@@ -1234,7 +1234,33 @@ export default function AdminDashboard() {
       {/* ── ANALYTICS TAB ── */}
       {activeTab === "analytics" && (
         <div className="p-6">
-          <h2 className="text-2xl font-black mb-6">الإحصاءات</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-black">الإحصاءات</h2>
+            {isSuperAdmin && (
+              <a
+                data-testid="export-db-btn"
+                href={`${API}/admin/export-db`}
+                download="hujjah_db_export.zip"
+                onClick={e => {
+                  // pass token via fetch instead of direct link
+                  e.preventDefault();
+                  fetch(`${API}/admin/export-db`, { headers })
+                    .then(r => r.blob())
+                    .then(blob => {
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url; a.download = "hujjah_db_export.zip"; a.click();
+                      URL.revokeObjectURL(url);
+                    })
+                    .catch(() => toast.error("خطأ في التصدير"));
+                }}
+                className="flex items-center gap-2 bg-primary text-secondary px-5 py-2.5 rounded-xl font-black text-sm hover:scale-[1.02] transition-all shadow-md cursor-pointer"
+              >
+                <span>💾</span>
+                <span>تصدير قاعدة البيانات</span>
+              </a>
+            )}
+          </div>
           {!analytics ? (
             <div className="text-center py-16 text-primary/30">جاري التحميل...</div>
           ) : (

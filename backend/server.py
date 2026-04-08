@@ -1,6 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 import os, logging, uuid, random, shutil, re, json, httpx, asyncio, io
@@ -2939,6 +2940,65 @@ async def get_admin_logs(limit: int = 50, skip: int = 0, admin: dict = Depends(g
     logs = await db.admin_logs.find({}, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
     total = await db.admin_logs.count_documents({})
     return {"logs": logs, "total": total, "limit": limit, "skip": skip}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DB EXPORT  (Super Admin only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.get("/admin/export-db")
+async def export_database(admin: dict = Depends(get_super_admin)):
+    """Export categories, questions, and users as a downloadable ZIP."""
+    import subprocess, zipfile, io, tempfile, shutil
+
+    mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+    db_name   = os.environ.get("DB_NAME", "test_database")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        collections = ["categories", "questions", "users"]
+        json_files = {}
+
+        for col in collections:
+            out_path = os.path.join(tmp, f"{col}.json")
+            subprocess.run(
+                ["mongoexport", f"--uri={mongo_url}", f"--db={db_name}",
+                 f"--collection={col}", f"--out={out_path}"],
+                capture_output=True, text=True
+            )
+            if os.path.exists(out_path):
+                with open(out_path, "r", encoding="utf-8") as f:
+                    json_files[col] = f.read()
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for col, content in json_files.items():
+                zf.writestr(f"hujjah_export/{col}.json", content)
+            readme = (
+                "Hujjah (حُجّة) - Database Export\n"
+                "===================================\n\n"
+                "To import into MongoDB Atlas:\n\n"
+                "  mongoimport --uri=\"mongodb+srv://USER:PASS@cluster.mongodb.net/hujjah\" \\\n"
+                "    --collection=categories --file=categories.json\n\n"
+                "  mongoimport --uri=\"mongodb+srv://USER:PASS@cluster.mongodb.net/hujjah\" \\\n"
+                "    --collection=questions --file=questions.json\n\n"
+                "  mongoimport --uri=\"mongodb+srv://USER:PASS@cluster.mongodb.net/hujjah\" \\\n"
+                "    --collection=users --file=users.json\n"
+            )
+            zf.writestr("hujjah_export/README.txt", readme)
+
+        buf.seek(0)
+        final_path = "/tmp/hujjah_db_export_latest.zip"
+        with open(final_path, "wb") as f:
+            f.write(buf.read())
+
+    from starlette.responses import FileResponse as SFileResponse
+    return SFileResponse(
+        path=final_path,
+        filename="hujjah_db_export.zip",
+        media_type="application/zip",
+    )
+
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STAFF MANAGEMENT  (Super Admin only)
