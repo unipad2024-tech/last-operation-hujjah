@@ -4,7 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid, random, shutil, re, json, httpx, asyncio, io
+import os, logging, uuid, random, shutil, re, json, httpx, asyncio, io, time
+from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional, Dict
@@ -35,8 +36,8 @@ UPLOAD_DIR = ROOT_DIR / "static" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/api/static", StaticFiles(directory=str(ROOT_DIR / "static")), name="static")
 
-SECRET_KEY      = os.environ.get('JWT_SECRET_KEY', 'hujjah_secret_2024')
-ADMIN_PASSWORD  = os.environ.get('ADMIN_PASSWORD', 'hujjah2024')
+SECRET_KEY      = os.environ['JWT_SECRET_KEY']          # No fallback — must be set
+ADMIN_PASSWORD  = os.environ['ADMIN_PASSWORD']          # No fallback — must be set
 STRIPE_API_KEY  = os.environ.get('STRIPE_API_KEY', '')
 PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID', '')
 PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '')
@@ -44,6 +45,18 @@ EMAIL_USER      = os.environ.get('EMAIL_USER', '')
 EMAIL_PASS      = os.environ.get('EMAIL_PASS', '')
 UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', '')
 ALGORITHM       = "HS256"
+
+# ─── Simple in-memory rate limiter ───────────────────────────────────────────
+_rate_buckets: dict = defaultdict(list)
+
+def _rate_check(key: str, max_calls: int = 10, window_secs: int = 300):
+    """Raise 429 if key exceeded max_calls within window_secs seconds."""
+    now = time.time()
+    bucket = _rate_buckets[key]
+    _rate_buckets[key] = [t for t in bucket if now - t < window_secs]
+    if len(_rate_buckets[key]) >= max_calls:
+        raise HTTPException(429, "محاولات كثيرة، الرجاء الانتظار قبل المحاولة مجدداً")
+    _rate_buckets[key].append(now)
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logging.basicConfig(level=logging.INFO)
@@ -255,7 +268,8 @@ async def require_user(authorization: Optional[str] = Header(None)) -> dict:
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_router.post("/auth/register")
-async def register(body: UserCreate):
+async def register(body: UserCreate, request: Request):
+    _rate_check(f"register:{request.client.host}", max_calls=5, window_secs=300)
     if len(body.password) < 6:
         raise HTTPException(400, "كلمة المرور يجب أن تكون 6 أحرف على الأقل")
     existing = await db.users.find_one({"email": body.email.lower()})
@@ -282,7 +296,8 @@ async def register(body: UserCreate):
     return {"token": token, "user": safe}
 
 @api_router.post("/auth/login")
-async def login(body: UserLogin):
+async def login(body: UserLogin, request: Request):
+    _rate_check(f"login:{request.client.host}", max_calls=10, window_secs=300)
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not verify_pw(body.password, user.get("password_hash", "")):
         raise HTTPException(401, "البريد أو كلمة المرور غلط")
@@ -319,7 +334,8 @@ async def update_me(body: UserUpdate, user: dict = Depends(require_user)):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_router.post("/admin/login")
-async def admin_login(body: AdminLogin):
+async def admin_login(body: AdminLogin, request: Request):
+    _rate_check(f"admin_login:{request.client.host}", max_calls=8, window_secs=300)
     username = (body.username or "admin").strip()
     # Super admin login
     if username.lower() == "admin" or username == "":
@@ -842,7 +858,9 @@ async def import_questions(
     filename = (file.filename or "untitled").lower()
     content  = await file.read()
     questions = []
-    extra_prompt = extra_prompt.strip()
+    # Sanitize AI prompt — strip, limit length, remove injection patterns
+    extra_prompt = (extra_prompt or "").strip()[:500]
+    extra_prompt = re.sub(r"(ignore|forget|disregard|system prompt|you are now)", "", extra_prompt, flags=re.IGNORECASE)
 
     try:
         if filename.endswith(".json"):
@@ -1526,13 +1544,17 @@ async def paylink_initiate(body: PaylinkInitiate, user: dict = Depends(require_u
 @api_router.get("/paylink/verify/{transaction_no}")
 async def paylink_verify(transaction_no: str, user: dict = Depends(require_user)):
     """Verify Paylink payment status and activate premium if paid."""
+    # Validate transaction_no format (prevent injection)
+    if not re.match(r'^[A-Za-z0-9_\-]{4,60}$', transaction_no):
+        raise HTTPException(400, "رقم المعاملة غير صالح")
+
     txn = await db.payment_transactions.find_one(
         {"transaction_no": transaction_no, "user_id": user["id"]}, {"_id": 0}
     )
     if not txn:
         raise HTTPException(404, "المعاملة غير موجودة")
 
-    # Already paid
+    # Idempotency: already marked as paid — return immediately, no external call
     if txn.get("payment_status") == "paid":
         return {"order_status": "Paid", "message": "الاشتراك مفعّل"}
 
@@ -1548,13 +1570,16 @@ async def paylink_verify(transaction_no: str, user: dict = Depends(require_user)
     if order_status == "Paid":
         plan     = SUBSCRIPTION_PLANS.get(txn.get("plan_id", "monthly"), SUBSCRIPTION_PLANS["monthly"])
         expires  = (datetime.now(timezone.utc) + timedelta(days=plan["days"])).isoformat()
-        await db.users.update_one(
-            {"id": user["id"]},
+        # Atomic update with condition to prevent duplicate subscription activation
+        result = await db.users.update_one(
+            {"id": user["id"], "subscription_type": {"$ne": "premium"}},
             {"$set": {"subscription_type": "premium", "subscription_expires_at": expires,
                       "notify_warning_sent": False, "notify_expired_sent": False}}
         )
+        if result.modified_count > 0:
+            logger.info(f"Premium activated for user {user['id']} via txn {transaction_no}")
         await db.payment_transactions.update_one(
-            {"transaction_no": transaction_no},
+            {"transaction_no": transaction_no, "payment_status": {"$ne": "paid"}},
             {"$set": {"payment_status": "paid", "status": "complete", "updated_at": now}}
         )
 
@@ -3322,9 +3347,9 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 async def _subscription_daily_loop():

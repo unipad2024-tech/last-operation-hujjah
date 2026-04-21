@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="10" time="7.362" timestamp="2026-04-21T22:52:34.823258+00:00" hostname="agent-env-77034e78-0375-4290-a144-307658039e05"><testcase classname="backend.tests.test_iter20.TestHealth" name="test_api_health" time="0.429"><failure message="assert 404 == 200&#10; +  where 404 = &lt;Response [404]&gt;.status_code">backend/tests/test_iter20.py:15: in test_api_health
+    assert r.status_code == 200
+E   assert 404 == 200
+E    +  where 404 = &lt;Response [404]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter20.TestCORS" name="test_cors_no_wildcard" time="0.155"><failure message="AssertionError: CORS is wildcard! Got: *&#10;assert '*' != '*'">backend/tests/test_iter20.py:28: in test_cors_no_wildcard
+    assert origin != "*", f"CORS is wildcard! Got: {origin}"
+E   AssertionError: CORS is wildcard! Got: *
+E   assert '*' != '*'</failure></testcase><testcase classname="backend.tests.test_iter20.TestCORS" name="test_cors_allowed_origin" time="0.218"><failure message="AssertionError: assert ('hujjah-trivia' in '*' or '*' == 'https://hujj...gentagent.com'&#10;  &#10;  - https://hujjah-trivia.preview.emergentagent.com&#10;  + *)">backend/tests/test_iter20.py:39: in test_cors_allowed_origin
+    assert "hujjah-trivia" in origin or origin == "https://hujjah-trivia.preview.emergentagent.com"
+E   AssertionError: assert ('hujjah-trivia' in '*' or '*' == 'https://hujj...gentagent.com'
+E     
+E     - https://hujjah-trivia.preview.emergentagent.com
+E     + *)</failure></testcase><testcase classname="backend.tests.test_iter20.TestAuth" name="test_register_works" time="0.776" /><testcase classname="backend.tests.test_iter20.TestAuth" name="test_admin_login_works" time="0.250" /><testcase classname="backend.tests.test_iter20.TestAuth" name="test_login_invalid_returns_4xx" time="0.237" /><testcase classname="backend.tests.test_iter20.TestRateLimiting" name="test_rate_limit_login" time="3.143"><failure message="AssertionError: Rate limit never triggered. Status codes: [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401]&#10;assert 429 in [401, 401, 401, 401, 401, 401, ...]">backend/tests/test_iter20.py:90: in test_rate_limit_login
+    assert 429 in status_codes, f"Rate limit never triggered. Status codes: {status_codes}"
+E   AssertionError: Rate limit never triggered. Status codes: [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401]
+E   assert 429 in [401, 401, 401, 401, 401, 401, ...]</failure></testcase><testcase classname="backend.tests.test_iter20.TestPaylinkVerify" name="test_invalid_transaction_format_returns_400" time="0.534" /><testcase classname="backend.tests.test_iter20.TestPaylinkVerify" name="test_short_transaction_no_returns_400" time="0.593"><failure message="AssertionError: Got 401: {&quot;detail&quot;:&quot;يجب تسجيل الدخول أولاً&quot;}&#10;assert 401 in [400, 404, 422]&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_iter20.py:121: in test_short_transaction_no_returns_400
+    assert r.status_code in [400, 404, 422], f"Got {r.status_code}: {r.text}"
+E   AssertionError: Got 401: {"detail":"يجب تسجيل الدخول أولاً"}
+E   assert 401 in [400, 404, 422]
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iter20.TestPaylinkVerify" name="test_valid_format_nonexistent_returns_not_200" time="0.557"><failure message="AssertionError: Got 401: {&quot;detail&quot;:&quot;يجب تسجيل الدخول أولاً&quot;}&#10;assert 401 in [400, 404, 500]&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_iter20.py:132: in test_valid_format_nonexistent_returns_not_200
+    assert r.status_code in [400, 404, 500], f"Got {r.status_code}: {r.text}"
+E   AssertionError: Got 401: {"detail":"يجب تسجيل الدخول أولاً"}
+E   assert 401 in [400, 404, 500]
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase></testsuite></testsuites>
