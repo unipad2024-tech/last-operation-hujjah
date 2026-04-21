@@ -46,17 +46,24 @@ EMAIL_PASS      = os.environ.get('EMAIL_PASS', '')
 UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', '')
 ALGORITHM       = "HS256"
 
-# ─── Simple in-memory rate limiter ───────────────────────────────────────────
-_rate_buckets: dict = defaultdict(list)
+# ─── MongoDB-backed rate limiter (works across all uvicorn workers) ─────────
+async def _rate_check(key: str, max_calls: int = 10, window_secs: int = 300):
+    """Shared rate limiter using MongoDB so all workers enforce the same limit."""
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(seconds=window_secs)
 
-def _rate_check(key: str, max_calls: int = 10, window_secs: int = 300):
-    """Raise 429 if key exceeded max_calls within window_secs seconds."""
-    now = time.time()
-    bucket = _rate_buckets[key]
-    _rate_buckets[key] = [t for t in bucket if now - t < window_secs]
-    if len(_rate_buckets[key]) >= max_calls:
+    count = await db.rate_limits.count_documents({
+        "key": key,
+        "ts": {"$gte": window_start}
+    })
+    if count >= max_calls:
         raise HTTPException(429, "محاولات كثيرة، الرجاء الانتظار قبل المحاولة مجدداً")
-    _rate_buckets[key].append(now)
+
+    await db.rate_limits.insert_one({"key": key, "ts": now})
+
+    # Periodic TTL cleanup (10% of requests)
+    if random.random() < 0.1:
+        await db.rate_limits.delete_many({"ts": {"$lt": window_start}})
 
 pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logging.basicConfig(level=logging.INFO)
@@ -269,7 +276,7 @@ async def require_user(authorization: Optional[str] = Header(None)) -> dict:
 
 @api_router.post("/auth/register")
 async def register(body: UserCreate, request: Request):
-    _rate_check(f"register:{request.client.host}", max_calls=5, window_secs=300)
+    await _rate_check(f"register:{request.headers.get('x-forwarded-for', request.client.host).split(',')[0].strip()}", max_calls=5, window_secs=300)
     if len(body.password) < 6:
         raise HTTPException(400, "كلمة المرور يجب أن تكون 6 أحرف على الأقل")
     existing = await db.users.find_one({"email": body.email.lower()})
@@ -297,7 +304,7 @@ async def register(body: UserCreate, request: Request):
 
 @api_router.post("/auth/login")
 async def login(body: UserLogin, request: Request):
-    _rate_check(f"login:{request.client.host}", max_calls=10, window_secs=300)
+    await _rate_check(f"login:{request.headers.get('x-forwarded-for', request.client.host).split(',')[0].strip()}", max_calls=10, window_secs=300)
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not verify_pw(body.password, user.get("password_hash", "")):
         raise HTTPException(401, "البريد أو كلمة المرور غلط")
@@ -335,7 +342,7 @@ async def update_me(body: UserUpdate, user: dict = Depends(require_user)):
 
 @api_router.post("/admin/login")
 async def admin_login(body: AdminLogin, request: Request):
-    _rate_check(f"admin_login:{request.client.host}", max_calls=8, window_secs=300)
+    await _rate_check(f"admin_login:{request.headers.get('x-forwarded-for', request.client.host).split(',')[0].strip()}", max_calls=8, window_secs=300)
     username = (body.username or "admin").strip()
     # Super admin login
     if username.lower() == "admin" or username == "":

@@ -66,7 +66,19 @@ A professional Arabic SaaS trivia game platform with multi-team support, subscri
 - [x] AI question generation (Gemini) with Unsplash image fetching
 - [x] Question deduplication in AI generation
 
-### Sprint 3 — 2026-02 (Current session)
+### Sprint 4 — 2026-04 (This session)
+- [x] **HomePage Redesign** — تصميم جديد كامل: خلفية متعددة الطبقات، عنوان متوازن بدون تداخل، navbar واضح مع الأسعار/الإدارة، تحسين التباعد والأناقة
+- [x] **Rate Limiting (MongoDB-backed)** — حد 10 محاولات/5 دقائق على auth/login, 5 على register, 8 على admin/login، يعمل عبر جميع workers (X-Forwarded-For)
+- [x] **JWT Security** — إزالة الـ fallback الضعيف، استبداله بـ 64-char hex key قوي
+- [x] **CORS تقييد** — CORS_ORIGINS محدد بالدومين الفعلي (يُطبَّق على مستوى التطبيق)
+- [x] **Paylink Idempotency** — منع تفعيل الاشتراك المكرر، التحقق من تنسيق transaction_no
+- [x] **AI Prompt Sanitization** — تنظيف extra_prompt من محاولات Prompt Injection
+- [x] **AI تعليمات مخصصة (import)** — textarea في لوحة الإدارة لتمرير extra_prompt
+- [x] **PendingQuestionCard** — عرض وتعديل صورتي السؤال والإجابة منفصلتين
+- [x] **QuickHostBar** — شريط تحكم سريع دائماً مرئي في لوحة اللعبة
+- [x] **DB Export** — زر تصدير قاعدة البيانات (ZIP) من تبويب الإحصاءات
+
+
 - [x] **QuickHostBar** — شريط تحكم سريع دائماً مرئي فوق لوحة اللعبة (+300/600/900 لكل فريق + تبديل الدور)
 - [x] **زر لوحة المضيف** — أكبر وأوضح مع animation نابضة gmpPulse
 - [x] **PendingQuestionCard** — مكوّن مستقل يعرض صورة السؤال وصورة الإجابة بشكل منفصل مع تعديل مباشر
