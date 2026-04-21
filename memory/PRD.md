@@ -66,7 +66,14 @@ A professional Arabic SaaS trivia game platform with multi-team support, subscri
 - [x] AI question generation (Gemini) with Unsplash image fetching
 - [x] Question deduplication in AI generation
 
-### Sprint 4 — 2026-04 (This session)
+### Sprint 5 — 2026-04 (This session)
+- [x] **QuestionPage Complete Redesign** — 3-section layout: TOP BAR + QUESTION CARD + SIDE PANEL، تصميم احترافي مثل مسابقات حقيقية
+- [x] **صورة السؤال** — دائماً مرئية مع loading state وfallback، zoom modal محسّن
+- [x] **Timer** — انتقل داخل card header (أصغر وأوضح)، مع timer controls محسّنة (Pause/Play/RotateCcw icons)
+- [x] **Active Team Highlight** — الفريق النشط مُبرز بـ glow في card header وفي side panel
+- [x] **Side Panel** — وسائل المساعدة لكل فريق مع نقاطه وأيقونات المساعدة الثلاثة
+
+
 - [x] **HomePage Redesign** — تصميم جديد كامل: خلفية متعددة الطبقات، عنوان متوازن بدون تداخل، navbar واضح مع الأسعار/الإدارة، تحسين التباعد والأناقة
 - [x] **Rate Limiting (MongoDB-backed)** — حد 10 محاولات/5 دقائق على auth/login, 5 على register, 8 على admin/login، يعمل عبر جميع workers (X-Forwarded-For)
 - [x] **JWT Security** — إزالة الـ fallback الضعيف، استبداله بـ 64-char hex key قوي

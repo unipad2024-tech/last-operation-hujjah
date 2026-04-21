@@ -121,11 +121,13 @@ export default function QuestionPage() {
   const activeBg        = isTeam1 ? "rgba(239,68,68,0.15)" : "rgba(59,130,246,0.15)";
   const activeBorder    = isTeam1 ? "rgba(239,68,68,0.45)" : "rgba(59,130,246,0.45)";
 
-  const diffBadge = {
-    300: { label: "سهل",   color: "#6ee7b7", bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.3)" },
-    600: { label: "متوسط", color: "#fcd34d", bg: "rgba(252,211,77,0.12)",  border: "rgba(252,211,77,0.3)"  },
-    900: { label: "صعب",   color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)" },
-  }[question.difficulty] || diffBadge?.[300];
+  const diffBadge = (
+    question.difficulty === 300
+      ? { label: "سهل",   color: "#6ee7b7", bg: "rgba(52,211,153,0.12)",  border: "rgba(52,211,153,0.3)"  }
+      : question.difficulty === 600
+      ? { label: "متوسط", color: "#fcd34d", bg: "rgba(252,211,77,0.12)",  border: "rgba(252,211,77,0.3)"  }
+      : { label: "صعب",   color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)" }
+  );
 
   /* ── Assistance tools (visual only) ── */
   const LIFELINES = ["⏱️", "🔄", "🎯"];
