@@ -1,0 +1,34 @@
+{
+  "summary": "GameModeSelectPage (/mode) fully tested. All 10 requested features verified. Both logged-out (login gate) and logged-in (direct navigation) scenarios working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100% (10/10 tests passed)"},
+  "test_credentials": "Registered test user: testmode@test.com / test1234 for logged-in tests",
+  "seed_data_creation": "Created test user: testmode@test.com via /api/auth/register",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "GameModeSelectPage at /mode fully working. Art background (School of Athens), title 'اختر نوع اللعبة', login notice for guests, lock icons on cards, login gate modal with login/signup btns, modal closes on X and backdrop, login btn → /login, back btn → /, standard mode → /setup when logged in. Test user: testmode@test.com / test1234",
+  "test_results_detail": {
+    "1_art_background": "PASS - Roman/Renaissance art background visible",
+    "2_title_visible": "PASS - 'اختر نوع اللعبة' large and clear",
+    "3_login_notice": "PASS - Notice visible for logged-out users",
+    "4_lock_icons": "PASS - 2 lock icons shown on cards for guests",
+    "5_login_gate_modal": "PASS - Modal appears on tournament btn click when not logged in",
+    "6_modal_buttons": "PASS - Both login-gate-login-btn and login-gate-signup-btn present",
+    "7_modal_close": "PASS - Closes on X click and backdrop click",
+    "8_modal_login_navigates": "PASS - Login btn navigates to /login",
+    "9_standard_mode_loggedin": "PASS - Standard mode navigates to /setup when logged in",
+    "10_back_btn": "PASS - Back btn navigates to /"
+  }
+}
