@@ -66,7 +66,13 @@ A professional Arabic SaaS trivia game platform with multi-team support, subscri
 - [x] AI question generation (Gemini) with Unsplash image fetching
 - [x] Question deduplication in AI generation
 
-### Sprint 5 — 2026-04 (This session)
+### Sprint 6 — 2026-04 (This session)
+- [x] **GameModeSelectPage Redesign** — خلفية فنية رومانية (School of Athens + Rembrandt)، glass cards مع hover animations وloading state
+- [x] **Login Gate** — بوابة تسجيل دخول: modal يظهر للزوار غير المسجلين مع زري Login/Signup
+- [x] **Lock Icons** — أيقونة 🔒 على البطاقتين للزوار + إشعار مناسب
+- [x] **Loading State** — زر يُظهر spinner أثناء الانتقال للصفحة التالية
+
+
 - [x] **QuestionPage Complete Redesign** — 3-section layout: TOP BAR + QUESTION CARD + SIDE PANEL، تصميم احترافي مثل مسابقات حقيقية
 - [x] **صورة السؤال** — دائماً مرئية مع loading state وfallback، zoom modal محسّن
 - [x] **Timer** — انتقل داخل card header (أصغر وأوضح)، مع timer controls محسّنة (Pause/Play/RotateCcw icons)
