@@ -4,6 +4,16 @@ import axios from "axios";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const GameContext = createContext(null);
 
+/* ── Device fingerprint (persisted in localStorage) ── */
+function getOrCreateDeviceId() {
+  let id = localStorage.getItem("hujjah_device_id");
+  if (!id) {
+    id = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    localStorage.setItem("hujjah_device_id", id);
+  }
+  return id;
+}
+
 export const GameProvider = ({ children }) => {
   const [session, setSession] = useState(() => {
     try { return JSON.parse(localStorage.getItem("hujjah_session") || "null"); }
@@ -16,6 +26,7 @@ export const GameProvider = ({ children }) => {
   });
   const [userToken, setUserToken] = useState(() => localStorage.getItem("hujjah_user_token") || null);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("hujjah_dark") === "true");
+  const [deviceId] = useState(getOrCreateDeviceId);
   const [gameSettings, setGameSettings] = useState({ default_timer: 65, word_timers: { "300": 80, "600": 60, "900": 45 } });
   const [currentTurn, setCurrentTurn] = useState(() => parseInt(localStorage.getItem("hujjah_turn") || "1"));
 
@@ -138,20 +149,28 @@ export const GameProvider = ({ children }) => {
   };
 
   const loginUser = async (email, password) => {
-    const { data } = await axios.post(`${API}/auth/login`, { email, password });
+    const { data } = await axios.post(`${API}/auth/login`, { email, password }, {
+      headers: { "X-Device-Id": deviceId },
+    });
     setCurrentUser(data.user);
     setUserToken(data.token);
     localStorage.setItem("hujjah_user", JSON.stringify(data.user));
     localStorage.setItem("hujjah_user_token", data.token);
+    if (data.session_id)  localStorage.setItem("hujjah_session_id", data.session_id);
+    if (data.device_id)   localStorage.setItem("hujjah_device_id",  data.device_id);
     return data;
   };
 
   const registerUser = async (email, username, password) => {
-    const { data } = await axios.post(`${API}/auth/register`, { email, username, password });
+    const { data } = await axios.post(`${API}/auth/register`, { email, username, password }, {
+      headers: { "X-Device-Id": deviceId },
+    });
     setCurrentUser(data.user);
     setUserToken(data.token);
     localStorage.setItem("hujjah_user", JSON.stringify(data.user));
     localStorage.setItem("hujjah_user_token", data.token);
+    if (data.session_id)  localStorage.setItem("hujjah_session_id", data.session_id);
+    if (data.device_id)   localStorage.setItem("hujjah_device_id",  data.device_id);
     return data;
   };
 
@@ -160,6 +179,7 @@ export const GameProvider = ({ children }) => {
     setUserToken(null);
     localStorage.removeItem("hujjah_user");
     localStorage.removeItem("hujjah_user_token");
+    localStorage.removeItem("hujjah_session_id");
   };
 
   const refreshUser = async () => {

@@ -271,6 +271,244 @@ async def require_user(authorization: Optional[str] = Header(None)) -> dict:
     return user
 
 # ══════════════════════════════════════════════════════════════════════════════
+# DEVICE & SESSION SECURITY SYSTEM
+# ══════════════════════════════════════════════════════════════════════════════
+
+MAX_DEVICES  = 2
+MAX_SESSIONS = 2
+SESSION_TTL_MINUTES = 60
+
+def _parse_device_name(ua: str) -> str:
+    u = ua.lower()
+    if   "iphone"  in u: return "iPhone"
+    elif "ipad"    in u: return "iPad"
+    elif "android" in u: return "Android"
+    elif "mac"     in u: return "Mac"
+    elif "windows" in u: return "Windows PC"
+    elif "linux"   in u: return "Linux"
+    else:                return "جهاز غير معروف"
+
+async def _register_device(user_id: str, device_id: str, ua: str, ip: str) -> None:
+    now = datetime.now(timezone.utc)
+    existing = await db.devices.find_one({"user_id": user_id, "device_id": device_id}, {"_id": 0})
+    if existing:
+        await db.devices.update_one(
+            {"user_id": user_id, "device_id": device_id},
+            {"$set": {"last_login": now.isoformat(), "last_ip": ip}},
+        )
+        return
+    # New device — check limit
+    count = await db.devices.count_documents({"user_id": user_id})
+    if count >= MAX_DEVICES:
+        # Try to evict oldest inactive device (last_login > 30 days ago)
+        cutoff = (now - timedelta(days=30)).isoformat()
+        old = await db.devices.find_one({"user_id": user_id, "last_login": {"$lt": cutoff}}, sort=[("last_login", 1)])
+        if old:
+            await db.devices.delete_one({"_id": old["_id"]})
+        else:
+            await _log_suspicious(user_id, "device_limit_exceeded",
+                                   {"attempted_device": device_id, "ip": ip})
+            raise HTTPException(403, "وصلت للحد الأقصى من الأجهزة (جهازان). أزل جهازاً قديماً أولاً")
+    await db.devices.insert_one({
+        "user_id":     user_id,
+        "device_id":   device_id,
+        "device_name": _parse_device_name(ua),
+        "user_agent":  ua[:300],
+        "first_login": now.isoformat(),
+        "last_login":  now.isoformat(),
+        "last_ip":     ip,
+        "trusted":     True,
+        "created_at":  now,
+    })
+
+async def _create_auth_session(user_id: str, device_id: str, ip: str, ua: str) -> str:
+    now    = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(minutes=SESSION_TTL_MINUTES)).isoformat()
+    # Expire idle sessions
+    await db.auth_sessions.update_many(
+        {"user_id": user_id, "is_active": True, "last_activity": {"$lt": cutoff}},
+        {"$set": {"is_active": False, "ended_at": now.isoformat(), "ended_reason": "expired"}},
+    )
+    # Enforce max sessions
+    active = await db.auth_sessions.count_documents({"user_id": user_id, "is_active": True})
+    if active >= MAX_SESSIONS:
+        oldest = await db.auth_sessions.find_one(
+            {"user_id": user_id, "is_active": True}, sort=[("created_at", 1)]
+        )
+        if oldest:
+            await db.auth_sessions.update_one(
+                {"session_id": oldest["session_id"]},
+                {"$set": {"is_active": False, "ended_at": now.isoformat(), "ended_reason": "limit_exceeded"}},
+            )
+    session_id = str(uuid.uuid4())
+    await db.auth_sessions.insert_one({
+        "session_id":    session_id,
+        "user_id":       user_id,
+        "device_id":     device_id,
+        "ip_address":    ip,
+        "user_agent":    ua[:300],
+        "is_active":     True,
+        "created_at":    now.isoformat(),
+        "last_activity": now.isoformat(),
+    })
+    return session_id
+
+async def _anti_abuse_check(user_id: str, ip: str, device_id: str) -> None:
+    now         = datetime.now(timezone.utc)
+    window_1h   = (now - timedelta(hours=1)).isoformat()
+    # Track IP
+    await db.ip_logs.insert_one({"user_id": user_id, "ip": ip, "ts": now.isoformat()})
+    # Count unique IPs in last hour
+    pipeline = [
+        {"$match": {"user_id": user_id, "ts": {"$gte": window_1h}}},
+        {"$group": {"_id": "$ip"}},
+        {"$count": "n"},
+    ]
+    result    = await db.ip_logs.aggregate(pipeline).to_list(1)
+    unique_ips = result[0]["n"] if result else 1
+    if unique_ips > 10:
+        await db.users.update_one({"id": user_id}, {"$set": {"is_locked": True}})
+        await _log_suspicious(user_id, "auto_lock_too_many_ips",
+                               {"unique_ips": unique_ips, "ip": ip})
+        raise HTTPException(403, "تم قفل الحساب تلقائياً لنشاط مشبوه. تواصل مع الدعم")
+    if unique_ips > 5:
+        await _log_suspicious(user_id, "many_ips_flagged",
+                               {"unique_ips": unique_ips, "ip": ip})
+    # Rapid device switching: if this device_id differs from last session's device and last session < 5 min
+    last_session = await db.auth_sessions.find_one(
+        {"user_id": user_id, "is_active": True}, sort=[("created_at", -1)]
+    )
+    if last_session and last_session.get("device_id") != device_id:
+        last_ts = last_session.get("created_at", "")
+        try:
+            delta = (now - datetime.fromisoformat(last_ts.replace("Z", "+00:00"))).total_seconds()
+            if delta < 30:
+                await _log_suspicious(user_id, "rapid_device_switch",
+                                       {"from": last_session["device_id"], "to": device_id, "secs": delta})
+        except Exception:
+            pass
+
+async def _log_suspicious(user_id: str, event_type: str, data: dict) -> None:
+    await db.suspicious_logs.insert_one({
+        "user_id":    user_id,
+        "event_type": event_type,
+        "data":       data,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADMIN — SECURITY ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.get("/admin/security/overview")
+async def security_overview(admin: dict = Depends(get_admin)):
+    now    = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(minutes=SESSION_TTL_MINUTES)).isoformat()
+    total_devices  = await db.devices.count_documents({})
+    active_sessions = await db.auth_sessions.count_documents(
+        {"is_active": True, "last_activity": {"$gte": cutoff}}
+    )
+    suspicious_24h = await db.suspicious_logs.count_documents(
+        {"created_at": {"$gte": (now - timedelta(hours=24)).isoformat()}}
+    )
+    locked = await db.users.count_documents({"is_locked": True})
+    total_users = await db.users.count_documents({})
+    return {
+        "total_devices": total_devices,
+        "active_sessions": active_sessions,
+        "suspicious_24h": suspicious_24h,
+        "locked_accounts": locked,
+        "total_users": total_users,
+    }
+
+@api_router.get("/admin/security/users")
+async def security_users(admin: dict = Depends(get_admin)):
+    users  = await db.users.find({}, {"_id": 0, "id": 1, "email": 1, "username": 1,
+                                       "is_locked": 1, "last_active": 1, "subscription_type": 1}).to_list(500)
+    result = []
+    for u in users:
+        uid     = u["id"]
+        devices = await db.devices.count_documents({"user_id": uid})
+        sessions = await db.auth_sessions.count_documents({"user_id": uid, "is_active": True})
+        suspicious = await db.suspicious_logs.count_documents({"user_id": uid})
+        result.append({**u, "device_count": devices, "active_sessions": sessions,
+                        "suspicious_count": suspicious})
+    return result
+
+@api_router.get("/admin/security/devices/{user_id}")
+async def get_user_devices(user_id: str, admin: dict = Depends(get_admin)):
+    docs = await db.devices.find({"user_id": user_id}, {"_id": 0}).to_list(10)
+    return docs
+
+@api_router.get("/admin/security/sessions")
+async def get_all_sessions(admin: dict = Depends(get_admin)):
+    now    = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(minutes=SESSION_TTL_MINUTES)).isoformat()
+    docs = await db.auth_sessions.find(
+        {"is_active": True, "last_activity": {"$gte": cutoff}},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(200).to_list(200)
+    # Enrich with username
+    for d in docs:
+        u = await db.users.find_one({"id": d["user_id"]}, {"_id": 0, "username": 1, "email": 1})
+        if u:
+            d["username"] = u.get("username", "؟")
+            d["email"]    = u.get("email", "")
+    return docs
+
+@api_router.get("/admin/security/suspicious")
+async def get_suspicious_logs(limit: int = 100, admin: dict = Depends(get_admin)):
+    docs = await db.suspicious_logs.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    for d in docs:
+        u = await db.users.find_one({"id": d["user_id"]}, {"_id": 0, "username": 1, "email": 1})
+        if u:
+            d["username"] = u.get("username", "؟")
+    return docs
+
+@api_router.delete("/admin/security/sessions/{session_id}")
+async def revoke_session(session_id: str, admin: dict = Depends(get_admin)):
+    now = datetime.now(timezone.utc)
+    r = await db.auth_sessions.update_one(
+        {"session_id": session_id},
+        {"$set": {"is_active": False, "ended_at": now.isoformat(), "ended_reason": "admin_revoke"}}
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "الجلسة غير موجودة")
+    return {"message": "تم إلغاء الجلسة"}
+
+@api_router.delete("/admin/security/devices/{device_id}")
+async def remove_device(device_id: str, admin: dict = Depends(get_admin)):
+    r = await db.devices.delete_one({"device_id": device_id})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "الجهاز غير موجود")
+    # Revoke sessions for this device
+    await db.auth_sessions.update_many(
+        {"device_id": device_id},
+        {"$set": {"is_active": False, "ended_reason": "device_removed"}}
+    )
+    return {"message": "تم حذف الجهاز وإلغاء جلساته"}
+
+@api_router.post("/admin/security/lock/{user_id}")
+async def lock_user(user_id: str, admin: dict = Depends(get_super_admin)):
+    await db.users.update_one({"id": user_id}, {"$set": {"is_locked": True}})
+    await db.auth_sessions.update_many(
+        {"user_id": user_id},
+        {"$set": {"is_active": False, "ended_reason": "account_locked"}}
+    )
+    return {"message": "تم قفل الحساب وإلغاء جميع جلساته"}
+
+@api_router.post("/admin/security/unlock/{user_id}")
+async def unlock_user(user_id: str, admin: dict = Depends(get_super_admin)):
+    await db.users.update_one({"id": user_id}, {"$set": {"is_locked": False}})
+    return {"message": "تم فتح الحساب"}
+
+@api_router.delete("/admin/security/logs/{user_id}")
+async def clear_user_logs(user_id: str, admin: dict = Depends(get_super_admin)):
+    await db.suspicious_logs.delete_many({"user_id": user_id})
+    await db.ip_logs.delete_many({"user_id": user_id})
+    return {"message": "تم مسح سجلات المستخدم"}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # USER AUTH ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -294,13 +532,19 @@ async def register(body: UserCreate, request: Request):
         "subscription_expires_at": None,
         "answered_question_ids": [],
         "game_count": 0,
+        "is_locked": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "last_active": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user)
+    ip        = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    device_id = request.headers.get("x-device-id", str(uuid.uuid4()))
+    ua        = request.headers.get("user-agent", "")
+    await _register_device(user["id"], device_id, ua, ip)
+    session_id = await _create_auth_session(user["id"], device_id, ip, ua)
     token = create_token({"sub": user["id"], "role": "user", "email": user["email"]})
     safe = {k: v for k, v in user.items() if k not in ("_id", "password_hash", "answered_question_ids")}
-    return {"token": token, "user": safe}
+    return {"token": token, "user": safe, "session_id": session_id, "device_id": device_id}
 
 @api_router.post("/auth/login")
 async def login(body: UserLogin, request: Request):
@@ -308,10 +552,21 @@ async def login(body: UserLogin, request: Request):
     user = await db.users.find_one({"email": body.email.lower()})
     if not user or not verify_pw(body.password, user.get("password_hash", "")):
         raise HTTPException(401, "البريد أو كلمة المرور غلط")
+    if user.get("is_locked"):
+        raise HTTPException(403, "الحساب موقوف مؤقتاً. تواصل مع الدعم")
+    ip        = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    device_id = request.headers.get("x-device-id", str(uuid.uuid4()))
+    ua        = request.headers.get("user-agent", "")
+    # Anti-abuse check
+    await _anti_abuse_check(user["id"], ip, device_id)
+    # Device registration (may raise 403 if limit exceeded)
+    await _register_device(user["id"], device_id, ua, ip)
+    # Create session (auto-expires oldest if >2)
+    session_id = await _create_auth_session(user["id"], device_id, ip, ua)
     await db.users.update_one({"id": user["id"]}, {"$set": {"last_active": datetime.now(timezone.utc).isoformat()}})
     token = create_token({"sub": user["id"], "role": "user", "email": user["email"]})
     safe = {k: v for k, v in user.items() if k not in ("_id", "password_hash", "answered_question_ids")}
-    return {"token": token, "user": safe}
+    return {"token": token, "user": safe, "session_id": session_id, "device_id": device_id}
 
 @api_router.get("/auth/me")
 async def get_me(user: dict = Depends(require_user)):
@@ -3384,6 +3639,17 @@ async def startup_event():
         await db.pending_questions.create_index([("id", 1)])
         await db.payment_transactions.create_index([("transaction_no", 1)])
         await db.payment_transactions.create_index([("user_id", 1)])
+        # Security indexes
+        await db.devices.create_index([("user_id", 1)])
+        await db.devices.create_index([("device_id", 1)])
+        await db.auth_sessions.create_index([("user_id", 1)])
+        await db.auth_sessions.create_index([("session_id", 1)], unique=True, sparse=True)
+        await db.auth_sessions.create_index([("user_id", 1), ("is_active", 1)])
+        await db.auth_sessions.create_index([("last_activity", 1)], expireAfterSeconds=SESSION_TTL_MINUTES * 60 + 300)
+        await db.suspicious_logs.create_index([("user_id", 1)])
+        await db.suspicious_logs.create_index([("created_at", -1)])
+        await db.ip_logs.create_index([("user_id", 1)])
+        await db.ip_logs.create_index([("ts", 1)], expireAfterSeconds=7200)  # auto-purge IP logs after 2h
         logger.info("DB indexes created/verified")
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")

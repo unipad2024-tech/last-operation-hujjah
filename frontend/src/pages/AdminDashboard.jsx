@@ -16,6 +16,269 @@ const emptyQuestion = {
   image_url: "", answer_image_url: "", question_type: "text",
 };
 
+/* ═════════════════════════════════════════════════════════════════
+   SECURITY DASHBOARD — Standalone component
+   ═════════════════════════════════════════════════════════════════ */
+function SecurityDashboard({ overview, users, sessions, suspicious, devices, loading,
+  expandedUser, setExpandedUser, onLoad, onLoadDevices,
+  onRevokeSession, onLock, onUnlock, onRemoveDevice, onClearLogs }) {
+
+  const [tab, setTab] = useState("overview");
+
+  useEffect(() => { if (!overview) onLoad(); }, []);
+
+  const STATUS_BADGE = (u) => {
+    if (u.is_locked)         return <span style={{ background:"#ef4444",color:"#fff",fontSize:"0.68rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>محظور</span>;
+    if (u.suspicious_count > 3) return <span style={{ background:"#f59e0b",color:"#fff",fontSize:"0.68rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>مشبوه</span>;
+    return <span style={{ background:"#10b981",color:"#fff",fontSize:"0.68rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>آمن</span>;
+  };
+
+  const STAT_CARD = ({ icon, label, value, color }) => (
+    <div style={{ background:"rgba(255,255,255,0.04)",backdropFilter:"blur(10px)",borderRadius:"1rem",padding:"1.2rem 1.5rem",boxShadow:"0 8px 24px rgba(0,0,0,0.35)",border:`1px solid ${color}22` }}>
+      <div style={{ fontSize:"1.8rem",marginBottom:"0.4rem" }}>{icon}</div>
+      <div style={{ fontSize:"2rem",fontWeight:900,color }}>{value ?? "—"}</div>
+      <div style={{ fontSize:"0.78rem",color:"rgba(229,231,235,0.55)",marginTop:"0.2rem" }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ padding:"1.5rem", minHeight:"70vh", fontFamily:"Cairo,sans-serif", color:"#e5e7eb" }}>
+      {/* Header */}
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.5rem" }}>
+        <h2 style={{ fontSize:"1.5rem",fontWeight:900,margin:0 }}>🛡 لوحة الأمان</h2>
+        <button
+          data-testid="security-refresh-btn"
+          onClick={onLoad}
+          disabled={loading}
+          style={{ background:"rgba(59,130,246,0.18)",border:"1px solid rgba(59,130,246,0.4)",color:"#60a5fa",borderRadius:"0.75rem",padding:"0.5rem 1.2rem",cursor:"pointer",fontWeight:700,fontSize:"0.85rem" }}
+        >
+          {loading ? "⏳ تحميل..." : "↻ تحديث"}
+        </button>
+      </div>
+
+      {/* Sub-tabs */}
+      <div style={{ display:"flex",gap:"0.5rem",marginBottom:"1.5rem",flexWrap:"wrap" }}>
+        {[
+          { key:"overview",   label:"نظرة عامة" },
+          { key:"users",      label:`المستخدمون (${users.length})` },
+          { key:"sessions",   label:`الجلسات النشطة (${sessions.length})` },
+          { key:"suspicious", label:`سجل المشبوهين (${suspicious.length})` },
+        ].map(t => (
+          <button
+            key={t.key}
+            data-testid={`sec-tab-${t.key}`}
+            onClick={() => setTab(t.key)}
+            style={{
+              background: tab === t.key ? "#3b82f6" : "rgba(255,255,255,0.06)",
+              border:`1px solid ${tab === t.key ? "#3b82f6" : "rgba(255,255,255,0.12)"}`,
+              color: tab === t.key ? "#fff" : "rgba(229,231,235,0.7)",
+              borderRadius:"0.75rem",padding:"0.45rem 1rem",cursor:"pointer",fontWeight:700,fontSize:"0.82rem",transition:"all 0.2s",
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* OVERVIEW */}
+      {tab === "overview" && (
+        <div>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"1rem",marginBottom:"1.5rem" }}>
+            <STAT_CARD icon="👥" label="إجمالي المستخدمين" value={overview?.total_users}   color="#60a5fa" />
+            <STAT_CARD icon="📱" label="الأجهزة المسجلة"   value={overview?.total_devices}  color="#a78bfa" />
+            <STAT_CARD icon="🔗" label="الجلسات النشطة"    value={overview?.active_sessions} color="#34d399" />
+            <STAT_CARD icon="⚠️" label="نشاط مشبوه (24س)"  value={overview?.suspicious_24h}  color="#fbbf24" />
+            <STAT_CARD icon="🔒" label="حسابات محظورة"     value={overview?.locked_accounts} color="#f87171" />
+          </div>
+          <div style={{ background:"rgba(255,255,255,0.04)",borderRadius:"1rem",padding:"1.2rem",border:"1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ fontWeight:700,marginBottom:"0.75rem",color:"rgba(229,231,235,0.65)",fontSize:"0.8rem",textTransform:"uppercase",letterSpacing:"0.08em" }}>
+              سياسة الحماية النشطة
+            </div>
+            {[
+              { icon:"✅", text:"الحد الأقصى للأجهزة: 2 لكل مستخدم" },
+              { icon:"✅", text:"الحد الأقصى للجلسات المتزامنة: 2" },
+              { icon:"✅", text:"انتهاء الجلسة تلقائياً: 60 دقيقة من عدم النشاط" },
+              { icon:"✅", text:"Rate Limiting: 10 محاولات/5 دقائق لكل IP" },
+              { icon:"✅", text:"رصد تغيير الأجهزة السريع" },
+              { icon:"✅", text:"قفل تلقائي عند >10 IPs مختلفة/ساعة" },
+              { icon:"✅", text:"تنظيف سجلات الـ IP تلقائياً كل ساعتين" },
+            ].map((p,i) => (
+              <div key={i} style={{ display:"flex",alignItems:"center",gap:"0.5rem",padding:"0.35rem 0",borderBottom:"1px solid rgba(255,255,255,0.05)",fontSize:"0.85rem" }}>
+                <span>{p.icon}</span><span style={{ color:"rgba(229,231,235,0.8)" }}>{p.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* USERS */}
+      {tab === "users" && (
+        <div style={{ display:"flex",flexDirection:"column",gap:"0.75rem" }}>
+          {users.map(u => (
+            <div key={u.id} style={{ background:"rgba(255,255,255,0.04)",borderRadius:"1rem",border:"1px solid rgba(255,255,255,0.08)",overflow:"hidden" }}>
+              <div
+                style={{ display:"flex",alignItems:"center",gap:"1rem",padding:"0.9rem 1.2rem",cursor:"pointer",flexWrap:"wrap" }}
+                onClick={() => {
+                  const next = expandedUser === u.id ? null : u.id;
+                  setExpandedUser(next);
+                  if (next && !devices[u.id]) onLoadDevices(u.id);
+                }}
+              >
+                <div style={{ width:"36px",height:"36px",borderRadius:"50%",background:"rgba(59,130,246,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:"#60a5fa",fontSize:"1rem",flexShrink:0 }}>
+                  {(u.username||"؟")[0].toUpperCase()}
+                </div>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontWeight:700,color:"#e5e7eb",fontSize:"0.92rem" }}>{u.username || u.email}</div>
+                  <div style={{ color:"rgba(229,231,235,0.45)",fontSize:"0.75rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{u.email}</div>
+                </div>
+                <div style={{ display:"flex",gap:"0.6rem",alignItems:"center",flexWrap:"wrap" }}>
+                  {STATUS_BADGE(u)}
+                  <span style={{ background:"rgba(167,139,250,0.15)",border:"1px solid rgba(167,139,250,0.3)",color:"#c4b5fd",fontSize:"0.72rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>📱 {u.device_count} أجهزة</span>
+                  <span style={{ background:"rgba(52,211,153,0.12)",border:"1px solid rgba(52,211,153,0.3)",color:"#6ee7b7",fontSize:"0.72rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>🔗 {u.active_sessions} جلسات</span>
+                  {u.suspicious_count > 0 && (
+                    <span style={{ background:"rgba(251,191,36,0.12)",border:"1px solid rgba(251,191,36,0.3)",color:"#fcd34d",fontSize:"0.72rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>⚠ {u.suspicious_count} سجلات</span>
+                  )}
+                </div>
+                <div style={{ display:"flex",gap:"0.4rem",flexShrink:0 }}>
+                  {u.is_locked ? (
+                    <button
+                      data-testid={`unlock-user-${u.id}`}
+                      onClick={e => { e.stopPropagation(); onUnlock(u.id); }}
+                      style={{ background:"rgba(52,211,153,0.15)",border:"1px solid rgba(52,211,153,0.4)",color:"#34d399",borderRadius:"0.6rem",padding:"0.3rem 0.75rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700 }}
+                    >فتح</button>
+                  ) : (
+                    <button
+                      data-testid={`lock-user-${u.id}`}
+                      onClick={e => { e.stopPropagation(); onLock(u.id); }}
+                      style={{ background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.4)",color:"#f87171",borderRadius:"0.6rem",padding:"0.3rem 0.75rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700 }}
+                    >قفل</button>
+                  )}
+                  {u.suspicious_count > 0 && (
+                    <button
+                      data-testid={`clear-logs-${u.id}`}
+                      onClick={e => { e.stopPropagation(); onClearLogs(u.id); }}
+                      style={{ background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.3)",color:"#fcd34d",borderRadius:"0.6rem",padding:"0.3rem 0.75rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700 }}
+                    >مسح سجلات</button>
+                  )}
+                </div>
+                <span style={{ color:"rgba(229,231,235,0.3)",marginLeft:"auto" }}>{expandedUser === u.id ? "▲" : "▼"}</span>
+              </div>
+
+              {/* Expanded: Devices list */}
+              {expandedUser === u.id && (
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.06)",padding:"1rem 1.2rem",background:"rgba(0,0,0,0.2)" }}>
+                  <div style={{ fontWeight:700,fontSize:"0.8rem",color:"rgba(229,231,235,0.5)",marginBottom:"0.6rem",textTransform:"uppercase",letterSpacing:"0.06em" }}>
+                    الأجهزة المسجلة
+                  </div>
+                  {(devices[u.id] || []).length === 0 ? (
+                    <div style={{ color:"rgba(229,231,235,0.3)",fontSize:"0.82rem" }}>لا توجد أجهزة مسجلة</div>
+                  ) : (
+                    <div style={{ display:"flex",flexDirection:"column",gap:"0.5rem" }}>
+                      {(devices[u.id] || []).map(d => (
+                        <div key={d.device_id} style={{ display:"flex",alignItems:"center",gap:"0.75rem",background:"rgba(255,255,255,0.03)",borderRadius:"0.75rem",padding:"0.6rem 0.9rem",border:"1px solid rgba(255,255,255,0.06)" }}>
+                          <span style={{ fontSize:"1.3rem" }}>
+                            {d.device_name?.includes("iPhone") ? "📱" : d.device_name?.includes("Android") ? "📱" : d.device_name?.includes("Mac") || d.device_name?.includes("Windows") ? "💻" : "🖥"}
+                          </span>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontWeight:700,fontSize:"0.85rem",color:"#e5e7eb" }}>{d.device_name}</div>
+                            <div style={{ fontSize:"0.7rem",color:"rgba(229,231,235,0.4)" }}>
+                              آخر دخول: {d.last_login ? new Date(d.last_login).toLocaleDateString("ar-SA") : "—"}
+                              {" · "} IP: {d.last_ip || "—"}
+                            </div>
+                          </div>
+                          <button
+                            data-testid={`remove-device-${d.device_id}`}
+                            onClick={() => onRemoveDevice(d.device_id, u.id)}
+                            style={{ background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.35)",color:"#f87171",borderRadius:"0.6rem",padding:"0.25rem 0.65rem",cursor:"pointer",fontSize:"0.72rem",fontWeight:700 }}
+                          >حذف</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+          {users.length === 0 && !loading && (
+            <div style={{ textAlign:"center",padding:"3rem",color:"rgba(229,231,235,0.3)" }}>لا يوجد مستخدمون</div>
+          )}
+        </div>
+      )}
+
+      {/* SESSIONS */}
+      {tab === "sessions" && (
+        <div>
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%",borderCollapse:"collapse",fontSize:"0.83rem" }}>
+              <thead>
+                <tr style={{ borderBottom:"1px solid rgba(255,255,255,0.1)" }}>
+                  {["المستخدم","الجهاز","عنوان IP","بدأت","آخر نشاط",""].map((h,i) => (
+                    <th key={i} style={{ padding:"0.6rem 0.8rem",textAlign:"right",color:"rgba(229,231,235,0.5)",fontWeight:700,fontSize:"0.75rem",textTransform:"uppercase",letterSpacing:"0.05em" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map(s => (
+                  <tr key={s.session_id} style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                    <td style={{ padding:"0.6rem 0.8rem" }}><div style={{ fontWeight:700 }}>{s.username || "؟"}</div><div style={{ fontSize:"0.7rem",color:"rgba(229,231,235,0.4)" }}>{s.email}</div></td>
+                    <td style={{ padding:"0.6rem 0.8rem",color:"rgba(229,231,235,0.65)" }}>{s.device_id?.slice(0,8)}…</td>
+                    <td style={{ padding:"0.6rem 0.8rem",fontFamily:"monospace",color:"#93c5fd",fontSize:"0.8rem" }}>{s.ip_address}</td>
+                    <td style={{ padding:"0.6rem 0.8rem",color:"rgba(229,231,235,0.5)",fontSize:"0.78rem" }}>{s.created_at ? new Date(s.created_at).toLocaleString("ar-SA") : "—"}</td>
+                    <td style={{ padding:"0.6rem 0.8rem",color:"rgba(229,231,235,0.5)",fontSize:"0.78rem" }}>{s.last_activity ? new Date(s.last_activity).toLocaleString("ar-SA") : "—"}</td>
+                    <td style={{ padding:"0.6rem 0.8rem" }}>
+                      <button
+                        data-testid={`revoke-session-${s.session_id}`}
+                        onClick={() => onRevokeSession(s.session_id)}
+                        style={{ background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.4)",color:"#f87171",borderRadius:"0.6rem",padding:"0.3rem 0.75rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700 }}
+                      >إلغاء</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {sessions.length === 0 && <div style={{ textAlign:"center",padding:"2rem",color:"rgba(229,231,235,0.3)" }}>لا توجد جلسات نشطة</div>}
+          </div>
+        </div>
+      )}
+
+      {/* SUSPICIOUS */}
+      {tab === "suspicious" && (
+        <div style={{ display:"flex",flexDirection:"column",gap:"0.6rem" }}>
+          {suspicious.map((s,i) => {
+            const isHigh = ["auto_lock_too_many_ips","device_limit_exceeded"].includes(s.event_type);
+            const isMed  = ["many_ips_flagged","rapid_device_switch"].includes(s.event_type);
+            const bgColor = isHigh ? "rgba(239,68,68,0.08)" : isMed ? "rgba(251,191,36,0.06)" : "rgba(255,255,255,0.03)";
+            const bdColor = isHigh ? "rgba(239,68,68,0.25)" : isMed ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.07)";
+            return (
+              <div key={i} style={{ background:bgColor,border:`1px solid ${bdColor}`,borderRadius:"0.9rem",padding:"0.8rem 1rem",display:"flex",alignItems:"flex-start",gap:"0.9rem" }}>
+                <span style={{ fontSize:"1.1rem",flexShrink:0 }}>{isHigh ? "🔴" : isMed ? "🟡" : "⚪"}</span>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ display:"flex",gap:"0.6rem",alignItems:"center",flexWrap:"wrap",marginBottom:"0.3rem" }}>
+                    <span style={{ fontWeight:700,color:"#e5e7eb",fontSize:"0.88rem" }}>{s.username || s.user_id?.slice(0,8)}</span>
+                    <span style={{ background: isHigh?"rgba(239,68,68,0.15)":isMed?"rgba(251,191,36,0.12)":"rgba(255,255,255,0.05)",
+                                    border:`1px solid ${isHigh?"rgba(239,68,68,0.3)":isMed?"rgba(251,191,36,0.25)":"rgba(255,255,255,0.1)"}`,
+                                    color: isHigh?"#fca5a5":isMed?"#fcd34d":"rgba(229,231,235,0.6)",
+                                    borderRadius:"9999px",padding:"2px 8px",fontSize:"0.7rem",fontWeight:700 }}>
+                      {s.event_type}
+                    </span>
+                    <span style={{ color:"rgba(229,231,235,0.3)",fontSize:"0.72rem",marginLeft:"auto" }}>
+                      {s.created_at ? new Date(s.created_at).toLocaleString("ar-SA") : ""}
+                    </span>
+                  </div>
+                  <div style={{ fontSize:"0.75rem",color:"rgba(229,231,235,0.45)",fontFamily:"monospace" }}>
+                    {JSON.stringify(s.data)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {suspicious.length === 0 && <div style={{ textAlign:"center",padding:"3rem",color:"rgba(229,231,235,0.3)" }}>لا يوجد نشاط مشبوه</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── PendingQuestionCard — standalone component to avoid stale-closure ── */
 function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, onUpdate }) {
   const diffColor = q.difficulty === 300 ? "green" : q.difficulty === 600 ? "amber" : "red";
@@ -200,6 +463,70 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("questions");
   const [gameSettings, setGameSettings] = useState({ default_timer: 65, word_timers: { "300": 80, "600": 60, "900": 45 }, free_categories: [], trial_enabled: true, trial_team1_categories: [], trial_team2_categories: [], trial_questions_only: false });
   const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Security state
+  const [secOverview, setSecOverview]     = useState(null);
+  const [secUsers, setSecUsers]           = useState([]);
+  const [secSessions, setSecSessions]     = useState([]);
+  const [secSuspicious, setSecSuspicious] = useState([]);
+  const [secLoading, setSecLoading]       = useState(false);
+  const [secDevices, setSecDevices]       = useState({});    // user_id → devices[]
+  const [expandedUser, setExpandedUser]   = useState(null);
+
+  const loadSecurity = useCallback(async () => {
+    setSecLoading(true);
+    try {
+      const [ov, us, ss, sp] = await Promise.all([
+        axios.get(`${API}/admin/security/overview`,   { headers }),
+        axios.get(`${API}/admin/security/users`,      { headers }),
+        axios.get(`${API}/admin/security/sessions`,   { headers }),
+        axios.get(`${API}/admin/security/suspicious`, { headers }),
+      ]);
+      setSecOverview(ov.data);
+      setSecUsers(us.data);
+      setSecSessions(ss.data);
+      setSecSuspicious(sp.data);
+    } catch { toast.error("خطأ في تحميل بيانات الأمان"); }
+    finally { setSecLoading(false); }
+  }, [headers]);
+
+  const loadUserDevices = async (uid) => {
+    try {
+      const { data } = await axios.get(`${API}/admin/security/devices/${uid}`, { headers });
+      setSecDevices(p => ({ ...p, [uid]: data }));
+    } catch {}
+  };
+
+  const revokeSession = async (session_id) => {
+    await axios.delete(`${API}/admin/security/sessions/${session_id}`, { headers });
+    toast.success("تم إلغاء الجلسة");
+    setSecSessions(p => p.filter(s => s.session_id !== session_id));
+  };
+
+  const lockUser = async (uid) => {
+    await axios.post(`${API}/admin/security/lock/${uid}`, {}, { headers });
+    toast.success("تم قفل الحساب");
+    setSecUsers(p => p.map(u => u.id === uid ? { ...u, is_locked: true } : u));
+  };
+
+  const unlockUser = async (uid) => {
+    await axios.post(`${API}/admin/security/unlock/${uid}`, {}, { headers });
+    toast.success("تم فتح الحساب");
+    setSecUsers(p => p.map(u => u.id === uid ? { ...u, is_locked: false } : u));
+  };
+
+  const removeDevice = async (device_id, uid) => {
+    await axios.delete(`${API}/admin/security/devices/${device_id}`, { headers });
+    toast.success("تم حذف الجهاز");
+    setSecDevices(p => ({ ...p, [uid]: (p[uid] || []).filter(d => d.device_id !== device_id) }));
+  };
+
+  const clearLogs = async (uid) => {
+    await axios.delete(`${API}/admin/security/logs/${uid}`, { headers });
+    toast.success("تم مسح السجلات");
+    setSecSuspicious(p => p.filter(l => l.user_id !== uid));
+    setSecUsers(prev => prev.map(u => u.id === uid ? { ...u, suspicious_count: 0 } : u));
+  };
 
   // Admin logs state
   const [logs, setLogs] = useState([]);
@@ -819,6 +1146,7 @@ export default function AdminDashboard() {
             { key: "questions", label: "الأسئلة", forAll: true },
             { key: "pending", label: `مراجعة الأسئلة${pendingTotal > 0 ? ` (${pendingTotal})` : ""}`, forAll: true },
             { key: "users", label: "المستخدمون", superOnly: true },
+            { key: "security", label: "🛡 الأمان", superOnly: true },
             { key: "analytics", label: "الإحصاءات", superOnly: true },
             { key: "settings", label: "الإعدادات", superOnly: true },
             { key: "ai", label: "توليد AI", forAll: true },
@@ -1229,6 +1557,27 @@ export default function AdminDashboard() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── SECURITY TAB ── */}
+      {activeTab === "security" && (
+        <SecurityDashboard
+          overview={secOverview}
+          users={secUsers}
+          sessions={secSessions}
+          suspicious={secSuspicious}
+          devices={secDevices}
+          loading={secLoading}
+          expandedUser={expandedUser}
+          setExpandedUser={setExpandedUser}
+          onLoad={loadSecurity}
+          onLoadDevices={loadUserDevices}
+          onRevokeSession={revokeSession}
+          onLock={lockUser}
+          onUnlock={unlockUser}
+          onRemoveDevice={removeDevice}
+          onClearLogs={clearLogs}
+        />
       )}
 
       {/* ── ANALYTICS TAB ── */}
