@@ -249,6 +249,7 @@ function QuickHostBar({ session, currentTurn, switchTurn, adjustScoreDelta, dark
 
   return (
     <div
+      data-testid="quick-host-bar"
       className="shrink-0 flex items-center justify-between px-3 py-1.5 gap-2"
       style={{
         background: dark
