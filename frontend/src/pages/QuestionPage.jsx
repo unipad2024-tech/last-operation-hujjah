@@ -30,6 +30,7 @@ export default function QuestionPage() {
   const [tensionDone, setTensionDone] = useState(false);
   const [zoomedImage, setZoomedImage] = useState(null);
   const [imgLoaded, setImgLoaded]     = useState(false);
+  const [panelVisible, setPanelVisible] = useState(false);
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -46,6 +47,15 @@ export default function QuestionPage() {
       toast.error("⏰ انتهى الوقت!", { duration: 3000 });
     }
   }, [timeLeft, timerOn, tensionDone]);
+
+  // Animate panel in after reveal
+  useEffect(() => {
+    if (showAnswer) {
+      requestAnimationFrame(() => requestAnimationFrame(() => setPanelVisible(true)));
+    } else {
+      setPanelVisible(false);
+    }
+  }, [showAnswer]);
 
   const playTension = () => {
     try {
@@ -129,18 +139,144 @@ export default function QuestionPage() {
       : { label: "صعب",   color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)" }
   );
 
-  /* ── Assistance tools (visual only) ── */
   const LIFELINES = ["⏱️", "🔄", "🎯"];
+
+  const ROMAN_BG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
   return (
     <div
       className="h-screen flex flex-col overflow-hidden select-none"
       style={{
         minHeight: "100svh",
-        background: "radial-gradient(ellipse 110% 60% at 50% 0%, #3D0810 0%, #1a0205 45%, #0a0101 100%)",
+        backgroundImage: `
+          radial-gradient(ellipse 110% 60% at 50% 0%, rgba(61,8,16,0.82) 0%, rgba(10,1,1,0.90) 55%, rgba(4,0,1,0.96) 100%),
+          url("${ROMAN_BG}")
+        `,
+        backgroundSize: "cover",
+        backgroundPosition: "center 30%",
+        backgroundAttachment: "fixed",
         fontFamily: "Cairo, sans-serif",
       }}
     >
+      <style>{`
+        @keyframes answerGlow {
+          0%, 100% { text-shadow: 0 0 24px rgba(241,225,148,0.45), 0 0 70px rgba(241,225,148,0.18); }
+          50%       { text-shadow: 0 0 50px rgba(241,225,148,0.80), 0 0 120px rgba(241,225,148,0.35); }
+        }
+        @keyframes goldShimmer {
+          0%   { background-position: 200% center; }
+          100% { background-position: -200% center; }
+        }
+        @keyframes pointsPop {
+          0%   { transform: scale(0.4) translateY(12px); opacity: 0; }
+          65%  { transform: scale(1.18) translateY(-4px); }
+          100% { transform: scale(1) translateY(0);  opacity: 1; }
+        }
+        @keyframes ctaFadeUp {
+          from { transform: translateY(20px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+        @keyframes answerWordIn {
+          0%   { opacity: 0; transform: scale(0.82) translateY(10px); filter: blur(6px); }
+          60%  { filter: blur(0px); }
+          100% { opacity: 1; transform: scale(1)    translateY(0);    filter: blur(0px); }
+        }
+        @keyframes revealFlash {
+          0%   { opacity: 0; }
+          18%  { opacity: 0.22; }
+          100% { opacity: 0; }
+        }
+        @keyframes revealBtnPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(241,225,148,0.0), 0 0 20px rgba(241,225,148,0.10); }
+          50%      { box-shadow: 0 0 0 8px rgba(241,225,148,0.12), 0 0 36px rgba(241,225,148,0.22); }
+        }
+        @keyframes cineBar {
+          from { transform: scaleX(0); opacity: 0; }
+          to   { transform: scaleX(1); opacity: 1; }
+        }
+
+        /* ── Answer panel ── */
+        .answer-panel {
+          position: fixed;
+          bottom: 0;
+          left: 50%;
+          transform: translateX(-50%) translateY(100%);
+          opacity: 0;
+          width: min(800px, 94vw);
+          z-index: 50;
+          border-radius: 28px 28px 0 0;
+          padding: clamp(20px,3vw,36px) clamp(20px,3vw,36px) clamp(18px,2.5vh,28px);
+          background: rgba(4,0,2,0.94);
+          backdrop-filter: blur(32px) saturate(1.6);
+          -webkit-backdrop-filter: blur(32px) saturate(1.6);
+          border: 1.5px solid rgba(241,225,148,0.16);
+          border-bottom: none;
+          box-shadow:
+            0 -24px 90px rgba(0,0,0,0.75),
+            0 -2px 0 rgba(241,225,148,0.12),
+            inset 0 1px 0 rgba(241,225,148,0.06);
+          transition: transform 0.58s cubic-bezier(0.16,1,0.3,1), opacity 0.38s ease;
+        }
+        .answer-panel.visible {
+          transform: translateX(-50%) translateY(0);
+          opacity: 1;
+        }
+
+        /* ── Overlay ── */
+        .answer-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 40;
+          background: rgba(0,0,0,0);
+          backdrop-filter: blur(0px);
+          -webkit-backdrop-filter: blur(0px);
+          transition: background 0.5s ease, backdrop-filter 0.5s ease;
+          pointer-events: none;
+        }
+        .answer-overlay.visible {
+          background: rgba(0,0,0,0.68);
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          pointer-events: auto;
+        }
+
+        /* Flash burst when answer is revealed */
+        .answer-overlay.visible::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(ellipse 60% 40% at 50% 80%, rgba(241,225,148,0.18) 0%, transparent 70%);
+          animation: revealFlash 0.8s ease-out forwards;
+          pointer-events: none;
+        }
+
+        /* Cinematic top/bottom bars */
+        .answer-overlay.visible::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 12%),
+            linear-gradient(to top,    rgba(0,0,0,0.5) 0%, transparent 18%);
+          pointer-events: none;
+        }
+
+        /* ── Text / button animations ── */
+        .answer-text-glow    { animation: answerGlow 2.6s ease-in-out infinite; }
+        .answer-word-in      { animation: answerWordIn 0.55s cubic-bezier(0.22,1,0.36,1) both; }
+        .points-badge-pop    { animation: pointsPop 0.55s cubic-bezier(0.34,1.56,0.64,1) both; animation-delay: 0.12s; }
+        .cta-fade-up         { animation: ctaFadeUp 0.5s ease both; animation-delay: 0.08s; }
+        .reveal-btn-pulse    { animation: revealBtnPulse 2s ease-in-out infinite; }
+
+        .score-btn-reveal {
+          transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s ease;
+        }
+        .score-btn-reveal:hover  { transform: scale(1.06) translateY(-4px); }
+        .score-btn-reveal:active { transform: scale(0.95); }
+
+        html, body { overflow-x: hidden; }
+      `}</style>
+
       {/* ════════════ IMAGE ZOOM MODAL ════════════ */}
       {zoomedImage && (
         <div
@@ -165,6 +301,9 @@ export default function QuestionPage() {
         </div>
       )}
 
+      {/* ════════════ ANSWER OVERLAY (darkens bg when answer shown) ════════════ */}
+      <div className={`answer-overlay${panelVisible ? " visible" : ""}`} />
+
       {/* ════════════ TOP BAR ════════════ */}
       <header
         className="shrink-0 flex items-center justify-between px-4 md:px-6"
@@ -175,7 +314,6 @@ export default function QuestionPage() {
           backdropFilter: "blur(10px)",
         }}
       >
-        {/* Left: back */}
         <button
           data-testid="back-to-board"
           onClick={handleBack}
@@ -186,12 +324,8 @@ export default function QuestionPage() {
           <span>اللوحة</span>
         </button>
 
-        {/* Center: session name + category */}
         <div className="flex flex-col items-center leading-tight">
-          <span
-            className="font-black text-secondary/80"
-            style={{ fontSize: "clamp(0.8rem,1.6vw,1.1rem)" }}
-          >
+          <span className="font-black text-secondary/80" style={{ fontSize: "clamp(0.8rem,1.6vw,1.1rem)" }}>
             {session?.name || "كأس حُجّة"}
           </span>
           <div className="flex items-center gap-2">
@@ -199,18 +333,13 @@ export default function QuestionPage() {
               {catName}
             </span>
             <span className="text-secondary/20 text-xs">·</span>
-            <span
-              className="font-black"
-              style={{ color: diffBadge?.color, fontSize: "clamp(0.62rem,1.1vw,0.78rem)" }}
-            >
+            <span className="font-black" style={{ color: diffBadge?.color, fontSize: "clamp(0.62rem,1.1vw,0.78rem)" }}>
               {diffBadge?.label}
             </span>
           </div>
         </div>
 
-        {/* Right: scores */}
         <div className="flex items-center gap-3 md:gap-5">
-          {/* Team 1 */}
           <div
             className="flex flex-col items-center rounded-xl px-3 py-1.5 transition-all"
             style={{
@@ -229,7 +358,6 @@ export default function QuestionPage() {
 
           <span className="text-secondary/20 font-bold text-xs">VS</span>
 
-          {/* Team 2 */}
           <div
             className="flex flex-col items-center rounded-xl px-3 py-1.5 transition-all"
             style={{
@@ -251,25 +379,23 @@ export default function QuestionPage() {
       {/* ════════════ MAIN BODY ════════════ */}
       <div className="flex-1 flex gap-3 p-3 md:p-4 overflow-hidden min-h-0">
 
-        {/* ── QUESTION CARD (main area) ── */}
+        {/* ── QUESTION CARD ── */}
         <div
           className="flex-1 flex flex-col rounded-3xl overflow-hidden"
           style={{
-            background: "rgba(15,2,5,0.88)",
-            border: "1.5px solid rgba(241,225,148,0.14)",
-            boxShadow: "0 0 60px rgba(0,0,0,0.7), inset 0 1px 0 rgba(241,225,148,0.07)",
-            backdropFilter: "blur(12px)",
+            background: "rgba(8,1,3,0.78)",
+            border: "1.5px solid rgba(241,225,148,0.13)",
+            boxShadow: "0 0 70px rgba(0,0,0,0.65), inset 0 1px 0 rgba(241,225,148,0.08)",
+            backdropFilter: "blur(20px) saturate(1.3)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.3)",
           }}
         >
-          {/* ── CARD HEADER: Team | Timer | Points ── */}
+          {/* ── CARD HEADER ── */}
           <div
             className="shrink-0 flex items-center justify-between px-5 py-3"
-            style={{
-              background: activeBg,
-              borderBottom: `1px solid ${activeBorder}`,
-            }}
+            style={{ background: activeBg, borderBottom: `1px solid ${activeBorder}` }}
           >
-            {/* Active team badge */}
+            {/* Active team */}
             <div className="flex items-center gap-2.5">
               <div
                 className="w-2.5 h-2.5 rounded-full animate-pulse shrink-0"
@@ -288,7 +414,7 @@ export default function QuestionPage() {
               </div>
             </div>
 
-            {/* Timer — circular, compact */}
+            {/* Timer */}
             <div className="flex flex-col items-center gap-1.5">
               <div style={{ width: "clamp(86px,10vw,110px)", height: "clamp(86px,10vw,110px)" }}>
                 <svg width="100%" height="100%" viewBox="0 0 90 90">
@@ -309,7 +435,6 @@ export default function QuestionPage() {
                   </text>
                 </svg>
               </div>
-              {/* Timer micro-controls */}
               <div className="flex gap-1.5 items-center">
                 <button
                   data-testid="timer-pause-resume-btn"
@@ -330,7 +455,6 @@ export default function QuestionPage() {
                   onClick={() => { setTimeLeft(TIMER_DURATION); setTimerOn(false); setTensionDone(false); }}
                   className="rounded-lg p-1.5 transition-all hover:scale-110 active:scale-95"
                   style={{ background: "rgba(156,163,175,0.12)", border: "1px solid rgba(156,163,175,0.25)", color: "rgba(209,213,219,0.7)" }}
-                  title="إعادة"
                 >
                   <RotateCcw size={10} />
                 </button>
@@ -359,10 +483,9 @@ export default function QuestionPage() {
             </div>
           </div>
 
-          {/* ── CARD BODY: Question text + Image ── */}
+          {/* ── CARD BODY: Question ── */}
           <div className="flex-1 flex flex-col justify-center overflow-y-auto px-5 md:px-8 py-4 min-h-0">
             {isSecret ? (
-              /* Secret word QR */
               <div className="flex flex-col items-center justify-center h-full gap-4">
                 <div className="text-secondary font-black text-center" style={{ fontSize: "clamp(1.2rem,2.5vw,1.8rem)" }}>
                   وصّف الكلمة السرية
@@ -376,19 +499,16 @@ export default function QuestionPage() {
             ) : (
               <div className="flex flex-col items-center gap-5">
 
-                {/* ── QUESTION IMAGE — always rendered if url exists ── */}
+                {/* Question image */}
                 {question.image_url && (
-                  <div
-                    className="relative group w-full flex justify-center shrink-0"
-                    data-testid="question-image-container"
-                  >
+                  <div className="relative group w-full flex justify-center shrink-0" data-testid="question-image-container">
                     <div className="relative inline-flex flex-col items-center gap-2">
                       {!imgLoaded && (
                         <div
                           className="animate-pulse rounded-2xl flex items-center justify-center"
                           style={{
-                            width: "clamp(160px,30vw,320px)",
-                            height: "clamp(100px,18vh,200px)",
+                            width: "clamp(180px,32vw,360px)",
+                            height: "clamp(110px,20vh,220px)",
                             background: "rgba(241,225,148,0.05)",
                             border: "1.5px dashed rgba(241,225,148,0.15)",
                           }}
@@ -401,35 +521,17 @@ export default function QuestionPage() {
                         alt="question"
                         data-testid="question-image"
                         onLoad={() => setImgLoaded(true)}
-                        onError={e => {
-                          e.target.style.display = "none";
-                          // Show fallback text
-                          const fb = e.target.nextSibling;
-                          if (fb) fb.style.display = "flex";
-                        }}
+                        onError={e => { e.target.style.display = "none"; }}
                         className="object-contain rounded-2xl cursor-zoom-in transition-all duration-300 hover:scale-[1.02]"
                         style={{
-                          maxHeight: "clamp(120px,22vh,260px)",
-                          maxWidth: "min(100%,480px)",
+                          maxHeight: "clamp(140px,26vh,300px)",
+                          maxWidth: "min(100%,520px)",
                           border: "1.5px solid rgba(241,225,148,0.18)",
-                          boxShadow: "0 8px 40px rgba(0,0,0,0.55)",
+                          boxShadow: "0 12px 50px rgba(0,0,0,0.65), 0 4px 16px rgba(241,225,148,0.06)",
                           display: imgLoaded ? "block" : "none",
                         }}
                         onClick={() => setZoomedImage(question.image_url)}
                       />
-                      {/* Fallback shown on error */}
-                      <div
-                        className="hidden rounded-2xl items-center justify-center text-secondary/25 text-sm"
-                        style={{
-                          width: "clamp(160px,28vw,300px)",
-                          height: "clamp(80px,14vh,140px)",
-                          background: "rgba(241,225,148,0.04)",
-                          border: "1.5px dashed rgba(241,225,148,0.1)",
-                        }}
-                      >
-                        صورة السؤال
-                      </div>
-                      {/* Zoom overlay */}
                       {imgLoaded && (
                         <div
                           className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl cursor-zoom-in"
@@ -439,24 +541,16 @@ export default function QuestionPage() {
                           <ZoomIn size={28} className="text-white" />
                         </div>
                       )}
-                      {/* Zoom hint */}
-                      {imgLoaded && (
-                        <span className="text-secondary/25 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-                          انقر للتكبير
-                        </span>
-                      )}
                     </div>
                   </div>
                 )}
 
-                {/* ── QUESTION TEXT ── */}
+                {/* Question text */}
                 <p
                   data-testid="question-text"
                   className="text-secondary font-bold text-center leading-relaxed"
                   style={{
-                    fontSize: question.image_url
-                      ? "clamp(1.25rem, 3vw, 2.4rem)"
-                      : "clamp(1.5rem, 3.8vw, 3rem)",
+                    fontSize: question.image_url ? "clamp(1.25rem,3vw,2.4rem)" : "clamp(1.5rem,3.8vw,3rem)",
                     textShadow: "0 2px 12px rgba(0,0,0,0.6)",
                     maxWidth: "720px",
                     margin: "0 auto",
@@ -469,160 +563,29 @@ export default function QuestionPage() {
             )}
           </div>
 
-          {/* ── CARD FOOTER: Reveal / Answer section ── */}
-          <div
-            className="shrink-0 px-5 py-4"
-            style={{ borderTop: "1px solid rgba(241,225,148,0.08)" }}
-          >
-            {/* Reveal button */}
-            {!showAnswer && (
+          {/* ── CARD FOOTER: Reveal button ── */}
+          {!showAnswer && (
+            <div className="shrink-0 px-5 py-4" style={{ borderTop: "1px solid rgba(241,225,148,0.08)" }}>
               <div className="flex justify-center">
                 <button
                   data-testid="reveal-answer-btn"
                   onClick={handleReveal}
-                  className="font-black rounded-full transition-all duration-300 hover:scale-105 active:scale-95"
+                  className="reveal-btn-pulse font-black rounded-full transition-all duration-200 hover:scale-105 active:scale-95"
                   style={{
-                    background: "rgba(241,225,148,0.10)",
-                    border: "2px solid rgba(241,225,148,0.45)",
+                    background: "linear-gradient(135deg, rgba(92,14,20,0.85) 0%, rgba(61,8,16,0.92) 100%)",
+                    border: "2px solid rgba(241,225,148,0.55)",
                     color: "#F1E194",
-                    fontSize: "clamp(0.9rem,1.8vw,1.2rem)",
-                    padding: "clamp(10px,1.5vw,16px) clamp(28px,5vw,56px)",
-                    boxShadow: "0 0 24px rgba(241,225,148,0.12)",
+                    fontSize: "clamp(1rem,1.9vw,1.3rem)",
+                    padding: "clamp(12px,1.8vw,18px) clamp(36px,6vw,72px)",
+                    letterSpacing: "0.04em",
+                    textShadow: "0 0 16px rgba(241,225,148,0.4)",
                   }}
                 >
-                  كشف الإجابة
+                  ◆ كشف الإجابة ◆
                 </button>
               </div>
-            )}
-
-            {/* Answer revealed */}
-            {showAnswer && (
-              <div className="animate-fade-in-up">
-                {/* Answer image */}
-                {question.answer_image_url && (
-                  <div className="flex justify-center mb-3 group relative">
-                    <img
-                      src={question.answer_image_url}
-                      alt="answer"
-                      data-testid="answer-image"
-                      className="object-contain rounded-xl cursor-zoom-in transition-transform hover:scale-[1.02]"
-                      style={{
-                        maxHeight: "clamp(70px,13vh,140px)",
-                        maxWidth: "min(100%,360px)",
-                        border: "1.5px solid rgba(241,225,148,0.18)",
-                        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-                      }}
-                      onClick={() => setZoomedImage(question.answer_image_url)}
-                      onError={e => { e.target.style.display = "none"; }}
-                    />
-                  </div>
-                )}
-
-                {/* Answer text */}
-                <div className="text-secondary/45 text-xs text-center uppercase tracking-widest mb-1.5">
-                  الإجابة
-                </div>
-                <div
-                  data-testid="answer-text"
-                  className="text-secondary font-black text-center"
-                  style={{
-                    fontSize: "clamp(1.8rem,4.5vw,3.2rem)",
-                    textShadow: "0 0 30px rgba(241,225,148,0.4)",
-                    lineHeight: 1.1,
-                  }}
-                >
-                  {question.answer}
-                </div>
-
-                {/* Score assignment */}
-                {!assigned && (
-                  <div className="mt-4">
-                    <div className="text-secondary/40 text-xs text-center mb-3 tracking-wider uppercase">من أجاب صح؟</div>
-                    <div className="flex gap-3 justify-center flex-wrap">
-                      <button
-                        data-testid="assign-team1-btn"
-                        onClick={() => handleAssign(1)}
-                        className="flex flex-col items-center justify-center rounded-2xl font-bold transition-all hover:scale-105 active:scale-95"
-                        style={{
-                          background: "linear-gradient(135deg,rgba(185,28,28,0.9),rgba(127,29,29,0.95))",
-                          border: "2px solid rgba(248,113,113,0.5)",
-                          padding: "clamp(10px,1.8vw,18px) clamp(20px,4vw,48px)",
-                          minWidth: "clamp(140px,18vw,220px)",
-                          boxShadow: "0 4px 20px rgba(239,68,68,0.3)",
-                        }}
-                      >
-                        <span className="text-white/90 font-black leading-tight" style={{ fontSize: "clamp(0.9rem,1.6vw,1.2rem)" }}>
-                          🔴 {session?.team1_name}
-                        </span>
-                        <span className="text-red-200 font-black tabular-nums leading-none" style={{ fontSize: "clamp(2rem,4vw,3.5rem)" }}>
-                          +{question.difficulty}
-                        </span>
-                      </button>
-
-                      <button
-                        data-testid="assign-team2-btn"
-                        onClick={() => handleAssign(2)}
-                        className="flex flex-col items-center justify-center rounded-2xl font-bold transition-all hover:scale-105 active:scale-95"
-                        style={{
-                          background: "linear-gradient(135deg,rgba(29,78,216,0.9),rgba(30,58,138,0.95))",
-                          border: "2px solid rgba(96,165,250,0.5)",
-                          padding: "clamp(10px,1.8vw,18px) clamp(20px,4vw,48px)",
-                          minWidth: "clamp(140px,18vw,220px)",
-                          boxShadow: "0 4px 20px rgba(59,130,246,0.3)",
-                        }}
-                      >
-                        <span className="text-white/90 font-black leading-tight" style={{ fontSize: "clamp(0.9rem,1.6vw,1.2rem)" }}>
-                          🔵 {session?.team2_name}
-                        </span>
-                        <span className="text-blue-200 font-black tabular-nums leading-none" style={{ fontSize: "clamp(2rem,4vw,3.5rem)" }}>
-                          +{question.difficulty}
-                        </span>
-                      </button>
-
-                      <button
-                        data-testid="skip-points-btn"
-                        onClick={handleSkip}
-                        className="rounded-2xl font-bold text-sm transition-all hover:scale-105 active:scale-95 self-center"
-                        style={{
-                          border: "1.5px solid rgba(241,225,148,0.18)",
-                          color: "rgba(241,225,148,0.35)",
-                          padding: "clamp(10px,1.8vw,18px) clamp(14px,2.5vw,24px)",
-                        }}
-                      >
-                        لا أحد
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Post-assignment CTA */}
-                {assigned && (
-                  <div className="mt-4 flex flex-col items-center gap-3 animate-fade-in-up">
-                    {scoredTeam && (
-                      <div
-                        className="text-secondary font-black text-center"
-                        style={{ fontSize: "clamp(1rem,2vw,1.4rem)", textShadow: "0 0 20px rgba(241,225,148,0.4)" }}
-                      >
-                        ✓ +{question.difficulty} ← {scoredTeam === 1 ? session?.team1_name : session?.team2_name}
-                      </div>
-                    )}
-                    <button
-                      data-testid="continue-btn"
-                      onClick={handleBack}
-                      className="bg-secondary text-primary font-black rounded-full transition-all hover:scale-105 active:scale-95 animate-pulse-glow"
-                      style={{
-                        fontSize: "clamp(1rem,1.8vw,1.3rem)",
-                        padding: "clamp(10px,1.5vw,16px) clamp(28px,5vw,52px)",
-                        boxShadow: "0 0 32px rgba(241,225,148,0.3)",
-                      }}
-                    >
-                      العودة للوحة ←
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* ════════════ SIDE PANEL ════════════ */}
@@ -630,7 +593,6 @@ export default function QuestionPage() {
           className="shrink-0 flex flex-col gap-3 overflow-y-auto"
           style={{ width: "clamp(160px, 18vw, 220px)" }}
         >
-          {/* Header label */}
           <div
             className="text-center rounded-2xl py-2.5 shrink-0"
             style={{
@@ -646,7 +608,7 @@ export default function QuestionPage() {
             وسائل المساعدة
           </div>
 
-          {/* Team 1 panel */}
+          {/* Team 1 */}
           <div
             className="rounded-2xl p-3 flex flex-col gap-2.5 shrink-0"
             style={{
@@ -677,29 +639,18 @@ export default function QuestionPage() {
             </div>
             <div className="flex justify-center gap-2">
               {LIFELINES.map((icon, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-center rounded-xl transition-all"
-                  style={{
-                    width: "clamp(28px,3vw,38px)",
-                    height: "clamp(28px,3vw,38px)",
-                    background: "rgba(241,225,148,0.06)",
-                    border: "1px solid rgba(241,225,148,0.12)",
-                    fontSize: "clamp(0.75rem,1.3vw,1rem)",
-                    cursor: "default",
-                  }}
+                <div key={i}
+                  className="flex items-center justify-center rounded-xl"
+                  style={{ width: "clamp(28px,3vw,38px)", height: "clamp(28px,3vw,38px)", background: "rgba(241,225,148,0.06)", border: "1px solid rgba(241,225,148,0.12)", fontSize: "clamp(0.75rem,1.3vw,1rem)" }}
                   title={["مزيد وقت","تغيير سؤال","مساعدة"][i]}
-                >
-                  {icon}
-                </div>
+                >{icon}</div>
               ))}
             </div>
           </div>
 
-          {/* Divider */}
           <div style={{ height: "1px", background: "rgba(241,225,148,0.07)" }} />
 
-          {/* Team 2 panel */}
+          {/* Team 2 */}
           <div
             className="rounded-2xl p-3 flex flex-col gap-2.5 shrink-0"
             style={{
@@ -730,26 +681,15 @@ export default function QuestionPage() {
             </div>
             <div className="flex justify-center gap-2">
               {LIFELINES.map((icon, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-center rounded-xl transition-all"
-                  style={{
-                    width: "clamp(28px,3vw,38px)",
-                    height: "clamp(28px,3vw,38px)",
-                    background: "rgba(241,225,148,0.06)",
-                    border: "1px solid rgba(241,225,148,0.12)",
-                    fontSize: "clamp(0.75rem,1.3vw,1rem)",
-                    cursor: "default",
-                  }}
+                <div key={i}
+                  className="flex items-center justify-center rounded-xl"
+                  style={{ width: "clamp(28px,3vw,38px)", height: "clamp(28px,3vw,38px)", background: "rgba(241,225,148,0.06)", border: "1px solid rgba(241,225,148,0.12)", fontSize: "clamp(0.75rem,1.3vw,1rem)" }}
                   title={["مزيد وقت","تغيير سؤال","مساعدة"][i]}
-                >
-                  {icon}
-                </div>
+                >{icon}</div>
               ))}
             </div>
           </div>
 
-          {/* Difficulty reminder */}
           <div
             className="rounded-2xl p-3 text-center shrink-0"
             style={{ background: diffBadge?.bg, border: `1px solid ${diffBadge?.border}` }}
@@ -764,6 +704,175 @@ export default function QuestionPage() {
         </aside>
 
       </div>
+
+      {/* ════════════ CINEMATIC ANSWER PANEL (slides up from bottom) ════════════ */}
+      {showAnswer && (
+        <div className={`answer-panel${panelVisible ? " visible" : ""}`}>
+
+          {/* Handle bar */}
+          <div className="flex justify-center mb-4">
+            <div style={{ width: 40, height: 4, borderRadius: 99, background: "rgba(241,225,148,0.2)" }} />
+          </div>
+
+          {/* Answer image */}
+          {question.answer_image_url && (
+            <div className="flex justify-center mb-4">
+              <img
+                src={question.answer_image_url}
+                alt="answer"
+                data-testid="answer-image"
+                className="object-contain rounded-2xl cursor-zoom-in transition-transform hover:scale-[1.02]"
+                style={{
+                  maxHeight: "clamp(80px,14vh,160px)",
+                  maxWidth: "min(100%,400px)",
+                  border: "1.5px solid rgba(241,225,148,0.2)",
+                  boxShadow: "0 8px 40px rgba(0,0,0,0.6), 0 0 30px rgba(241,225,148,0.08)",
+                }}
+                onClick={() => setZoomedImage(question.answer_image_url)}
+                onError={e => { e.target.style.display = "none"; }}
+              />
+            </div>
+          )}
+
+          {/* "الإجابة" label */}
+          <div
+            className="text-center mb-2"
+            style={{ color: "rgba(241,225,148,0.4)", fontSize: "clamp(0.65rem,1.1vw,0.8rem)", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase" }}
+          >
+            ◆ الإجابة ◆
+          </div>
+
+          {/* Answer text — BIG, glowing, animated entrance */}
+          <div
+            data-testid="answer-text"
+            className="text-secondary font-black text-center answer-text-glow answer-word-in"
+            style={{
+              fontSize: "clamp(2rem,5.5vw,4rem)",
+              lineHeight: 1.1,
+              letterSpacing: "-0.01em",
+              marginBottom: "clamp(14px,2.2vh,24px)",
+            }}
+          >
+            {question.answer}
+          </div>
+
+          {/* Points badge — gradient gold */}
+          {!assigned && (
+            <div className="flex justify-center mb-4 points-badge-pop">
+              <div
+                style={{
+                  background: "linear-gradient(135deg, #92400e, #d97706, #fbbf24, #d97706, #92400e)",
+                  backgroundSize: "200% auto",
+                  animation: "goldShimmer 3s linear infinite",
+                  color: "#000",
+                  fontWeight: 900,
+                  fontSize: "clamp(0.85rem,1.4vw,1rem)",
+                  padding: "8px 24px",
+                  borderRadius: 99,
+                  boxShadow: "0 0 24px rgba(251,191,36,0.4), 0 4px 16px rgba(0,0,0,0.4)",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {question.difficulty} نقطة
+              </div>
+            </div>
+          )}
+
+          {/* Score assignment */}
+          {!assigned && (
+            <div>
+              <div
+                className="text-center mb-3"
+                style={{ color: "rgba(241,225,148,0.35)", fontSize: "clamp(0.7rem,1.1vw,0.82rem)", fontWeight: 700, letterSpacing: "0.1em" }}
+              >
+                من أجاب صح؟
+              </div>
+              <div className="flex gap-3 justify-center flex-wrap">
+                <button
+                  data-testid="assign-team1-btn"
+                  onClick={() => handleAssign(1)}
+                  className="score-btn-reveal flex flex-col items-center justify-center rounded-2xl font-bold"
+                  style={{
+                    background: "linear-gradient(160deg, rgba(220,38,38,0.9) 0%, rgba(153,27,27,0.95) 100%)",
+                    border: "1.5px solid rgba(248,113,113,0.5)",
+                    padding: "clamp(10px,1.8vw,18px) clamp(22px,4vw,52px)",
+                    minWidth: "clamp(140px,18vw,220px)",
+                    boxShadow: "0 6px 28px rgba(239,68,68,0.35)",
+                  }}
+                >
+                  <span className="text-white/90 font-black leading-tight" style={{ fontSize: "clamp(0.85rem,1.5vw,1.1rem)" }}>
+                    🔴 {session?.team1_name}
+                  </span>
+                  <span className="text-red-200 font-black tabular-nums leading-none" style={{ fontSize: "clamp(1.5rem,2.8vw,2.2rem)" }}>
+                    +{question.difficulty}
+                  </span>
+                </button>
+
+                <button
+                  data-testid="assign-team2-btn"
+                  onClick={() => handleAssign(2)}
+                  className="score-btn-reveal flex flex-col items-center justify-center rounded-2xl font-bold"
+                  style={{
+                    background: "linear-gradient(160deg, rgba(29,78,216,0.9) 0%, rgba(30,58,138,0.95) 100%)",
+                    border: "1.5px solid rgba(96,165,250,0.5)",
+                    padding: "clamp(10px,1.8vw,18px) clamp(22px,4vw,52px)",
+                    minWidth: "clamp(140px,18vw,220px)",
+                    boxShadow: "0 6px 28px rgba(59,130,246,0.35)",
+                  }}
+                >
+                  <span className="text-white/90 font-black leading-tight" style={{ fontSize: "clamp(0.85rem,1.5vw,1.1rem)" }}>
+                    🔵 {session?.team2_name}
+                  </span>
+                  <span className="text-blue-200 font-black tabular-nums leading-none" style={{ fontSize: "clamp(1.5rem,2.8vw,2.2rem)" }}>
+                    +{question.difficulty}
+                  </span>
+                </button>
+
+                <button
+                  data-testid="skip-points-btn"
+                  onClick={handleSkip}
+                  className="rounded-2xl font-bold text-sm transition-all hover:scale-105 active:scale-95 self-center"
+                  style={{
+                    border: "1.5px solid rgba(241,225,148,0.18)",
+                    color: "rgba(241,225,148,0.35)",
+                    padding: "clamp(10px,1.8vw,18px) clamp(14px,2.5vw,24px)",
+                  }}
+                >
+                  لا أحد
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Post-assignment CTA */}
+          {assigned && (
+            <div className="flex flex-col items-center gap-3 cta-fade-up">
+              {scoredTeam && (
+                <div
+                  className="text-secondary font-black text-center"
+                  style={{ fontSize: "clamp(1rem,2vw,1.4rem)", textShadow: "0 0 20px rgba(241,225,148,0.4)" }}
+                >
+                  ✓ +{question.difficulty} ← {scoredTeam === 1 ? session?.team1_name : session?.team2_name}
+                </div>
+              )}
+              <button
+                data-testid="continue-btn"
+                onClick={handleBack}
+                className="bg-secondary text-primary font-black rounded-full transition-all hover:scale-105 active:scale-95"
+                style={{
+                  fontSize: "clamp(1rem,1.8vw,1.3rem)",
+                  padding: "clamp(10px,1.5vw,16px) clamp(28px,5vw,52px)",
+                  boxShadow: "0 0 32px rgba(241,225,148,0.3)",
+                }}
+              >
+                العودة للوحة ←
+              </button>
+            </div>
+          )}
+
+        </div>
+      )}
+
     </div>
   );
 }
