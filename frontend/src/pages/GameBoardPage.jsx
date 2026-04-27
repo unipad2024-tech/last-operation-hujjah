@@ -101,14 +101,14 @@ function ScoreBtn({ catId, diff, slot, used, clicking, onClick, dark }) {
         background: used
           ? (dark ? "rgba(60,20,24,0.25)" : "rgba(180,160,140,0.3)")
           : (dark ? ds.darkBg : ds.bg),
-        boxShadow: used ? "none" : `0 6px 18px ${ds.shadow}, 0 2px 6px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25)`,
-        padding: "clamp(6px,1.2vh,14px) clamp(3px,0.5vw,8px)",
-        fontSize: "clamp(1.2rem, 2.6vw, 2.6rem)",
+        boxShadow: used ? "none" : `0 4px 12px ${ds.shadow}, 0 2px 4px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25)`,
+        padding: "clamp(4px,0.8vh,10px) clamp(2px,0.4vw,6px)",
+        fontSize: "clamp(0.7rem, 1.3vw, 1.25rem)",
         color: used ? (dark ? "rgba(212,160,23,0.25)" : "rgba(80,60,50,0.3)") : "#fff",
         letterSpacing: "-0.02em",
         lineHeight: 1,
         border: used ? `1px solid rgba(212,160,23,0.08)` : "1px solid rgba(255,255,255,0.22)",
-        textShadow: used ? "none" : "0 2px 6px rgba(0,0,0,0.5)",
+        textShadow: used ? "none" : "0 1px 4px rgba(0,0,0,0.5)",
       }}
     >
       {isClicking ? "⏳" : used ? "✓" : diff}
@@ -149,7 +149,7 @@ function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick, dar
       <div className="flex-1 flex flex-row items-stretch gap-1 px-1 py-1" style={{ minHeight: 0, overflow: "hidden" }}>
 
         {/* Left column: slot 1 buttons */}
-        <div className="card-btn-col flex flex-col justify-around gap-1 shrink-0" style={{ width: "clamp(52px,7.5vw,108px)" }}>
+        <div className="card-btn-col flex flex-col justify-around gap-1 shrink-0" style={{ width: "clamp(40px,5.5vw,80px)" }}>
           {DIFFICULTIES.map(diff => (
             <ScoreBtn
               key={`${cat.id}_${diff}_1`}
@@ -167,8 +167,8 @@ function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick, dar
           <div
             className="rounded-xl overflow-hidden flex items-center justify-center mb-1.5"
             style={{
-              width:  "clamp(60px, 10vw, 160px)",
-              height: "clamp(60px, 10vw, 160px)",
+              width:  "clamp(38px, 6.5vw, 100px)",
+              height: "clamp(38px, 6.5vw, 100px)",
               background: `linear-gradient(135deg, ${cat.color || "#5B0E14"}44, ${cat.color || "#5B0E14"}11)`,
               boxShadow: "0 4px 14px rgba(0,0,0,0.18)",
               flexShrink: 0,
@@ -182,7 +182,7 @@ function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick, dar
                 onError={(e) => { e.target.style.display = "none"; }}
               />
             ) : (
-              <span style={{ fontSize: "clamp(2rem, 4vw, 3.5rem)" }}>{cat.icon || "🎯"}</span>
+              <span style={{ fontSize: "clamp(1.2rem, 2.8vw, 2.4rem)" }}>{cat.icon || "🎯"}</span>
             )}
           </div>
 
@@ -216,7 +216,7 @@ function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick, dar
         </div>
 
         {/* Right column: slot 2 buttons */}
-        <div className="card-btn-col flex flex-col justify-around gap-1 shrink-0" style={{ width: "clamp(52px,7.5vw,108px)" }}>
+        <div className="card-btn-col flex flex-col justify-around gap-1 shrink-0" style={{ width: "clamp(40px,5.5vw,80px)" }}>
           {DIFFICULTIES.map(diff => (
             <ScoreBtn
               key={`${cat.id}_${diff}_2`}
@@ -345,11 +345,7 @@ export default function GameBoardPage() {
           from { opacity: 0; transform: translateY(22px) scale(0.97); }
           to   { opacity: 1; transform: translateY(0)   scale(1);    }
         }
-        @keyframes gmpPulse {
-          0%,100% { box-shadow: 0 0 0 4px rgba(241,225,148,0.12), 0 8px 32px rgba(91,14,20,0.8); }
-          50%     { box-shadow: 0 0 0 8px rgba(241,225,148,0.22), 0 8px 40px rgba(91,14,20,0.95); }
-        }
-        @keyframes boardLoad {
+@keyframes boardLoad {
           from { opacity: 0; transform: scale(0.985); }
           to   { opacity: 1; transform: scale(1); }
         }
@@ -395,78 +391,78 @@ export default function GameBoardPage() {
           WebkitBackdropFilter: "blur(12px)",
         }}
       >
-        <div className="flex items-center justify-between px-3 md:px-5 py-2 md:py-3 gap-2 md:gap-4">
+        <div className="flex items-center justify-between px-3 md:px-4 py-1.5 md:py-2 gap-2 md:gap-3">
 
           {/* ── Team 1 Score Block ── */}
           <div
             data-testid="team1-score"
-            className="flex flex-col items-center justify-center rounded-2xl px-3 md:px-6 py-2 md:py-3 transition-all duration-500 flex-1"
+            className="flex flex-col items-center justify-center rounded-xl px-2 md:px-4 py-1.5 md:py-2 transition-all duration-500 flex-1"
             style={{
               background:  currentTurn === 1 ? "rgba(180,30,40,0.22)" : "rgba(180,30,40,0.07)",
               border:      `2px solid ${currentTurn === 1 ? "rgba(220,50,60,0.80)" : "rgba(180,30,40,0.20)"}`,
-              boxShadow:   currentTurn === 1 ? "0 0 24px rgba(220,50,60,0.40), 0 0 50px rgba(180,30,40,0.15)" : "none",
-              minWidth:    "clamp(100px,16vw,230px)",
-              maxWidth:    "260px",
+              boxShadow:   currentTurn === 1 ? "0 0 18px rgba(220,50,60,0.35), 0 0 36px rgba(180,30,40,0.12)" : "none",
+              minWidth:    "clamp(80px,12vw,180px)",
+              maxWidth:    "200px",
             }}
           >
             <span
-              className="font-black leading-tight text-center truncate w-full mb-0.5"
-              style={{ fontSize: "clamp(0.95rem, 2.2vw, 1.85rem)", color: "#fca5a5", maxWidth: "230px", fontFamily: "Cairo, sans-serif" }}
+              className="font-black leading-tight text-center truncate w-full"
+              style={{ fontSize: "clamp(0.65rem, 1.4vw, 1.1rem)", color: "#fca5a5", maxWidth: "180px", fontFamily: "Cairo, sans-serif" }}
             >
               🔴 {team1Name}
             </span>
             <span
               className="font-black tabular-nums leading-none"
-              style={{ fontSize: "clamp(1.9rem, 4vw, 3.4rem)", color: "#D4A820", textShadow: "0 2px 10px rgba(212,168,32,0.4)" }}
+              style={{ fontSize: "clamp(1.2rem, 2.6vw, 2.2rem)", color: "#D4A820", textShadow: "0 2px 8px rgba(212,168,32,0.4)" }}
             >
               <ScoreCounter value={teamScores.team1} dark={darkMode} />
             </span>
           </div>
 
           {/* ── Center: Logo + LARGE Turn Indicator + Controls ── */}
-          <div className="flex flex-col items-center gap-1 shrink-0">
+          <div className="flex flex-col items-center gap-0.5 shrink-0">
             {/* Game title */}
             <div
               className="font-black leading-none"
-              style={{ fontSize: "clamp(1rem, 1.8vw, 1.4rem)", fontFamily: "Cairo, sans-serif", color: "#D4A820", textShadow: "0 2px 8px rgba(212,168,32,0.35)" }}
+              style={{ fontSize: "clamp(0.8rem, 1.3vw, 1.1rem)", fontFamily: "Cairo, sans-serif", color: "#D4A820", textShadow: "0 2px 6px rgba(212,168,32,0.35)" }}
             >
               حُجّة
             </div>
 
-            {/* ═══ LARGE TURN INDICATOR ═══ */}
+            {/* Turn indicator */}
             <div
               data-testid="turn-indicator"
-              className="flex items-center gap-2 rounded-xl font-black transition-all duration-500 text-center"
+              className="flex items-center gap-1.5 rounded-lg font-black transition-all duration-500 text-center"
               style={{
                 background:   currentTurn === 1 ? "rgba(180,30,40,0.28)" : "rgba(37,99,235,0.28)",
-                border:       `2px solid ${currentTurn === 1 ? "rgba(220,50,60,0.85)" : "rgba(59,130,246,0.85)"}`,
+                border:       `1.5px solid ${currentTurn === 1 ? "rgba(220,50,60,0.85)" : "rgba(59,130,246,0.85)"}`,
                 color:        currentTurn === 1 ? "#fca5a5" : "#93c5fd",
-                fontSize:     "clamp(0.72rem, 1.6vw, 1.1rem)",
-                padding:      "clamp(4px,0.7vh,9px) clamp(10px,1.4vw,18px)",
+                fontSize:     "clamp(0.6rem, 1.2vw, 0.9rem)",
+                padding:      "clamp(3px,0.5vh,6px) clamp(8px,1.1vw,14px)",
                 boxShadow:    currentTurn === 1
-                  ? "0 0 20px rgba(220,50,60,0.50), 0 0 40px rgba(180,30,40,0.18)"
-                  : "0 0 20px rgba(59,130,246,0.50), 0 0 40px rgba(37,99,235,0.18)",
+                  ? "0 0 14px rgba(220,50,60,0.40)"
+                  : "0 0 14px rgba(59,130,246,0.40)",
                 whiteSpace:   "nowrap",
                 animation:    "pulse 1.8s ease-in-out infinite",
               }}
             >
-              <span style={{ fontSize: "clamp(0.85rem, 1.5vw, 1.15rem)" }}>{currentTurn === 1 ? "🔴" : "🔵"}</span>
+              <span style={{ fontSize: "clamp(0.7rem, 1.2vw, 0.95rem)" }}>{currentTurn === 1 ? "🔴" : "🔵"}</span>
               <span>دور {currentTurn === 1 ? team1Name : team2Name}</span>
             </div>
 
             {/* Controls row */}
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-1.5 mt-0.5">
               <button
                 data-testid="dark-mode-toggle"
                 onClick={toggleDarkMode}
                 title={darkMode ? "الوضع الفاتح" : "الوضع الداكن"}
-                className="flex items-center gap-1.5 font-bold rounded-full transition-all duration-200 hover:scale-105 active:scale-95"
+                className="flex items-center gap-1 font-bold rounded-full transition-all duration-200 hover:scale-105 active:scale-95"
                 style={{
                   background: darkMode ? "rgba(120,170,90,0.3)" : "rgba(200,200,150,0.2)",
                   color:      darkMode ? "#C7D3A4" : "#F1E194",
-                  border:     `1.5px solid ${darkMode ? "rgba(120,170,90,0.5)" : "rgba(241,225,148,0.3)"}`,
-                  fontSize:   "clamp(0.65rem, 1.2vw, 0.85rem)",
-                  padding:    "clamp(3px,0.5vh,7px) clamp(8px,1.2vw,14px)",
+                  border:     `1px solid ${darkMode ? "rgba(120,170,90,0.5)" : "rgba(241,225,148,0.3)"}`,
+                  fontSize:   "clamp(0.55rem, 1vw, 0.75rem)",
+                  padding:    "clamp(2px,0.4vh,5px) clamp(6px,1vw,12px)",
                 }}
               >
                 <span>{darkMode ? "☀️" : "🌙"}</span>
@@ -479,8 +475,8 @@ export default function GameBoardPage() {
                 style={{
                   color:    "rgba(241,225,148,0.4)",
                   border:   "1px solid rgba(241,225,148,0.15)",
-                  fontSize: "clamp(0.6rem, 1vw, 0.75rem)",
-                  padding:  "clamp(3px,0.4vh,6px) clamp(6px,1vw,12px)",
+                  fontSize: "clamp(0.55rem, 0.9vw, 0.7rem)",
+                  padding:  "clamp(2px,0.35vh,5px) clamp(5px,0.8vw,10px)",
                 }}
               >
                 إنهاء
@@ -491,24 +487,24 @@ export default function GameBoardPage() {
           {/* ── Team 2 Score Block ── */}
           <div
             data-testid="team2-score"
-            className="flex flex-col items-center justify-center rounded-2xl px-3 md:px-6 py-2 md:py-3 transition-all duration-500 flex-1"
+            className="flex flex-col items-center justify-center rounded-xl px-2 md:px-4 py-1.5 md:py-2 transition-all duration-500 flex-1"
             style={{
               background:  currentTurn === 2 ? "rgba(37,99,235,0.22)" : "rgba(37,99,235,0.07)",
               border:      `2px solid ${currentTurn === 2 ? "rgba(59,130,246,0.80)" : "rgba(37,99,235,0.20)"}`,
-              boxShadow:   currentTurn === 2 ? "0 0 24px rgba(59,130,246,0.40), 0 0 50px rgba(37,99,235,0.15)" : "none",
-              minWidth:    "clamp(100px,16vw,230px)",
-              maxWidth:    "260px",
+              boxShadow:   currentTurn === 2 ? "0 0 18px rgba(59,130,246,0.35), 0 0 36px rgba(37,99,235,0.12)" : "none",
+              minWidth:    "clamp(80px,12vw,180px)",
+              maxWidth:    "200px",
             }}
           >
             <span
-              className="font-black leading-tight text-center truncate w-full mb-0.5"
-              style={{ fontSize: "clamp(0.95rem, 2.2vw, 1.85rem)", color: "#93c5fd", maxWidth: "230px", fontFamily: "Cairo, sans-serif" }}
+              className="font-black leading-tight text-center truncate w-full"
+              style={{ fontSize: "clamp(0.65rem, 1.4vw, 1.1rem)", color: "#93c5fd", maxWidth: "180px", fontFamily: "Cairo, sans-serif" }}
             >
               {team2Name} 🔵
             </span>
             <span
               className="font-black tabular-nums leading-none"
-              style={{ fontSize: "clamp(1.9rem, 4vw, 3.4rem)", color: "#D4A820", textShadow: "0 2px 10px rgba(212,168,32,0.4)" }}
+              style={{ fontSize: "clamp(1.2rem, 2.6vw, 2.2rem)", color: "#D4A820", textShadow: "0 2px 8px rgba(212,168,32,0.4)" }}
             >
               <ScoreCounter value={teamScores.team2} dark={darkMode} />
             </span>
@@ -524,10 +520,14 @@ export default function GameBoardPage() {
           display: "grid",
           gridTemplateColumns: "repeat(3, 1fr)",
           gridTemplateRows: "repeat(2, 1fr)",
-          gap: "clamp(5px, 1vw, 14px)",
-          padding: "clamp(6px, 1.2vw, 16px)",
+          gap: "clamp(6px, 1.2vw, 16px)",
+          padding: "clamp(8px, 1.4vw, 20px)",
+          maxWidth: "1200px",
+          width: "100%",
+          margin: "0 auto",
           overflow: "hidden",
           minHeight: 0,
+          alignSelf: "stretch",
         }}
       >
         {categories.slice(0, 6).map(cat => (
@@ -544,7 +544,7 @@ export default function GameBoardPage() {
       </div>
 
       {/* ── Legend ── */}
-      <div className="shrink-0 flex justify-center gap-6 pb-1.5 pt-0.5">
+      <div className="shrink-0 flex justify-center gap-4 pb-1 pt-0">
         <div className={`flex items-center gap-2 px-3 py-1 rounded-full transition-all duration-500 ${currentTurn === 1 ? "bg-red-500/10" : ""}`}>
           <div className="w-2.5 h-2.5 rounded-full" style={{ background: "linear-gradient(135deg,#ef4444,#b91c1c)" }} />
           <span className="font-bold" style={{ color: currentTurn === 1 ? "#fca5a5" : "rgba(212,160,23,0.55)", fontSize: "clamp(0.65rem, 1.2vw, 0.85rem)", fontFamily: "Cairo, sans-serif" }}>{team1Name}</span>
