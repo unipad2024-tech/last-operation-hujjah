@@ -151,6 +151,7 @@ export const GameProvider = ({ children }) => {
   const loginUser = async (email, password) => {
     const { data } = await axios.post(`${API}/auth/login`, { email, password }, {
       headers: { "X-Device-Id": deviceId },
+      timeout: 15000,
     });
     setCurrentUser(data.user);
     setUserToken(data.token);
@@ -164,6 +165,7 @@ export const GameProvider = ({ children }) => {
   const registerUser = async (email, username, password) => {
     const { data } = await axios.post(`${API}/auth/register`, { email, username, password }, {
       headers: { "X-Device-Id": deviceId },
+      timeout: 15000,
     });
     setCurrentUser(data.user);
     setUserToken(data.token);
