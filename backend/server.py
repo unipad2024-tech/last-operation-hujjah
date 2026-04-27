@@ -31,6 +31,19 @@ db = client[os.environ['DB_NAME']]
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+# ─── In-memory cache ──────────────────────────────────────────────────────────
+_cache: Dict[str, dict] = {}
+
+def _cache_get(key: str):
+    entry = _cache.get(key)
+    if entry and time.monotonic() < entry["exp"]:
+        return entry["val"]
+    _cache.pop(key, None)
+    return None
+
+def _cache_set(key: str, val, ttl: int = 30):
+    _cache[key] = {"val": val, "exp": time.monotonic() + ttl}
+
 # ─── Static files for uploaded images ────────────────────────────────────────
 UPLOAD_DIR = ROOT_DIR / "static" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -727,24 +740,32 @@ async def admin_payments(_: dict = Depends(get_super_admin)):
 
 @api_router.get("/categories")
 async def get_categories(show_inactive: bool = False):
+    cache_key = f"categories:{show_inactive}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     cats = await db.categories.find({}, {"_id": 0}).sort("order", 1).to_list(100)
     for c in cats:
         c.setdefault("is_premium", False)
         c.setdefault("is_active", True)
     if not show_inactive:
         cats = [c for c in cats if c.get("is_active", True)]
+    _cache_set(cache_key, cats, ttl=120)
     return cats
 
 @api_router.get("/free-categories")
 async def get_free_categories():
+    cached = _cache_get("free-categories")
+    if cached is not None:
+        return cached
     s = await db.settings.find_one({"key": "game_settings"}, {"_id": 0})
     settings = {**DEFAULT_SETTINGS, **(s or {})}
     t1 = settings.get("trial_team1_categories", DEFAULT_SETTINGS["trial_team1_categories"])
     t2 = settings.get("trial_team2_categories", DEFAULT_SETTINGS["trial_team2_categories"])
-    all_ids = list(dict.fromkeys(t1 + t2))  # preserve order, no duplicates
+    all_ids = list(dict.fromkeys(t1 + t2))
     cats = await db.categories.find({"id": {"$in": all_ids}}, {"_id": 0}).to_list(20)
     cats_map = {c["id"]: c for c in cats}
-    return {
+    result = {
         "trial_enabled":          settings.get("trial_enabled", True),
         "trial_team1_categories": t1,
         "trial_team2_categories": t2,
@@ -753,11 +774,18 @@ async def get_free_categories():
         "category_ids":           all_ids,
         "categories":             cats,
     }
+    _cache_set("free-categories", result, ttl=120)
+    return result
+
+def _invalidate_category_cache():
+    for k in ["categories:True", "categories:False", "free-categories"]:
+        _cache.pop(k, None)
 
 @api_router.post("/categories")
 async def create_category(body: CategoryCreate, admin: dict = Depends(get_admin)):
     cat = Category(**body.model_dump())
     await db.categories.insert_one(cat.model_dump())
+    _invalidate_category_cache()
     await log_admin_action(admin, "إضافة", "فئة", cat.name)
     return cat
 
@@ -767,6 +795,7 @@ async def update_category(cat_id: str, body: CategoryCreate, admin: dict = Depen
     res = await db.categories.find_one_and_update({"id": cat_id}, {"$set": upd}, {"_id": 0}, return_document=True)
     if not res:
         raise HTTPException(404, "الفئة غير موجودة")
+    _invalidate_category_cache()
     await log_admin_action(admin, "تعديل", "فئة", res.get("name", cat_id))
     return res
 
@@ -775,6 +804,7 @@ async def delete_category(cat_id: str, admin: dict = Depends(get_admin)):
     cat = await db.categories.find_one({"id": cat_id}, {"_id": 0})
     await db.categories.delete_one({"id": cat_id})
     await db.questions.delete_many({"category_id": cat_id})
+    _invalidate_category_cache()
     await log_admin_action(admin, "حذف", "فئة", cat.get("name", cat_id) if cat else cat_id)
     return {"message": "تم الحذف"}
 
@@ -1404,8 +1434,13 @@ async def create_session(body: GameSessionCreate, authorization: Optional[str] =
 
 @api_router.get("/game/session/{session_id}")
 async def get_session(session_id: str):
+    cache_key = f"session:{session_id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     s = await db.game_sessions.find_one({"id": session_id}, {"_id": 0})
     if not s: raise HTTPException(404, "الجلسة غير موجودة")
+    _cache_set(cache_key, s, ttl=2)   # 2s cache — safe since scores update via separate PUT
     return s
 
 @api_router.put("/game/session/{session_id}")
@@ -1414,6 +1449,7 @@ async def update_session(session_id: str, body: GameSessionUpdate):
     upd["updated_at"] = datetime.now(timezone.utc).isoformat()
     res = await db.game_sessions.find_one_and_update({"id": session_id}, {"$set": upd}, {"_id": 0}, return_document=True)
     if not res: raise HTTPException(404, "الجلسة غير موجودة")
+    _cache.pop(f"session:{session_id}", None)   # invalidate on write
     return res
 
 @api_router.post("/game/session/{session_id}/question")
@@ -1437,31 +1473,33 @@ async def get_next_question(session_id: str, category_id: str, difficulty: int,
     # Build base query — exclude soft-deleted questions
     base_q = {"category_id": category_id, "difficulty": difficulty, "id": {"$nin": exclude_ids}, "deleted_at": None}
 
-    # Trial sessions: filter only experimental questions (if any are marked)
+    async def _sample_one(q: dict):
+        """Pick 1 random doc via $sample — much faster than to_list(1000)."""
+        pipeline = [{"$match": q}, {"$sample": {"size": 1}}, {"$project": {"_id": 0}}]
+        results = await db.questions.aggregate(pipeline).to_list(1)
+        return results[0] if results else None
+
+    settings_doc = None
     if is_trial:
         settings_doc = await db.settings.find_one({"key": "game_settings"}, {"_id": 0})
         use_trial_only = (settings_doc or {}).get("trial_questions_only", False)
         if use_trial_only:
-            trial_q = {**base_q, "is_experimental": True}
-            available = await db.questions.find(trial_q, {"_id": 0}).to_list(1000)
-            if not available:
-                # fallback: all questions if none tagged
-                available = await db.questions.find(base_q, {"_id": 0}).to_list(1000)
+            question = await _sample_one({**base_q, "is_experimental": True})
+            if not question:
+                question = await _sample_one(base_q)
         else:
-            available = await db.questions.find(base_q, {"_id": 0}).to_list(1000)
+            question = await _sample_one(base_q)
     else:
-        available = await db.questions.find(base_q, {"_id": 0}).to_list(1000)
+        question = await _sample_one(base_q)
 
-    if not available:
-        # Reset and try again (ignoring exclude list)
+    if not question:
+        # Reset: ignore exclude list
         reset_q = {"category_id": category_id, "difficulty": difficulty, "deleted_at": None}
-        if is_trial and (settings_doc if 'settings_doc' in dir() else {}).get("trial_questions_only"):
+        if is_trial and (settings_doc or {}).get("trial_questions_only"):
             reset_q["is_experimental"] = True
-        available = await db.questions.find(reset_q, {"_id": 0}).to_list(1000)
-        if not available:
+        question = await _sample_one(reset_q)
+        if not question:
             raise HTTPException(404, "لا يوجد أسئلة")
-
-    question = random.choice(available)
 
     new_used = list(set(session.get("used_questions", []) + [question["id"]]))
     await db.game_sessions.update_one(
@@ -1490,6 +1528,7 @@ async def update_score(session_id: str, body: ScoreUpdate,
         {"id": session_id},
         {"$set": {field: new_score, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
+    _cache.pop(f"session:{session_id}", None)   # invalidate on score change
     updated = await db.game_sessions.find_one({"id": session_id}, {"_id": 0})
     return {"team1_score": updated["team1_score"], "team2_score": updated["team2_score"]}
 
@@ -3069,6 +3108,10 @@ async def ai_save_questions(body: dict, admin=Depends(get_admin)):
 async def root():
     return {"message": "Hujjah API v2 – حُجّة", "version": "2.0"}
 
+@api_router.get("/ping")
+async def ping():
+    return {"ok": True}
+
 @api_router.post("/admin/seed-letter-categories")
 async def seed_letter_categories(_: dict = Depends(get_super_admin)):
     """Add 3 new letter/word-based categories and their questions."""
@@ -3605,7 +3648,6 @@ async def seed_category_groups(_: dict = Depends(get_super_admin)):
         added += 1
     return {"message": f"تمت إضافة {added} مجموعة", "added": added}
 
-app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -3613,6 +3655,17 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
+
+# Fast health/keepalive at app level (no router prefix)
+@app.get("/health")
+async def health():
+    try:
+        await db.command("ping")
+        return {"ok": True, "db": "connected"}
+    except Exception:
+        return {"ok": True, "db": "error"}
+
+app.include_router(api_router)
 
 async def _subscription_daily_loop():
     """Run subscription expiry check every 24 hours."""
@@ -3624,10 +3677,30 @@ async def _subscription_daily_loop():
             logger.error(f"Daily subscription loop error: {e}")
         await asyncio.sleep(86400)  # 24 hours
 
+async def _keepalive_loop():
+    """Ping /health every 4 min to prevent Railway cold start."""
+    await asyncio.sleep(60)  # Let server fully start first
+    port = os.environ.get("PORT", "8000")
+    url  = f"http://127.0.0.1:{port}/health"
+    while True:
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                await c.get(url)
+        except Exception:
+            pass
+        await asyncio.sleep(240)  # 4 minutes
+
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(_subscription_daily_loop())
-    logger.info("Subscription notification loop started")
+    asyncio.create_task(_keepalive_loop())
+    logger.info("Subscription notification loop + keepalive started")
+    # Warm up MongoDB connection pool immediately
+    try:
+        await db.command("ping")
+        logger.info("MongoDB connection pool warmed up")
+    except Exception as e:
+        logger.warning(f"MongoDB warmup warning: {e}")
     # DB Indexes for performance at scale
     try:
         await db.questions.create_index([("category_id", 1), ("difficulty", 1)])

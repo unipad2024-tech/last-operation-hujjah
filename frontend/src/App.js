@@ -1,8 +1,24 @@
-import React from "react";
+import React, { useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { GameProvider } from "@/context/GameContext";
 import { Toaster } from "sonner";
+
+const API   = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const BASE  = process.env.REACT_APP_BACKEND_URL;          // for /health (no /api prefix)
+
+// Warm up server + preload categories on app start
+function useBackendWarmup() {
+  useEffect(() => {
+    // Wake server & prime category cache immediately on first load
+    fetch(`${BASE}/health`).catch(() => {});
+    fetch(`${API}/categories`).catch(() => {});
+    fetch(`${API}/free-categories`).catch(() => {});
+    // Keep-alive ping every 4 min — prevents Railway cold start
+    const iv = setInterval(() => fetch(`${BASE}/health`).catch(() => {}), 4 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, []);
+}
 
 import HomePage from "@/pages/HomePage";
 import LoginPage from "@/pages/LoginPage";
@@ -21,6 +37,7 @@ import AdminLoginPage from "@/pages/AdminLoginPage";
 import AdminDashboard from "@/pages/AdminDashboard";
 
 function App() {
+  useBackendWarmup();
   return (
     <GameProvider>
       <div className="App" dir="rtl">
