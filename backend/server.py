@@ -693,35 +693,92 @@ async def admin_analytics(_: dict = Depends(get_super_admin)):
     week_ago   = (now - timedelta(days=7)).isoformat()
     month_ago  = (now - timedelta(days=30)).isoformat()
 
+    # ── User counts ──
     users_total   = await db.users.count_documents({})
     premium       = await db.users.count_documents({"subscription_type": "premium"})
     recent_7d     = await db.users.count_documents({"created_at": {"$gte": week_ago}})
-    q_total       = await db.questions.count_documents({})
-    sessions_total= await db.game_sessions.count_documents({})
-    active_24h    = await db.game_sessions.count_documents({"created_at": {"$gte": yesterday}})
-    revenue_docs  = await db.payment_transactions.find({"payment_status": "paid"}, {"amount": 1}).to_list(1000)
+    recent_30d    = await db.users.count_documents({"created_at": {"$gte": month_ago}})
+
+    # ── Active users (had a game session in period) ──
+    active_24h_sessions = await db.game_sessions.distinct("user_id", {"created_at": {"$gte": yesterday}})
+    active_7d_sessions  = await db.game_sessions.distinct("user_id", {"created_at": {"$gte": week_ago}})
+    active_30d_sessions = await db.game_sessions.distinct("user_id", {"created_at": {"$gte": month_ago}})
+
+    # ── Question counts ──
+    q_total       = await db.questions.count_documents({"deleted_at": None})
+    q_300         = await db.questions.count_documents({"difficulty": 300, "deleted_at": None})
+    q_600         = await db.questions.count_documents({"difficulty": 600, "deleted_at": None})
+    q_900         = await db.questions.count_documents({"difficulty": 900, "deleted_at": None})
+    q_pending     = await db.pending_questions.count_documents({"status": "pending"})
+
+    # ── Sessions ──
+    sessions_total = await db.game_sessions.count_documents({})
+    sessions_24h   = await db.game_sessions.count_documents({"created_at": {"$gte": yesterday}})
+    sessions_7d    = await db.game_sessions.count_documents({"created_at": {"$gte": week_ago}})
+
+    # ── Revenue ──
+    revenue_docs  = await db.payment_transactions.find({"payment_status": "paid"}, {"amount": 1, "created_at": 1}).to_list(1000)
     total_revenue = sum(float(d.get("amount", 0)) for d in revenue_docs)
     recent_txns   = await db.payment_transactions.find({}, {"_id": 0}).sort("created_at", -1).to_list(10)
 
-    cats = await db.categories.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(50)
+    # Revenue trend: last 30 days grouped by day
+    revenue_trend = {}
+    for d in revenue_docs:
+        ts = d.get("created_at", "")
+        if ts and ts >= month_ago:
+            day = ts[:10]  # YYYY-MM-DD
+            revenue_trend[day] = revenue_trend.get(day, 0) + float(d.get("amount", 0))
+    trend_list = [{"date": k, "amount": round(v, 2)} for k, v in sorted(revenue_trend.items())]
+
+    # ── Category stats ──
+    cats = await db.categories.find({}, {"_id": 0, "id": 1, "name": 1, "icon": 1}).to_list(50)
     cat_stats = []
     for c in cats:
-        count = await db.questions.count_documents({"category_id": c["id"]})
-        cat_stats.append({"id": c["id"], "name": c["name"], "count": count})
+        count = await db.questions.count_documents({"category_id": c["id"], "deleted_at": None})
+        cat_stats.append({"id": c["id"], "name": c["name"], "icon": c.get("icon", ""), "count": count})
 
-    # Enhanced platform analytics
-    active_cats = await db.categories.count_documents({"is_active": {"$ne": False}})
+    active_cats   = await db.categories.count_documents({"is_active": {"$ne": False}})
     inactive_cats = await db.categories.count_documents({"is_active": False})
-    premium_cats = await db.categories.count_documents({"is_premium": True})
-    most_popular = max(cat_stats, key=lambda x: x["count"]) if cat_stats else {}
+    premium_cats  = await db.categories.count_documents({"is_premium": True})
+    most_popular  = max(cat_stats, key=lambda x: x["count"]) if cat_stats else {}
+    weak_cats     = [c for c in cat_stats if c["count"] < 6]
 
     return {
-        "users":    {"total": users_total, "premium": premium, "free": users_total - premium, "recent_7d": recent_7d},
-        "questions": {"total": q_total, "by_category": cat_stats},
-        "sessions": {"total": sessions_total, "active_24h": active_24h},
-        "revenue":  {"total": round(total_revenue, 2), "currency": "SAR", "recent_transactions": recent_txns},
-        "categories": {"total": len(cats), "active": active_cats, "inactive": inactive_cats,
-                       "premium": premium_cats, "most_popular": most_popular},
+        "users": {
+            "total": users_total,
+            "premium": premium,
+            "free": users_total - premium,
+            "new_7d": recent_7d,
+            "new_30d": recent_30d,
+            "active_24h": len(active_24h_sessions),
+            "active_7d": len(active_7d_sessions),
+            "active_30d": len(active_30d_sessions),
+        },
+        "questions": {
+            "total": q_total,
+            "pending": q_pending,
+            "by_difficulty": {"300": q_300, "600": q_600, "900": q_900},
+            "by_category": cat_stats,
+            "weak_categories": sorted(weak_cats, key=lambda x: x["count"]),
+        },
+        "sessions": {
+            "total": sessions_total,
+            "active_24h": sessions_24h,
+            "active_7d": sessions_7d,
+        },
+        "revenue": {
+            "total": round(total_revenue, 2),
+            "currency": "SAR",
+            "recent_transactions": recent_txns,
+            "trend": trend_list,
+        },
+        "categories": {
+            "total": len(cats),
+            "active": active_cats,
+            "inactive": inactive_cats,
+            "premium": premium_cats,
+            "most_popular": most_popular,
+        },
     }
 
 @api_router.get("/admin/sessions")
@@ -3021,19 +3078,24 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
     custom = f"\nتعليمات المشرف: {extra_prompt}\n" if extra_prompt else ""
 
     base_rules = (
-        "- اكتب الأسئلة والإجابات باللغة العربية الفصيحة\n"
-        "- الأسئلة متنوعة، حماسية، وغير متكررة\n"
-        "- الإجابة نص قصير (كلمة إلى ثلاث كلمات) — لا تكتب 'أ' أو 'ب' أو 'ج' أبداً\n"
-        "- image_query: جملة إنجليزية قصيرة مناسبة للبحث عن صورة\n"
-        "- أرجع JSON array فقط بدون أي شرح:\n"
+        "قواعد صارمة يجب اتباعها:\n"
+        "1. اكتب الأسئلة والإجابات باللغة العربية الفصيحة\n"
+        "2. الأسئلة متنوعة، حماسية، وغير متكررة — كل سؤال يختبر شيئاً مختلفاً\n"
+        "3. الإجابة نص قصير جداً (كلمة إلى 3 كلمات) — لا تكتب 'أ' أو 'ب' أو 'ج' أبداً\n"
+        "4. ⚠️ لا تذكر الإجابة داخل نص السؤال أبداً — السؤال يجب أن يختبر المعرفة لا يكشفها\n"
+        "5. السؤال يكون بصيغة سؤال (؟) — وضّح وصف دقيق يتطلب إجابة محددة\n"
+        "6. image_query: جملة إنجليزية قصيرة واصفة للصورة المناسبة\n"
+        "7. difficulty: استخدم القيمة المطلوبة فقط لكل سؤال\n"
+        "8. أرجع JSON array فقط بدون أي شرح إضافي:\n"
         '[{"text":"...؟","answer":"...","image_query":"...","difficulty":300}]'
     )
 
     async def _gen(count: int, diff: int) -> list:
-        diff_label = {300: "سهلة", 600: "متوسطة", 900: "صعبة"}.get(diff, "متوسطة")
+        diff_label = {300: "سهلة (معروفة للعموم)", 600: "متوسطة (تحتاج معرفة معقولة)", 900: "صعبة (تحتاج خبرة عالية)"}.get(diff, "متوسطة")
         prompt = (
-            f"أنشئ بالضبط {count} سؤال لفئة \"{cat_name}\" بمستوى {diff_label} ({diff} نقطة).\n"
+            f"أنشئ بالضبط {count} سؤال تريفيا لفئة \"{cat_name}\" بمستوى {diff_label} — {diff} نقطة.\n"
             f"وصف الفئة: {cat_desc}\n"
+            f"السياق: هذه أسئلة لعبة تريفيا عربية ترفيهية — الجمهور سعودي/خليجي.\n"
             f"{custom}{existing_hint}{base_rules}"
         )
         raw = await _ai_generate(prompt, prefer=ai_engine)
@@ -3051,6 +3113,10 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
             ans = (q.get("answer") or "").strip()
             # Skip if answer looks like a choice letter
             if not txt or not ans or ans in {"أ", "ب", "ج", "د", "A", "B", "C", "D"}:
+                continue
+            # Skip if the answer is literally contained in the question text (quality guard)
+            if ans and len(ans) > 2 and ans.lower() in txt.lower():
+                logger.warning(f"AI quality: answer '{ans}' found in question text — skipping")
                 continue
             result.append({
                 "id": str(uuid.uuid4()), "category_id": category_id, "difficulty": diff,
@@ -3463,7 +3529,7 @@ def build_warning_email(username: str, expires_at: str) -> str:
           جدّد اشتراكك الآن للاستمرار في الاستمتاع بجميع الفئات المميزة دون انقطاع.
         </p>
         <div style="text-align:center;margin:28px 0">
-          <a href="https://hujjah-trivia.preview.emergentagent.com/pricing"
+          <a href="https://al-amaliya-al-akhira.vercel.app/pricing"
              style="background:#F1E194;color:#5B0E14;padding:14px 32px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1.1rem">
             جدّد الاشتراك
           </a>
@@ -3491,7 +3557,7 @@ def build_expired_email(username: str) -> str:
           يمكنك تجديد اشتراكك في أي وقت للعودة إلى الوصول الكامل لجميع الفئات والمحتوى المميز.
         </p>
         <div style="text-align:center;margin:28px 0">
-          <a href="https://hujjah-trivia.preview.emergentagent.com/pricing"
+          <a href="https://al-amaliya-al-akhira.vercel.app/pricing"
              style="background:#F1E194;color:#5B0E14;padding:14px 32px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1.1rem">
             اشترك مجدداً
           </a>

@@ -515,15 +515,27 @@ function SecurityDashboard({ overview, users, sessions, suspicious, devices, loa
 }
 
 /* ── PendingQuestionCard — standalone component to avoid stale-closure ── */
-function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, onUpdate }) {
-  const diffColor = q.difficulty === 300 ? "green" : q.difficulty === 600 ? "amber" : "red";
-  const diffLabel = q.difficulty === 300 ? "سهل" : q.difficulty === 600 ? "متوسط" : "صعب";
+function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, onUpdate, selected, onToggleSelect }) {
   const cat = categories.find(c => c.id === q.category_id);
-  const [editImg, setEditImg] = useState(false);
-  const [editAnsImg, setEditAnsImg] = useState(false);
-  const [tmpImg, setTmpImg] = useState(q.image_url || "");
-  const [tmpAnsImg, setTmpAnsImg] = useState(q.answer_image_url || "");
-  const [saving, setSaving] = useState(false);
+
+  const [editText, setEditText]       = useState(false);
+  const [editAnswer, setEditAnswer]   = useState(false);
+  const [editDiff, setEditDiff]       = useState(false);
+  const [editImg, setEditImg]         = useState(false);
+  const [editAnsImg, setEditAnsImg]   = useState(false);
+  const [tmpText, setTmpText]         = useState(q.text || "");
+  const [tmpAnswer, setTmpAnswer]     = useState(q.answer || "");
+  const [tmpDiff, setTmpDiff]         = useState(q.difficulty || 300);
+  const [tmpImg, setTmpImg]           = useState(q.image_url || "");
+  const [tmpAnsImg, setTmpAnsImg]     = useState(q.answer_image_url || "");
+  const [saving, setSaving]           = useState(false);
+
+  const diffColors = {
+    300: { bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.4)", text: "#34d399", label: "سهل" },
+    600: { bg: "rgba(251,191,36,0.12)", border: "rgba(251,191,36,0.4)", text: "#fbbf24", label: "متوسط" },
+    900: { bg: "rgba(239,68,68,0.12)",  border: "rgba(239,68,68,0.4)",  text: "#f87171", label: "صعب" },
+  };
+  const dc = diffColors[q.difficulty] || diffColors[300];
 
   const saveField = async (field, val) => {
     setSaving(true);
@@ -535,139 +547,226 @@ function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, o
     finally { setSaving(false); }
   };
 
+  const BG     = "#111827";
+  const BORDER = "rgba(255,255,255,0.08)";
+  const TEXT   = "#f3f4f6";
+  const MUTED  = "rgba(243,244,246,0.45)";
+
   return (
     <div
       data-testid={`pending-q-${i}`}
-      className={`bg-white border rounded-2xl overflow-hidden border-${diffColor}-200`}
+      style={{
+        background: selected ? "rgba(99,102,241,0.08)" : BG,
+        border: `1.5px solid ${selected ? "rgba(99,102,241,0.55)" : BORDER}`,
+        borderRadius: "14px",
+        overflow: "hidden",
+        transition: "border-color 0.2s",
+      }}
     >
-      <div className={`h-1 w-full bg-${diffColor}-400`} />
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          {/* Left: content */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`text-[11px] font-black px-2 py-0.5 rounded-full bg-${diffColor}-100 text-${diffColor}-800`}>
-                {diffLabel} · {q.difficulty}
-              </span>
+      {/* Difficulty strip */}
+      <div style={{ height: "3px", background: dc.text, opacity: 0.7 }} />
+
+      <div style={{ padding: "14px 16px" }}>
+        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+
+          {/* Checkbox */}
+          <div style={{ paddingTop: "2px" }}>
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggleSelect(q.id)}
+              style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#818cf8" }}
+            />
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+
+            {/* Tags row */}
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px", alignItems: "center" }}>
+              {/* Difficulty badge — click to edit */}
+              {editDiff ? (
+                <select
+                  value={tmpDiff}
+                  onChange={e => setTmpDiff(Number(e.target.value))}
+                  onBlur={() => { saveField("difficulty", tmpDiff); setEditDiff(false); }}
+                  autoFocus
+                  style={{ background: dc.bg, border: `1px solid ${dc.border}`, color: dc.text,
+                           fontSize: "0.72rem", fontWeight: 700, padding: "2px 8px", borderRadius: "9999px",
+                           outline: "none", cursor: "pointer" }}
+                >
+                  <option value={300}>سهل · 300</option>
+                  <option value={600}>متوسط · 600</option>
+                  <option value={900}>صعب · 900</option>
+                </select>
+              ) : (
+                <span
+                  onClick={() => setEditDiff(true)}
+                  title="انقر لتغيير الصعوبة"
+                  style={{ background: dc.bg, border: `1px solid ${dc.border}`, color: dc.text,
+                           fontSize: "0.72rem", fontWeight: 700, padding: "2px 9px", borderRadius: "9999px",
+                           cursor: "pointer", whiteSpace: "nowrap" }}
+                >
+                  {dc.label} · {q.difficulty} ✎
+                </span>
+              )}
               {cat && (
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary/60 font-bold">
-                  {cat.icon} {cat.name}
+                <span style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                               color: MUTED, fontSize: "0.72rem", fontWeight: 700, padding: "2px 9px", borderRadius: "9999px" }}>
+                  {cat.icon || ""} {cat.name}
                 </span>
               )}
             </div>
-            <div className="font-bold text-primary mb-1">{q.text}</div>
-            <div className="text-sm text-primary/60 mb-3">
-              الإجابة: <span className="font-black text-primary">{q.answer}</span>
-            </div>
+
+            {/* Question text — click to edit inline */}
+            {editText ? (
+              <div style={{ marginBottom: "8px" }}>
+                <textarea
+                  value={tmpText}
+                  onChange={e => setTmpText(e.target.value)}
+                  rows={3}
+                  autoFocus
+                  style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(99,102,241,0.5)",
+                           borderRadius: "10px", color: TEXT, padding: "8px 12px", fontSize: "0.9rem", fontFamily: "Cairo,sans-serif",
+                           outline: "none", resize: "vertical" }}
+                />
+                <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                  <button
+                    onClick={() => { saveField("text", tmpText); setEditText(false); }}
+                    disabled={saving}
+                    style={{ background: "rgba(52,211,153,0.2)", border: "1px solid rgba(52,211,153,0.5)", color: "#34d399",
+                             fontSize: "0.75rem", fontWeight: 700, padding: "4px 12px", borderRadius: "8px", cursor: "pointer" }}
+                  >✓ حفظ</button>
+                  <button onClick={() => { setTmpText(q.text); setEditText(false); }}
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: MUTED,
+                             fontSize: "0.75rem", padding: "4px 10px", borderRadius: "8px", cursor: "pointer" }}
+                  >إلغاء</button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => { setTmpText(q.text); setEditText(true); }}
+                title="انقر للتعديل"
+                style={{ color: TEXT, fontWeight: 700, fontSize: "0.92rem", marginBottom: "6px",
+                         cursor: "text", lineHeight: 1.5, fontFamily: "Cairo,sans-serif",
+                         padding: "4px 6px", borderRadius: "6px", transition: "background 0.15s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                {q.text} <span style={{ color: "rgba(99,102,241,0.5)", fontSize: "0.7rem" }}>✎</span>
+              </div>
+            )}
+
+            {/* Answer — click to edit inline */}
+            {editAnswer ? (
+              <div style={{ marginBottom: "8px" }}>
+                <input
+                  type="text"
+                  value={tmpAnswer}
+                  onChange={e => setTmpAnswer(e.target.value)}
+                  autoFocus
+                  style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(251,191,36,0.5)",
+                           borderRadius: "10px", color: "#fbbf24", padding: "8px 12px", fontSize: "0.88rem",
+                           fontFamily: "Cairo,sans-serif", outline: "none" }}
+                />
+                <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                  <button
+                    onClick={() => { saveField("answer", tmpAnswer); setEditAnswer(false); }}
+                    disabled={saving}
+                    style={{ background: "rgba(52,211,153,0.2)", border: "1px solid rgba(52,211,153,0.5)", color: "#34d399",
+                             fontSize: "0.75rem", fontWeight: 700, padding: "4px 12px", borderRadius: "8px", cursor: "pointer" }}
+                  >✓ حفظ</button>
+                  <button onClick={() => { setTmpAnswer(q.answer); setEditAnswer(false); }}
+                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: MUTED,
+                             fontSize: "0.75rem", padding: "4px 10px", borderRadius: "8px", cursor: "pointer" }}
+                  >إلغاء</button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => { setTmpAnswer(q.answer); setEditAnswer(true); }}
+                title="انقر لتعديل الإجابة"
+                style={{ fontSize: "0.83rem", marginBottom: "10px", cursor: "text",
+                         padding: "4px 6px", borderRadius: "6px", transition: "background 0.15s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <span style={{ color: MUTED }}>الإجابة: </span>
+                <span style={{ color: "#fbbf24", fontWeight: 900, fontFamily: "Cairo,sans-serif" }}>{q.answer}</span>
+                <span style={{ color: "rgba(251,191,36,0.4)", fontSize: "0.68rem", marginRight: "4px" }}>✎</span>
+              </div>
+            )}
 
             {/* Images row */}
-            <div className="flex gap-3 flex-wrap">
-              {/* Question Image */}
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-black text-primary/50">صورة السؤال</span>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              {/* Question image */}
+              <div>
+                <div style={{ color: MUTED, fontSize: "0.68rem", fontWeight: 700, marginBottom: "4px" }}>صورة السؤال</div>
                 {q.image_url && !editImg ? (
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={q.image_url}
-                      alt="سؤال"
-                      className="h-14 w-20 rounded-lg object-cover border border-primary/10"
-                      onError={e => e.target.style.display = "none"}
-                    />
-                    <button
-                      onClick={() => { setTmpImg(q.image_url || ""); setEditImg(true); }}
-                      className="text-xs text-primary/50 hover:text-primary border border-primary/20 px-2 py-1 rounded-lg transition-all"
-                    >
-                      تغيير
-                    </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <img src={q.image_url} alt="سؤال" style={{ height: "48px", width: "72px", borderRadius: "8px", objectFit: "cover", border: "1px solid rgba(255,255,255,0.1)" }} onError={e => e.target.style.display="none"} />
+                    <button onClick={() => { setTmpImg(q.image_url||""); setEditImg(true); }}
+                      style={{ fontSize: "0.68rem", color: MUTED, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", padding: "3px 8px", borderRadius: "6px", cursor: "pointer" }}>تغيير</button>
                   </div>
                 ) : editImg ? (
-                  <div className="flex gap-1.5 items-center">
-                    <input
-                      data-testid={`pending-q-img-input-${q.id}`}
-                      value={tmpImg}
-                      onChange={e => setTmpImg(e.target.value)}
-                      placeholder="رابط الصورة..."
-                      className="border border-primary/20 rounded-lg px-2 py-1 text-xs outline-none w-40"
-                    />
-                    <button
-                      onClick={() => { saveField("image_url", tmpImg); setEditImg(false); }}
-                      disabled={saving}
-                      className="text-xs bg-green-600 text-white px-2 py-1 rounded-lg font-black disabled:opacity-50"
-                    >✓</button>
-                    <button onClick={() => setEditImg(false)} className="text-xs text-primary/50 px-1">✕</button>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    <input data-testid={`pending-q-img-input-${q.id}`} value={tmpImg} onChange={e=>setTmpImg(e.target.value)} placeholder="رابط الصورة..."
+                      style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:"8px", color:TEXT, padding:"4px 8px", fontSize:"0.75rem", outline:"none", width:"140px" }} />
+                    <button onClick={()=>{ saveField("image_url",tmpImg); setEditImg(false); }} disabled={saving}
+                      style={{ background:"rgba(52,211,153,0.2)", border:"1px solid rgba(52,211,153,0.4)", color:"#34d399", fontSize:"0.72rem", fontWeight:700, padding:"4px 8px", borderRadius:"6px", cursor:"pointer" }}>✓</button>
+                    <button onClick={()=>setEditImg(false)} style={{ color:MUTED, fontSize:"0.72rem", cursor:"pointer", padding:"4px" }}>✕</button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => { setTmpImg(""); setEditImg(true); }}
-                    className="text-xs text-primary/40 border border-dashed border-primary/20 px-3 py-1.5 rounded-lg hover:border-primary/40 transition-all"
-                  >
-                    + إضافة صورة
-                  </button>
+                  <button onClick={()=>{ setTmpImg(""); setEditImg(true); }}
+                    style={{ fontSize:"0.72rem", color:MUTED, background:"rgba(255,255,255,0.04)", border:"1px dashed rgba(255,255,255,0.14)", padding:"5px 10px", borderRadius:"8px", cursor:"pointer" }}>+ إضافة صورة</button>
                 )}
               </div>
 
-              {/* Answer Image */}
-              <div className="flex flex-col gap-1">
-                <span className="text-xs font-black text-primary/50">صورة الإجابة</span>
+              {/* Answer image */}
+              <div>
+                <div style={{ color: MUTED, fontSize: "0.68rem", fontWeight: 700, marginBottom: "4px" }}>صورة الإجابة</div>
                 {q.answer_image_url && !editAnsImg ? (
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={q.answer_image_url}
-                      alt="إجابة"
-                      className="h-14 w-20 rounded-lg object-cover border border-blue-200"
-                      onError={e => e.target.style.display = "none"}
-                    />
-                    <button
-                      onClick={() => { setTmpAnsImg(q.answer_image_url || ""); setEditAnsImg(true); }}
-                      className="text-xs text-primary/50 hover:text-primary border border-primary/20 px-2 py-1 rounded-lg transition-all"
-                    >
-                      تغيير
-                    </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <img src={q.answer_image_url} alt="إجابة" style={{ height: "48px", width: "72px", borderRadius: "8px", objectFit: "cover", border: "1px solid rgba(96,165,250,0.2)" }} onError={e => e.target.style.display="none"} />
+                    <button onClick={() => { setTmpAnsImg(q.answer_image_url||""); setEditAnsImg(true); }}
+                      style={{ fontSize: "0.68rem", color: MUTED, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", padding: "3px 8px", borderRadius: "6px", cursor: "pointer" }}>تغيير</button>
                   </div>
                 ) : editAnsImg ? (
-                  <div className="flex gap-1.5 items-center">
-                    <input
-                      data-testid={`pending-q-ans-img-input-${q.id}`}
-                      value={tmpAnsImg}
-                      onChange={e => setTmpAnsImg(e.target.value)}
-                      placeholder="رابط صورة الإجابة..."
-                      className="border border-blue-200 rounded-lg px-2 py-1 text-xs outline-none w-40"
-                    />
-                    <button
-                      onClick={() => { saveField("answer_image_url", tmpAnsImg); setEditAnsImg(false); }}
-                      disabled={saving}
-                      className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg font-black disabled:opacity-50"
-                    >✓</button>
-                    <button onClick={() => setEditAnsImg(false)} className="text-xs text-primary/50 px-1">✕</button>
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    <input data-testid={`pending-q-ans-img-input-${q.id}`} value={tmpAnsImg} onChange={e=>setTmpAnsImg(e.target.value)} placeholder="رابط صورة الإجابة..."
+                      style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(96,165,250,0.25)", borderRadius:"8px", color:TEXT, padding:"4px 8px", fontSize:"0.75rem", outline:"none", width:"140px" }} />
+                    <button onClick={()=>{ saveField("answer_image_url",tmpAnsImg); setEditAnsImg(false); }} disabled={saving}
+                      style={{ background:"rgba(96,165,250,0.2)", border:"1px solid rgba(96,165,250,0.4)", color:"#60a5fa", fontSize:"0.72rem", fontWeight:700, padding:"4px 8px", borderRadius:"6px", cursor:"pointer" }}>✓</button>
+                    <button onClick={()=>setEditAnsImg(false)} style={{ color:MUTED, fontSize:"0.72rem", cursor:"pointer", padding:"4px" }}>✕</button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => { setTmpAnsImg(""); setEditAnsImg(true); }}
-                    className="text-xs text-primary/40 border border-dashed border-blue-200 px-3 py-1.5 rounded-lg hover:border-blue-400 transition-all"
-                  >
-                    + إضافة صورة إجابة
-                  </button>
+                  <button onClick={()=>{ setTmpAnsImg(""); setEditAnsImg(true); }}
+                    style={{ fontSize:"0.72rem", color:MUTED, background:"rgba(255,255,255,0.04)", border:"1px dashed rgba(96,165,250,0.2)", padding:"5px 10px", borderRadius:"8px", cursor:"pointer" }}>+ صورة إجابة</button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Right: actions */}
-          <div className="flex flex-col gap-2 shrink-0">
+          {/* Actions column */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
             <button
               data-testid={`approve-q-${q.id}`}
               onClick={() => onApprove(q.id)}
-              className="bg-green-600 text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-green-700 transition-all whitespace-nowrap"
-            >
-              ✓ نشر
-            </button>
+              style={{ background: "rgba(52,211,153,0.18)", border: "1.5px solid rgba(52,211,153,0.5)", color: "#34d399",
+                       padding: "8px 16px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
+                       cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(52,211,153,0.28)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(52,211,153,0.18)"}
+            >✓ نشر</button>
             <button
               data-testid={`reject-q-${q.id}`}
               onClick={() => onReject(q.id)}
-              className="bg-red-100 text-red-600 px-4 py-2 rounded-xl font-black text-sm hover:bg-red-200 transition-all whitespace-nowrap"
-            >
-              ✕ رفض
-            </button>
+              style={{ background: "rgba(239,68,68,0.12)", border: "1.5px solid rgba(239,68,68,0.35)", color: "#f87171",
+                       padding: "8px 16px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
+                       cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.22)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.12)"}
+            >✕ رفض</button>
           </div>
         </div>
       </div>
@@ -810,6 +909,7 @@ export default function AdminDashboard() {
   const [importUploading, setImportUploading]   = useState(false);
   const [importCustomPrompt, setImportCustomPrompt] = useState("");
   const importFileRef = useRef(null);
+  const [selectedPending, setSelectedPending]   = useState(new Set());
 
   useEffect(() => {
     if (!token) { navigate("/admin"); return; }
@@ -939,9 +1039,38 @@ export default function AdminDashboard() {
       toast.success(data.message);
       setPendingQuestions([]);
       setPendingTotal(0);
+      setSelectedPending(new Set());
       const { data: qs } = await axios.get(`${API}/questions`);
       setQuestions(qs);
     } catch { toast.error("خطأ في الموافقة الجماعية"); }
+  };
+
+  const handleBulkApprove = async () => {
+    const ids = [...selectedPending];
+    if (!ids.length) return;
+    if (!window.confirm(`نشر ${ids.length} سؤال؟`)) return;
+    let done = 0;
+    for (const id of ids) {
+      try { await axios.post(`${API}/admin/questions/${id}/approve`, {}, { headers }); done++; } catch {}
+    }
+    setPendingQuestions(prev => prev.filter(q => !selectedPending.has(q.id)));
+    setPendingTotal(t => Math.max(0, t - done));
+    setSelectedPending(new Set());
+    toast.success(`تم نشر ${done} سؤال`);
+  };
+
+  const handleBulkReject = async () => {
+    const ids = [...selectedPending];
+    if (!ids.length) return;
+    if (!window.confirm(`رفض وحذف ${ids.length} سؤال؟`)) return;
+    let done = 0;
+    for (const id of ids) {
+      try { await axios.post(`${API}/admin/questions/${id}/reject`, {}, { headers }); done++; } catch {}
+    }
+    setPendingQuestions(prev => prev.filter(q => !selectedPending.has(q.id)));
+    setPendingTotal(t => Math.max(0, t - done));
+    setSelectedPending(new Set());
+    toast.success(`تم رفض ${done} سؤال`);
   };
 
   const handleBulkFetchImages = async () => {
@@ -1338,10 +1467,15 @@ export default function AdminDashboard() {
     } catch { toast.error("خطأ في الحذف"); }
   };
 
+  const [questionSearch, setQuestionSearch] = useState("");
+
   const filteredQuestions = questions.filter((q) => {
     const catMatch = selectedCat ? q.category_id === selectedCat : true;
     const diffMatch = selectedDifficulty === "all" ? true : q.difficulty === parseInt(selectedDifficulty);
-    return catMatch && diffMatch;
+    const searchMatch = !questionSearch.trim() ||
+      q.text?.toLowerCase().includes(questionSearch.toLowerCase()) ||
+      q.answer?.toLowerCase().includes(questionSearch.toLowerCase());
+    return catMatch && diffMatch && searchMatch;
   });
 
   const getCatName = (id) => categories.find(c => c.id === id)?.name || id;
@@ -1571,8 +1705,8 @@ export default function AdminDashboard() {
 
           {/* Main Content */}
           <div className="flex-1 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <div className="flex items-center gap-4 flex-wrap">
                 <h2 className="text-2xl font-black">
                   {selectedCat ? getCatName(selectedCat) : "كل الأسئلة"}
                 </h2>
@@ -1588,6 +1722,15 @@ export default function AdminDashboard() {
                     </button>
                   ))}
                 </div>
+                {/* Search */}
+                <input
+                  data-testid="question-search-input"
+                  value={questionSearch}
+                  onChange={e => setQuestionSearch(e.target.value)}
+                  placeholder="🔍 ابحث في الأسئلة..."
+                  className="border border-primary/20 focus:border-primary rounded-xl px-3 py-1.5 text-sm outline-none bg-white"
+                  style={{ fontFamily: "Cairo, sans-serif", minWidth: "180px" }}
+                />
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-primary/40 text-sm">{filteredQuestions.length} سؤال</span>
@@ -1816,126 +1959,284 @@ export default function AdminDashboard() {
       )}
 
       {/* ── ANALYTICS TAB ── */}
-      {activeTab === "analytics" && (
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-black">الإحصاءات</h2>
-            {isSuperAdmin && (
-              <a
-                data-testid="export-db-btn"
-                href={`${API}/admin/export-db`}
-                download="hujjah_db_export.zip"
-                onClick={e => {
-                  // pass token via fetch instead of direct link
-                  e.preventDefault();
-                  fetch(`${API}/admin/export-db`, { headers })
-                    .then(r => r.blob())
-                    .then(blob => {
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url; a.download = "hujjah_db_export.zip"; a.click();
-                      URL.revokeObjectURL(url);
-                    })
-                    .catch(() => toast.error("خطأ في التصدير"));
-                }}
-                className="flex items-center gap-2 bg-primary text-secondary px-5 py-2.5 rounded-xl font-black text-sm hover:scale-[1.02] transition-all shadow-md cursor-pointer"
-              >
-                <span>💾</span>
-                <span>تصدير قاعدة البيانات</span>
-              </a>
-            )}
+      {activeTab === "analytics" && (() => {
+        const A_BG    = "#0d1117";
+        const A_CARD  = "rgba(255,255,255,0.035)";
+        const A_BORDER= "rgba(255,255,255,0.08)";
+        const A_TEXT  = "#f3f4f6";
+        const A_MUTED = "rgba(243,244,246,0.45)";
+
+        const ACard = ({ children, style = {} }) => (
+          <div style={{ background: A_CARD, border: `1px solid ${A_BORDER}`, borderRadius: "16px",
+                        backdropFilter: "blur(12px)", ...style }}>
+            {children}
           </div>
-          {!analytics ? (
-            <div className="text-center py-16 text-primary/30">جاري التحميل...</div>
-          ) : (
-            <div className="space-y-6">
-              {/* KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: "المستخدمون", value: analytics.users.total, sub: `${analytics.users.premium} مميز`, color: "bg-blue-50 border-blue-200" },
-                  { label: "المشتركون المميزون", value: analytics.users.premium, sub: `${analytics.users.free} مجاني`, color: "bg-amber-50 border-amber-200" },
-                  { label: "الأسئلة", value: analytics.questions.total, sub: "في قاعدة البيانات", color: "bg-green-50 border-green-200" },
-                  { label: "المباريات", value: analytics.sessions.total, sub: `${analytics.sessions.active_24h} اليوم`, color: "bg-purple-50 border-purple-200" },
-                ].map((kpi) => (
-                  <div key={kpi.label} className={`${kpi.color} border rounded-xl p-4`}>
-                    <div className="text-3xl font-black text-primary mb-1">{kpi.value}</div>
-                    <div className="text-sm font-bold text-primary/70">{kpi.label}</div>
-                    <div className="text-xs text-primary/40 mt-1">{kpi.sub}</div>
-                  </div>
-                ))}
+        );
+
+        const AKPI = ({ icon, label, value, sub, color, accent }) => (
+          <ACard style={{ padding: "20px 22px", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: -8, right: -6, fontSize: "3.8rem", opacity: 0.055 }}>{icon}</div>
+            <div style={{ fontSize: "2rem", marginBottom: "6px" }}>{icon}</div>
+            <div style={{ fontSize: "2rem", fontWeight: 900, color, lineHeight: 1 }}>{value ?? "—"}</div>
+            <div style={{ fontSize: "0.78rem", color: A_MUTED, marginTop: "5px", fontWeight: 700 }}>{label}</div>
+            {sub && <div style={{ fontSize: "0.7rem", color, opacity: 0.6, marginTop: "3px" }}>{sub}</div>}
+            {accent && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "3px",
+                                     background: color, opacity: 0.4, borderRadius: "0 0 16px 16px" }} />}
+          </ACard>
+        );
+
+        const SectionLabel = ({ children }) => (
+          <div style={{ fontSize: "0.72rem", fontWeight: 800, color: A_MUTED, letterSpacing: "0.12em",
+                        textTransform: "uppercase", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ flex: 1, height: "1px", background: A_BORDER }} />
+            {children}
+            <div style={{ flex: 1, height: "1px", background: A_BORDER }} />
+          </div>
+        );
+
+        if (!analytics) return (
+          <div style={{ padding: "64px", background: A_BG, minHeight: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: "3rem", marginBottom: "16px" }}>📊</div>
+            <div style={{ color: A_MUTED, fontSize: "1rem" }}>جاري تحميل الإحصاءات...</div>
+          </div>
+        );
+
+        const convRate = analytics.users.total > 0
+          ? Math.round((analytics.users.premium / analytics.users.total) * 100) : 0;
+        const maxCatCount = Math.max(...(analytics.questions.by_category || []).map(c => c.count), 1);
+        const diffTotal = (analytics.questions.by_difficulty?.["300"] || 0) +
+                          (analytics.questions.by_difficulty?.["600"] || 0) +
+                          (analytics.questions.by_difficulty?.["900"] || 0);
+        const trend = analytics.revenue?.trend || [];
+        const maxTrend = Math.max(...trend.map(t => t.amount), 1);
+
+        return (
+          <div style={{ padding: "clamp(16px,2.5vw,28px)", background: A_BG, minHeight: "100%",
+                        fontFamily: "Cairo, sans-serif", color: A_TEXT }}>
+            {/* ── Header ── */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "28px", gap: "12px", flexWrap: "wrap" }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: "clamp(1.3rem,2.5vw,1.8rem)", fontWeight: 900 }}>📊 لوحة التحليلات</h2>
+                <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: A_MUTED }}>نظرة شاملة على أداء المنصة</p>
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button onClick={loadAnalytics}
+                  style={{ background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa",
+                           padding: "9px 18px", borderRadius: "12px", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}>
+                  ↻ تحديث
+                </button>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => {
+                      fetch(`${API}/admin/export-db`, { headers })
+                        .then(r => r.blob())
+                        .then(blob => {
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url; a.download = "hujjah_db_export.zip"; a.click();
+                          URL.revokeObjectURL(url);
+                        })
+                        .catch(() => toast.error("خطأ في التصدير"));
+                    }}
+                    style={{ background: "rgba(255,255,255,0.06)", border: `1.5px solid ${A_BORDER}`, color: A_TEXT,
+                             padding: "9px 18px", borderRadius: "12px", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer",
+                             display: "flex", alignItems: "center", gap: "8px" }}
+                  >
+                    <span>💾</span><span>تصدير DB</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+
+              {/* ═══ SECTION: المستخدمون ═══ */}
+              <SectionLabel>👥 المستخدمون</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "12px", marginTop: "-10px" }}>
+                <AKPI icon="👥" label="إجمالي المستخدمين" value={analytics.users.total}    color="#60a5fa" accent sub={`+${analytics.users.new_7d} هذا الأسبوع`} />
+                <AKPI icon="⭐" label="مشتركون مميزون"   value={analytics.users.premium}   color="#fbbf24" accent sub={`${analytics.users.free} مجاني`} />
+                <AKPI icon="🔥" label="نشطون (24 ساعة)"  value={analytics.users.active_24h} color="#f87171" accent />
+                <AKPI icon="📅" label="نشطون (7 أيام)"   value={analytics.users.active_7d}  color="#a78bfa" accent />
+                <AKPI icon="🗓" label="نشطون (30 يوم)"   value={analytics.users.active_30d} color="#34d399" accent />
+                <AKPI icon="📈" label="معدل التحويل"     value={`${convRate}%`}              color="#22d3ee" accent sub="مجاني → مميز" />
               </div>
 
-              {/* Categories Stats */}
-              {analytics.categories && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { label: "إجمالي الفئات", value: analytics.categories.total, color: "bg-teal-50 border-teal-200" },
-                    { label: "الفئات النشطة", value: analytics.categories.active, color: "bg-green-50 border-green-200" },
-                    { label: "الفئات المعطّلة", value: analytics.categories.inactive, color: "bg-red-50 border-red-200" },
-                    { label: "الفئات المميزة", value: analytics.categories.premium, color: "bg-amber-50 border-amber-200" },
-                  ].map((kpi) => (
-                    <div key={kpi.label} className={`${kpi.color} border rounded-xl p-4`}>
-                      <div className="text-3xl font-black text-primary mb-1">{kpi.value}</div>
-                      <div className="text-sm font-bold text-primary/70">{kpi.label}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* ═══ SECTION: الجلسات والأسئلة ═══ */}
+              <SectionLabel>🎮 الجلسات والمحتوى</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "12px", marginTop: "-10px" }}>
+                <AKPI icon="🎮" label="جلسات اليوم"    value={analytics.sessions.active_24h} color="#a78bfa" accent />
+                <AKPI icon="📋" label="جلسات الأسبوع"  value={analytics.sessions.active_7d}  color="#60a5fa" accent />
+                <AKPI icon="📚" label="إجمالي الأسئلة" value={analytics.questions.total}      color="#34d399" accent />
+                <AKPI icon="⏳" label="قيد المراجعة"   value={analytics.questions.pending}    color="#f59e0b" accent />
+                <AKPI icon="📦" label="الفئات النشطة"  value={analytics.categories.active}   color="#22d3ee" accent />
+                <AKPI icon="🔒" label="فئات مميزة"     value={analytics.categories.premium}  color="#fbbf24" accent />
+              </div>
 
-              {/* Most Popular Category */}
-              {analytics.categories?.most_popular?.name && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-4">
-                  <div className="text-3xl">🏆</div>
-                  <div>
-                    <div className="text-xs font-bold text-amber-700/60 uppercase tracking-widest">الفئة الأكثر أسئلة</div>
-                    <div className="font-black text-xl text-amber-800">{analytics.categories.most_popular.name}</div>
-                    <div className="text-amber-700/60 text-sm">{analytics.categories.most_popular.count} سؤال</div>
+              {/* ═══ SECTION: الإيرادات ═══ */}
+              <SectionLabel>💰 الإيرادات</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "-10px" }}>
+
+                {/* Revenue total + conversion */}
+                <ACard style={{ padding: "22px" }}>
+                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "rgba(251,191,36,0.55)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px" }}>
+                    إجمالي الإيرادات
                   </div>
-                </div>
-              )}
+                  <div style={{ fontSize: "2.6rem", fontWeight: 900, color: "#fbbf24", lineHeight: 1 }}>
+                    {analytics.revenue.total.toLocaleString()}
+                  </div>
+                  <div style={{ color: "rgba(251,191,36,0.5)", fontSize: "0.85rem", marginTop: "4px" }}>ريال سعودي</div>
 
-              {/* Revenue */}
-              <div className="bg-white border border-primary/10 rounded-xl p-5">
-                <h3 className="font-black text-lg mb-3">الإيرادات</h3>
-                <div className="text-4xl font-black text-primary mb-1">{analytics.revenue.total} {analytics.revenue.currency}</div>
-                <div className="text-primary/50 text-sm">إجمالي الإيرادات</div>
-                {analytics.revenue.recent_transactions?.length > 0 && (
-                  <div className="mt-4">
-                    <div className="text-xs font-bold text-primary/50 uppercase tracking-widest mb-2">آخر المعاملات</div>
-                    {analytics.revenue.recent_transactions.map((txn, i) => (
-                      <div key={i} className="flex justify-between items-center py-1.5 border-b border-primary/5 text-sm">
-                        <span className="text-primary/60">{txn.email || txn.gifted_by}</span>
-                        <span className={`font-bold ${txn.payment_status === "paid" ? "text-green-600" : txn.payment_status === "gift" ? "text-amber-600" : "text-red-500"}`}>
-                          {txn.payment_status === "gift" ? "هدية" : `${txn.amount} ${txn.currency || ""}`}
+                  <div style={{ marginTop: "18px" }}>
+                    <div style={{ fontSize: "0.7rem", color: A_MUTED, fontWeight: 700, marginBottom: "10px" }}>آخر المعاملات</div>
+                    {(analytics.revenue.recent_transactions || []).slice(0, 5).map((txn, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                                            padding: "7px 0", borderBottom: `1px solid ${A_BORDER}`, fontSize: "0.78rem" }}>
+                        <span style={{ color: A_MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "130px" }}>
+                          {txn.email || txn.gifted_by || "—"}
+                        </span>
+                        <span style={{ fontWeight: 900, flexShrink: 0,
+                                       color: txn.payment_status === "paid" ? "#34d399" : txn.payment_status === "gift" ? "#fbbf24" : "#f87171" }}>
+                          {txn.payment_status === "gift" ? "هدية 🎁" : `${txn.amount} ر.س`}
                         </span>
                       </div>
                     ))}
+                    {(analytics.revenue.recent_transactions || []).length === 0 && (
+                      <div style={{ color: A_MUTED, fontSize: "0.78rem", textAlign: "center", padding: "12px 0" }}>لا توجد معاملات بعد</div>
+                    )}
                   </div>
-                )}
+                </ACard>
+
+                {/* Revenue trend chart */}
+                <ACard style={{ padding: "22px" }}>
+                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "rgba(251,191,36,0.55)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>
+                    منحنى الإيرادات (30 يوم)
+                  </div>
+                  {trend.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "32px 0", color: A_MUTED, fontSize: "0.82rem" }}>
+                      لا توجد بيانات إيرادات بعد
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: "3px", height: "100px", paddingBottom: "8px" }}>
+                      {trend.map((t, i) => (
+                        <div key={i} title={`${t.date}: ${t.amount} ر.س`}
+                          style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", cursor: "default" }}>
+                          <div style={{
+                            width: "100%", borderRadius: "4px 4px 0 0",
+                            background: t.amount > 0 ? "linear-gradient(to top,#d97706,#fbbf24)" : "rgba(255,255,255,0.04)",
+                            height: `${Math.max(4, (t.amount / maxTrend) * 88)}px`,
+                            transition: "height 0.4s ease",
+                            minHeight: "4px",
+                          }} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
+                    <span style={{ fontSize: "0.65rem", color: A_MUTED }}>{trend[0]?.date?.slice(5) || "—"}</span>
+                    <span style={{ fontSize: "0.65rem", color: A_MUTED }}>{trend[trend.length - 1]?.date?.slice(5) || "—"}</span>
+                  </div>
+                </ACard>
               </div>
 
-              {/* Questions by category */}
-              <div className="bg-white border border-primary/10 rounded-xl p-5">
-                <h3 className="font-black text-lg mb-3">الأسئلة بالفئات</h3>
-                <div className="space-y-2">
-                  {analytics.questions.by_category.map((cat) => (
-                    <div key={cat.id} className="flex items-center gap-3">
-                      <span className="text-primary/70 text-sm w-32 truncate">{cat.name}</span>
-                      <div className="flex-1 bg-primary/10 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-primary h-full rounded-full"
-                          style={{ width: `${Math.min(100, (cat.count / 50) * 100)}%` }}
-                        />
+              {/* ═══ SECTION: الأسئلة ═══ */}
+              <SectionLabel>📚 المحتوى والأسئلة</SectionLabel>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "-10px" }}>
+
+                {/* Questions by difficulty */}
+                <ACard style={{ padding: "22px" }}>
+                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: A_MUTED, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "16px" }}>
+                    الأسئلة حسب الصعوبة
+                  </div>
+                  {[
+                    { key: "300", label: "سهل",   color: "#34d399", bg: "rgba(52,211,153,0.15)"  },
+                    { key: "600", label: "متوسط", color: "#fbbf24", bg: "rgba(251,191,36,0.15)"  },
+                    { key: "900", label: "صعب",   color: "#f87171", bg: "rgba(239,68,68,0.15)"   },
+                  ].map(({ key, label, color, bg }) => {
+                    const count = analytics.questions.by_difficulty?.[key] || 0;
+                    const pct = diffTotal > 0 ? Math.round((count / diffTotal) * 100) : 0;
+                    return (
+                      <div key={key} style={{ marginBottom: "14px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "0.82rem", color, fontWeight: 700 }}>{key} — {label}</span>
+                          <span style={{ fontSize: "0.9rem", fontWeight: 900, color }}>{count} <span style={{ fontSize: "0.65rem", opacity: 0.6 }}>({pct}%)</span></span>
+                        </div>
+                        <div style={{ height: "8px", background: "rgba(255,255,255,0.06)", borderRadius: "9999px", overflow: "hidden" }}>
+                          <div style={{ height: "100%", borderRadius: "9999px", background: color,
+                                        width: `${pct}%`, transition: "width 0.6s ease" }} />
+                        </div>
                       </div>
-                      <span className="text-xs font-black text-primary/60 w-8 text-left">{cat.count}</span>
+                    );
+                  })}
+                  <div style={{ marginTop: "6px", fontSize: "0.72rem", color: A_MUTED, textAlign: "center" }}>
+                    الإجمالي: {diffTotal} سؤال
+                  </div>
+                </ACard>
+
+                {/* Weak categories */}
+                <ACard style={{ padding: "22px" }}>
+                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "rgba(251,191,36,0.55)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>
+                    ⚠️ فئات تحتاج محتوى (&lt;6 أسئلة)
+                  </div>
+                  {(analytics.questions.weak_categories || []).length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "24px 0", color: "#34d399", fontSize: "0.9rem" }}>
+                      ✅ كل الفئات لديها محتوى كافٍ
                     </div>
-                  ))}
-                </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "180px", overflowY: "auto" }}>
+                      {(analytics.questions.weak_categories || []).map(cat => (
+                        <div key={cat.id} style={{ display: "flex", alignItems: "center", gap: "10px",
+                                                    padding: "8px 12px", borderRadius: "10px",
+                                                    background: cat.count === 0 ? "rgba(239,68,68,0.1)" : "rgba(251,191,36,0.07)",
+                                                    border: `1px solid ${cat.count === 0 ? "rgba(239,68,68,0.3)" : "rgba(251,191,36,0.2)"}` }}>
+                          <span style={{ fontSize: "1rem" }}>{cat.icon || "🎯"}</span>
+                          <span style={{ flex: 1, fontSize: "0.82rem", color: A_TEXT, fontWeight: 700 }}>{cat.name}</span>
+                          <span style={{ fontSize: "0.75rem", fontWeight: 900,
+                                         color: cat.count === 0 ? "#f87171" : "#fbbf24" }}>
+                            {cat.count} سؤال
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ACard>
               </div>
+
+              {/* ═══ SECTION: الأسئلة بالفئات ═══ */}
+              <SectionLabel>📊 الأسئلة بالفئات</SectionLabel>
+              <ACard style={{ padding: "22px", marginTop: "-10px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {(analytics.questions.by_category || [])
+                    .sort((a, b) => b.count - a.count)
+                    .slice(0, 15)
+                    .map(cat => (
+                      <div key={cat.id} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span style={{ fontSize: "0.85rem", width: "20px", textAlign: "center", flexShrink: 0 }}>{cat.icon || "🎯"}</span>
+                        <span style={{ color: A_TEXT, fontSize: "0.82rem", width: "130px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>
+                          {cat.name}
+                        </span>
+                        <div style={{ flex: 1, background: "rgba(255,255,255,0.06)", borderRadius: "9999px", height: "8px", overflow: "hidden" }}>
+                          <div style={{
+                            height: "100%", borderRadius: "9999px",
+                            background: cat.count < 6
+                              ? "linear-gradient(90deg,#ef4444,#f87171)"
+                              : "linear-gradient(90deg,#6366f1,#818cf8)",
+                            width: `${Math.max(2, (cat.count / maxCatCount) * 100)}%`,
+                            transition: "width 0.6s ease",
+                          }} />
+                        </div>
+                        <span style={{ color: cat.count < 6 ? "#f87171" : "#818cf8", fontSize: "0.78rem", fontWeight: 900, width: "32px", textAlign: "left", flexShrink: 0 }}>
+                          {cat.count}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </ACard>
+
             </div>
-          )}
-        </div>
-      )}
+            <style>{`@keyframes analyticsIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
+          </div>
+        );
+      })()}
 
       {/* ── SETTINGS TAB ── */}
       {activeTab === "settings" && (
@@ -2325,6 +2626,54 @@ export default function AdminDashboard() {
             </button>
           </div>
 
+          {/* Bulk action bar */}
+          {selectedPending.size > 0 && (
+            <div style={{
+              background: "rgba(99,102,241,0.12)", border: "1.5px solid rgba(99,102,241,0.4)",
+              borderRadius: "14px", padding: "12px 18px", marginBottom: "16px",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap"
+            }}>
+              <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: "0.9rem" }}>
+                ✔ {selectedPending.size} سؤال محدد
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button onClick={handleBulkApprove}
+                  style={{ background: "rgba(52,211,153,0.18)", border: "1.5px solid rgba(52,211,153,0.5)", color: "#34d399",
+                           padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem", cursor: "pointer" }}>
+                  ✓ نشر المحدد
+                </button>
+                <button onClick={handleBulkReject}
+                  style={{ background: "rgba(239,68,68,0.12)", border: "1.5px solid rgba(239,68,68,0.4)", color: "#f87171",
+                           padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem", cursor: "pointer" }}>
+                  ✕ رفض المحدد
+                </button>
+                <button onClick={() => setSelectedPending(new Set())}
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(243,244,246,0.5)",
+                           padding: "7px 14px", borderRadius: "10px", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>
+                  إلغاء
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Select all row */}
+          {pendingQuestions.length > 0 && !pendingLoading && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", padding: "0 4px" }}>
+              <input
+                type="checkbox"
+                checked={selectedPending.size === pendingQuestions.length && pendingQuestions.length > 0}
+                onChange={() => {
+                  if (selectedPending.size === pendingQuestions.length) setSelectedPending(new Set());
+                  else setSelectedPending(new Set(pendingQuestions.map(q => q.id)));
+                }}
+                style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#818cf8" }}
+              />
+              <span style={{ color: "rgba(243,244,246,0.45)", fontSize: "0.8rem", fontWeight: 700 }}>
+                {selectedPending.size === pendingQuestions.length ? "إلغاء تحديد الكل" : "تحديد الكل"}
+              </span>
+            </div>
+          )}
+
           {/* Pending list */}
           {pendingLoading ? (
             <div className="text-center py-16 text-primary/40">
@@ -2349,6 +2698,12 @@ export default function AdminDashboard() {
                   onApprove={handleApproveQuestion}
                   onReject={handleRejectQuestion}
                   onUpdate={(id, fields) => setPendingQuestions(prev => prev.map(pq => pq.id === id ? { ...pq, ...fields } : pq))}
+                  selected={selectedPending.has(q.id)}
+                  onToggleSelect={(id) => setSelectedPending(prev => {
+                    const next = new Set(prev);
+                    next.has(id) ? next.delete(id) : next.add(id);
+                    return next;
+                  })}
                 />
               ))}
             </div>
