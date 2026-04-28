@@ -69,7 +69,7 @@ export default function TeamSetupPage() {
                 type="text"
                 value={team1}
                 onChange={(e) => setTeam1(e.target.value)}
-                placeholder="مثال: الأسود"
+                placeholder="الفريق الأحمر"
                 maxLength={20}
                 className="w-full bg-primary-dark/50 border-2 border-secondary/30 focus:border-secondary text-secondary placeholder:text-secondary/30 px-4 py-4 rounded-xl text-xl font-bold outline-none transition-all text-right"
                 onKeyDown={(e) => e.key === "Enter" && document.getElementById("team2-input")?.focus()}
@@ -94,7 +94,7 @@ export default function TeamSetupPage() {
                 type="text"
                 value={team2}
                 onChange={(e) => setTeam2(e.target.value)}
-                placeholder="مثال: النسور"
+                placeholder="الفريق الأزرق"
                 maxLength={20}
                 className="w-full bg-primary-dark/50 border-2 border-secondary/30 focus:border-secondary text-secondary placeholder:text-secondary/30 px-4 py-4 rounded-xl text-xl font-bold outline-none transition-all text-right"
                 onKeyDown={(e) => e.key === "Enter" && handleStart()}

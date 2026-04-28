@@ -10,7 +10,7 @@ services:
         sync: false
       - key: DB_NAME
         value: hujjah_db
-      - key: JWT_SECRET
+      - key: JWT_SECRET_KEY
         generateValue: true
       - key: ADMIN_PASSWORD
         value: hujjah2024
