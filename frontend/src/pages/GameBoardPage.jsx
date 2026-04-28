@@ -65,17 +65,18 @@ function fireConfetti() {
 }
 
 /* ══════════════════════════════════════════════════════
-   Category Card — new layout: title · [vals|img|vals]
-   Left col = slot 1 (team 1) · Right col = slot 2 (team 2)
+   Category Card
+   Layout:  [ title ]
+            [ 300  300 ]   ← slot1 | slot2
+            [ 600  600 ]
+            [ 900  900 ]
+   Category image = subtle blurred background of the card
    ══════════════════════════════════════════════════════ */
-function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick, currentTurn }) {
-  const [imgErr, setImgErr] = useState(false);
-
+function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn }) {
   const slotUsed = (diff, slot) => isTileUsed(`${cat.id}_${diff}_${slot}`);
   const bothUsed = (diff)       => slotUsed(diff, 1) && slotUsed(diff, 2);
   const allDone  = DIFFICULTIES.every(d => bothUsed(d));
 
-  /* renders one value button */
   const renderBtn = (diff, slot) => {
     const used     = slotUsed(diff, slot);
     const allGone  = bothUsed(diff);
@@ -93,10 +94,10 @@ function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick, cur
         disabled={disabled}
         onClick={() => isMyTurn && !used && !allGone && onTileClick(cat.id, diff, slot)}
         style={used || allGone ? {} : {
-          background:  c.bg,
-          boxShadow:   isMyTurn ? `0 5px 18px ${c.glow}` : "none",
-          opacity:     isMyTurn ? 1 : 0.30,
-          filter:      isMyTurn ? "none" : "saturate(0.25)",
+          background: c.bg,
+          boxShadow:  isMyTurn ? `0 4px 16px ${c.glow}` : "none",
+          opacity:    isMyTurn ? 1 : 0.28,
+          filter:     isMyTurn ? "none" : "saturate(0.2)",
         }}
       >
         {clicking ? "…" : used ? "✓" : c.label}
@@ -107,47 +108,32 @@ function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick, cur
   return (
     <div className="category-card" style={{ opacity: allDone ? 0.44 : 1 }}>
 
-      {/* ── Title ── */}
+      {/* Category image — blurred bg inside card */}
+      {cat.image_url && (
+        <div
+          className="card-bg-img"
+          style={{ backgroundImage: `url(${cat.image_url})` }}
+        />
+      )}
+
+      {/* Completed overlay */}
+      {allDone && (
+        <div className="answered-overlay">
+          <div className="answered-check">✓</div>
+        </div>
+      )}
+
+      {/* Title */}
       <div className="cat-title">{cat.name}</div>
 
-      {/* ── Body: left values · image · right values ── */}
-      <div className="cat-body">
-
-        {/* Slot 1 — Team 1 (left) */}
-        <div className="val-col val-left">
-          {DIFFICULTIES.map(d => renderBtn(d, 1))}
-        </div>
-
-        {/* Center image */}
-        <div className="cat-img-wrap">
-          {cat.image_url && !imgErr ? (
-            <img
-              src={cat.image_url}
-              alt={cat.name}
-              onError={() => setImgErr(true)}
-            />
-          ) : (
-            <div
-              className="cat-img-fallback"
-              style={{
-                background: `linear-gradient(135deg,${cat.color || "#3d1a8e"}88,${cat.color || "#080316"}44)`,
-              }}
-            >
-              <span style={{ fontSize: "2.4rem" }}>{cat.icon || "🎯"}</span>
-            </div>
-          )}
-          <div className="cat-img-vignette" />
-          {allDone && (
-            <div className="answered-overlay">
-              <div className="answered-check">✓</div>
-            </div>
-          )}
-        </div>
-
-        {/* Slot 2 — Team 2 (right) */}
-        <div className="val-col val-right">
-          {DIFFICULTIES.map(d => renderBtn(d, 2))}
-        </div>
+      {/* 2×3 points grid: left col = slot1, right col = slot2 */}
+      <div className="points-grid">
+        {DIFFICULTIES.map(diff => (
+          <React.Fragment key={diff}>
+            {renderBtn(diff, 1)}
+            {renderBtn(diff, 2)}
+          </React.Fragment>
+        ))}
       </div>
     </div>
   );
@@ -447,28 +433,28 @@ export default function GameBoardPage() {
 
         /* ─── CATEGORY CARD ─── */
         .category-card {
+          height: 100%;
+          min-height: 280px;
+          border-radius: 22px;
+          padding: 16px;
+          background: rgba(18, 22, 44, 0.92);
+          border: 1px solid rgba(216,178,92,0.14);
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          padding: 13px;
-          border-radius: 22px;
-          background: linear-gradient(160deg, rgba(22,26,50,0.90), rgba(9,11,22,0.84));
-          border: 1px solid rgba(216,178,92,0.14);
-          box-shadow:
-            0 20px 60px rgba(0,0,0,0.50),
-            inset 0 1px 0 rgba(255,255,255,0.05);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          animation: cardIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
-          transition: transform 0.26s ease, box-shadow 0.26s ease, border-color 0.26s ease;
+          justify-content: space-between;
+          gap: 12px;
+          position: relative;
           overflow: hidden;
+          box-shadow: 0 18px 54px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.05);
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          animation: cardIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
+          transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
         }
         .category-card:hover {
           transform: translateY(-3px);
-          border-color: rgba(216,178,92,0.26);
-          box-shadow:
-            0 28px 72px rgba(0,0,0,0.58),
-            inset 0 1px 0 rgba(255,255,255,0.07);
+          border-color: rgba(216,178,92,0.28);
+          box-shadow: 0 26px 68px rgba(0,0,0,0.58), inset 0 1px 0 rgba(255,255,255,0.07);
         }
         .category-card:nth-child(1) { animation-delay:0.05s }
         .category-card:nth-child(2) { animation-delay:0.10s }
@@ -477,42 +463,52 @@ export default function GameBoardPage() {
         .category-card:nth-child(5) { animation-delay:0.25s }
         .category-card:nth-child(6) { animation-delay:0.30s }
 
+        /* Category image as blurred card background */
+        .card-bg-img {
+          position: absolute;
+          inset: 0;
+          background-size: cover;
+          background-position: center;
+          opacity: 0.10;
+          filter: blur(6px) grayscale(30%);
+          transform: scale(1.08);
+          z-index: 0;
+          pointer-events: none;
+          transition: opacity 0.3s ease;
+        }
+        .category-card:hover .card-bg-img { opacity: 0.15; }
+
+        /* All content above bg image */
+        .cat-title,
+        .points-grid { position: relative; z-index: 1; }
+
         /* Card title */
         .cat-title {
           text-align: center;
-          font-size: clamp(0.90rem, 1.3vw, 1.10rem);
+          font-size: clamp(0.92rem, 1.35vw, 1.12rem);
           font-weight: 900;
           color: #f5f1e8;
           line-height: 1.3;
-          padding-bottom: 8px;
-          border-bottom: 1px solid rgba(216,178,92,0.16);
-          text-shadow: 0 2px 10px rgba(0,0,0,0.55);
+          padding-bottom: 10px;
+          border-bottom: 1px solid rgba(216,178,92,0.18);
+          text-shadow: 0 2px 10px rgba(0,0,0,0.60);
           letter-spacing: 0.01em;
         }
 
-        /* Card body: [vals | image | vals] */
-        .cat-body {
-          flex: 1;
-          min-height: 0;
+        /* 2-col × 3-row points grid */
+        .points-grid {
           display: grid;
-          grid-template-columns: 70px 1fr 70px;
+          grid-template-columns: 1fr 1fr;
           gap: 10px;
-          align-items: stretch;
-        }
-
-        /* Value columns */
-        .val-col {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
+          flex: 1;
         }
 
         /* Score buttons */
         .score-btn {
-          flex: 1;
+          height: 52px;
           border: none;
           border-radius: 12px;
-          font-size: clamp(0.78rem, 1.1vw, 0.92rem);
+          font-size: clamp(1rem, 1.4vw, 1.15rem);
           font-weight: 900;
           font-family: 'Tajawal', Cairo, sans-serif;
           cursor: pointer;
@@ -521,7 +517,6 @@ export default function GameBoardPage() {
           overflow: hidden;
           transition:
             transform 0.18s cubic-bezier(0.34,1.56,0.64,1),
-            filter 0.18s ease,
             opacity 0.18s ease,
             box-shadow 0.18s ease;
         }
@@ -530,59 +525,25 @@ export default function GameBoardPage() {
           position: absolute;
           inset: 0;
           background: rgba(255,255,255,0);
-          transition: background 0.15s;
+          transition: background 0.14s;
         }
-        .score-btn.s-active:hover::after { background: rgba(255,255,255,0.16); }
-        .score-btn.s-active:hover  { transform: translateY(-2px) scale(1.05); }
+        .score-btn.s-active:hover::after { background: rgba(255,255,255,0.14); }
+        .score-btn.s-active:hover  { transform: translateY(-2px) scale(1.04); }
         .score-btn.s-active:active { transform: scale(0.91); }
         .score-btn.s-wait  { cursor: not-allowed; }
         .score-btn.s-used  {
-          background: rgba(255,255,255,0.06) !important;
+          background: rgba(255,255,255,0.05) !important;
           box-shadow: none !important;
           opacity: 1 !important;
           filter: none !important;
-          color: rgba(255,255,255,0.20);
+          color: rgba(255,255,255,0.18);
           cursor: default;
           border: 1px solid rgba(255,255,255,0.06);
         }
 
-        /* Category image */
-        .cat-img-wrap {
-          border-radius: 16px;
-          overflow: hidden;
-          position: relative;
-        }
-        .cat-img-wrap img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          object-position: center;
-          display: block;
-          filter: grayscale(0.15) brightness(0.76) contrast(1.04);
-          transform: scale(1.03);
-          transition: transform 0.45s ease;
-        }
-        .category-card:hover .cat-img-wrap img { transform: scale(1.08); }
-        .cat-img-vignette {
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(to bottom, rgba(0,0,0,0.04), rgba(6,4,18,0.28));
-          border: 1px solid rgba(216,178,92,0.10);
-          border-radius: 16px;
-          pointer-events: none;
-        }
-        .cat-img-fallback {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 160px;
-        }
-
         /* Answered overlay */
         .answered-overlay {
-          position: absolute; inset: 0;
+          position: absolute; inset: 0; z-index: 2;
           display: flex; align-items: center; justify-content: center;
           background: rgba(8,6,22,0.65);
           backdrop-filter: blur(4px);
@@ -711,7 +672,6 @@ export default function GameBoardPage() {
           <CategoryCard
             key={cat.id}
             cat={cat}
-            session={session}
             isTileUsed={isTileUsed}
             clickingTile={clickingTile}
             currentTurn={currentTurn}
