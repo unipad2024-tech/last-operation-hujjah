@@ -4,7 +4,7 @@ import { useGame } from "@/context/GameContext";
 import axios from "axios";
 import { toast } from "sonner";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
 const DIFFICULTIES = [300, 600, 900];
 
 /* ── Color palettes ── */

@@ -4,7 +4,7 @@ import axios from "axios";
 import { toast } from "sonner";
 import { useGame } from "@/context/GameContext";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
 const DARK_BG = { background: "radial-gradient(ellipse at top, #3D0810 0%, #1a0205 40%, #0f0102 100%)" };
 
 const PLANS = [

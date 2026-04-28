@@ -3717,9 +3717,12 @@ async def seed_category_groups(_: dict = Depends(get_super_admin)):
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(','),
+    allow_origins=os.environ.get(
+        'CORS_ORIGINS',
+        'http://localhost:3000,https://al-amaliya-al-akhira.vercel.app'
+    ).split(','),
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Device-Id", "Accept", "Accept-Language", "Content-Language"],
 )
 
 # Fast health/keepalive at app level (no router prefix)

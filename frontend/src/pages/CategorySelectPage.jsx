@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Lock } from "lucide-react";
 import { useGame } from "@/context/GameContext";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
 
 export default function CategorySelectPage() {
   const navigate = useNavigate();

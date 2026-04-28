@@ -4,8 +4,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { GameProvider } from "@/context/GameContext";
 import { Toaster } from "sonner";
 
-const API   = `${process.env.REACT_APP_BACKEND_URL}/api`;
-const BASE  = process.env.REACT_APP_BACKEND_URL;          // for /health (no /api prefix)
+const BASE  = process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app";
+const API   = `${BASE}/api`;
 
 // Warm up server + preload categories on app start
 function useBackendWarmup() {
