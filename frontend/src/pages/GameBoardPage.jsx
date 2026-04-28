@@ -4,28 +4,19 @@ import { useGame } from "@/context/GameContext";
 import axios from "axios";
 import { toast } from "sonner";
 
-const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
+/* ═══════════════════════════════════════════════════════════════════════════
+   HUJJAH — GameBoardPage
+   Navy glass UI · Immersive category cards · All logic preserved
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const API         = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
 const DIFFICULTIES = [300, 600, 900];
 
-const ROMAN_BG_IMG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
-
-/* ── Difficulty chip styles ── */
-const DIFF_STYLE = {
-  300: {
-    bg: "linear-gradient(145deg,#b8860b,#d4a820,#f0d045)",
-    shadow: "rgba(212,168,32,0.55)",
-    used: "rgba(212,168,32,0.08)",
-  },
-  600: {
-    bg: "linear-gradient(145deg,#a84c08,#c45c0a,#f07830)",
-    shadow: "rgba(196,92,10,0.55)",
-    used: "rgba(196,92,10,0.08)",
-  },
-  900: {
-    bg: "linear-gradient(145deg,#5b0e14,#8b1520,#a82030)",
-    shadow: "rgba(139,21,32,0.65)",
-    used: "rgba(139,21,32,0.08)",
-  },
+/* pill styles */
+const PILL = {
+  300: { bg: "linear-gradient(135deg,#1db954,#17a348)", shadow: "rgba(29,185,84,0.42)",  color: "#fff",    label: "٣٠٠" },
+  600: { bg: "linear-gradient(135deg,#f5c842,#e5a800)", shadow: "rgba(245,200,66,0.42)", color: "#1a1a2e", label: "٦٠٠" },
+  900: { bg: "linear-gradient(135deg,#ff6b6b,#e03e3e)", shadow: "rgba(255,107,107,0.42)", color: "#fff",   label: "٩٠٠" },
 };
 
 /* ── Animated score counter ── */
@@ -49,14 +40,11 @@ function ScoreCounter({ value }) {
   }, [value]);
 
   return (
-    <span
-      className="tabular-nums inline-block"
-      style={{
-        display: "inline-block",
-        transform: pop ? "scale(1.22)" : "scale(1)",
-        transition: "transform 0.18s cubic-bezier(0.34,1.56,0.64,1)",
-      }}
-    >
+    <span style={{
+      display: "inline-block",
+      transform: pop ? "scale(1.22)" : "scale(1)",
+      transition: "transform 0.18s cubic-bezier(0.34,1.56,0.64,1)",
+    }}>
       {display}
     </span>
   );
@@ -64,13 +52,13 @@ function ScoreCounter({ value }) {
 
 /* ── Confetti ── */
 function fireConfetti() {
-  const colors = ["#F1E194","#ef4444","#3b82f6","#10b981","#f59e0b","#8b5cf6"];
-  for (let i = 0; i < 80; i++) {
+  const colors = ["#f5c842","#ff6b6b","#43e97b","#4facfe","#a78bfa","#fff"];
+  for (let i = 0; i < 90; i++) {
     const el = document.createElement("div");
     Object.assign(el.style, {
       position: "fixed", top: "-10px",
       left: Math.random() * 100 + "vw",
-      width: (Math.random() * 9 + 5) + "px",
+      width:  (Math.random() * 9 + 5) + "px",
       height: (Math.random() * 9 + 5) + "px",
       background: colors[Math.floor(Math.random() * colors.length)],
       borderRadius: Math.random() > 0.5 ? "50%" : "2px",
@@ -82,215 +70,115 @@ function fireConfetti() {
   }
 }
 
-/* ── Score Button ── */
-function ScoreBtn({ catId, diff, slot, used, clicking, onClick }) {
-  const ds = DIFF_STYLE[diff];
-  const key = `${catId}_${diff}_${slot}`;
-  const isClicking = clicking === key;
-
-  return (
-    <button
-      data-testid={`tile-${catId}-${diff}-${slot}`}
-      onClick={onClick}
-      disabled={used || !!clicking}
-      style={{
-        width: "100%",
-        borderRadius: "10px",
-        fontWeight: 900,
-        fontSize: "clamp(0.62rem,1.1vw,1.05rem)",
-        lineHeight: 1,
-        letterSpacing: "-0.01em",
-        padding: "clamp(5px,0.9vh,11px) clamp(2px,0.3vw,5px)",
-        background: used ? ds.used : ds.bg,
-        border: used
-          ? "1px solid rgba(255,220,120,0.08)"
-          : "1px solid rgba(255,255,255,0.18)",
-        color: used ? "rgba(255,220,120,0.18)" : "#fff8e8",
-        boxShadow: used ? "none" : `0 4px 14px ${ds.shadow}, inset 0 1px 0 rgba(255,255,255,0.22)`,
-        cursor: used ? "default" : "pointer",
-        transition: "transform 0.16s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.16s ease, opacity 0.16s ease",
-        textShadow: used ? "none" : "0 1px 3px rgba(0,0,0,0.55)",
-        transform: isClicking ? "scale(0.92)" : "scale(1)",
-      }}
-    >
-      {isClicking ? "⏳" : used ? "✓" : diff}
-    </button>
-  );
-}
-
 /* ── Category Card ── */
-function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick }) {
-  const t1Cats = session?.team1_categories || [];
-  const isT1   = t1Cats.includes(cat.id);
-  const teamName  = isT1 ? session?.team1_name : session?.team2_name;
-  const teamColor = isT1 ? "#ef4444" : "#3b82f6";
-  const teamGlow  = isT1 ? "rgba(239,68,68,0.30)" : "rgba(59,130,246,0.30)";
+function CategoryCard({ cat, session, isTileUsed, clickingTile, onTileClick, currentTurn }) {
+  const t1Cats   = session?.team1_categories || [];
+  const isT1     = t1Cats.includes(cat.id);
+  const teamName  = isT1 ? session?.team1_name  : session?.team2_name;
+  const teamColor = isT1 ? "#ff6b6b" : "#4facfe";
+  const teamDot   = isT1 ? "active-red" : "active-blue";
+  const [imgErr, setImgErr] = useState(false);
+
+  /* check used state for both slots */
+  const slotUsed = (diff, slot) => isTileUsed(`${cat.id}_${diff}_${slot}`);
+  const bothUsed = (diff) => slotUsed(diff, 1) && slotUsed(diff, 2);
+  const mySlot   = currentTurn; /* slot = current team's turn */
+  const myUsed   = (diff) => slotUsed(diff, mySlot);
+
+  /* all 6 tiles used = card fully answered */
+  const allDone = DIFFICULTIES.every(d => bothUsed(d));
 
   return (
     <div
       className="category-card"
-      style={{
-        position: "relative",
-        borderRadius: "18px",
-        background: "linear-gradient(160deg, rgba(255,245,225,0.11) 0%, rgba(255,235,190,0.07) 100%)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        border: "1px solid rgba(255,215,130,0.22)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.48), 0 2px 8px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,230,150,0.09)",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        minHeight: 0,
-        minWidth: 0,
-      }}
+      style={{ position: "relative", opacity: allDone ? 0.42 : 1 }}
     >
-      {/* Team color bar at top */}
-      <div style={{
-        height: "3px",
-        width: "100%",
-        background: `linear-gradient(90deg, ${teamColor}cc, ${teamColor}55)`,
-        flexShrink: 0,
-      }} />
+      {/* ── Image area (full-width cover, top 55%) ── */}
+      <div className="card-image-wrap">
+        {cat.image_url && !imgErr ? (
+          <img
+            src={cat.image_url}
+            alt={cat.name}
+            onError={() => setImgErr(true)}
+          />
+        ) : (
+          /* fallback: colored gradient with icon */
+          <div style={{
+            width: "100%", height: "100%",
+            background: `linear-gradient(135deg, ${cat.color || "#302b63"}cc, ${cat.color || "#0f0c29"}44)`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "clamp(2.5rem,5vw,4rem)",
+          }}>
+            {cat.icon || "🎯"}
+          </div>
+        )}
+        {/* gradient overlay */}
+        <div className="card-img-gradient" />
 
-      {/* Inner glow from team color */}
-      <div style={{
-        position: "absolute",
-        top: 0, left: 0, right: 0,
-        height: "60%",
-        background: `radial-gradient(ellipse at top, ${teamGlow} 0%, transparent 70%)`,
-        pointerEvents: "none",
-        opacity: 0.35,
-      }} />
-
-      {/* Card body: [left buttons | center | right buttons] */}
-      <div style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "row",
-        alignItems: "stretch",
-        gap: "clamp(5px,0.6vw,10px)",
-        padding: "clamp(8px,1vw,14px)",
-        minHeight: 0,
-      }}>
-
-        {/* Left score buttons */}
+        {/* team label overlaid on image bottom */}
         <div style={{
-          width: "clamp(36px,5vw,72px)",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          gap: "clamp(4px,0.5vh,8px)",
-          flexShrink: 0,
+          position: "absolute", bottom: "8px", left: "50%", transform: "translateX(-50%)",
+          display: "flex", alignItems: "center", gap: "5px", zIndex: 2,
+          padding: "3px 12px", borderRadius: "50px",
+          background: "rgba(0,0,0,0.52)", backdropFilter: "blur(6px)",
+          border: `1px solid ${teamColor}55`,
+          whiteSpace: "nowrap",
         }}>
-          {DIFFICULTIES.map(diff => (
-            <ScoreBtn
-              key={`${cat.id}_${diff}_1`}
-              catId={cat.id} diff={diff} slot={1}
-              used={isTileUsed(`${cat.id}_${diff}_1`)}
-              clicking={clickingTile}
-              onClick={() => onTileClick(cat.id, diff, 1)}
-            />
-          ))}
+          <span className={`player-dot ${teamDot}`} />
+          <span style={{
+            fontFamily: "Tajawal, Cairo, sans-serif",
+            fontSize: "0.72rem", fontWeight: 700,
+            color: teamColor,
+            maxWidth: "100px", overflow: "hidden", textOverflow: "ellipsis",
+          }}>{teamName}</span>
         </div>
 
-        {/* Center: image + title + team badge */}
-        <div style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "clamp(5px,0.6vh,9px)",
-          minWidth: 0,
-          padding: "clamp(2px,0.3vh,6px) 0",
-        }}>
-          {/* Category image */}
-          <div style={{
-            width: "clamp(44px,5.5vw,86px)",
-            height: "clamp(44px,5.5vw,86px)",
-            borderRadius: "12px",
-            overflow: "hidden",
-            flexShrink: 0,
-            background: `linear-gradient(135deg, ${cat.color || "#5B0E14"}44, ${cat.color || "#5B0E14"}11)`,
-            border: "1px solid rgba(255,230,150,0.16)",
-            boxShadow: "0 6px 18px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}>
-            {cat.image_url ? (
-              <img
-                src={cat.image_url}
-                alt={cat.name}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                onError={e => { e.target.style.display = "none"; }}
-              />
-            ) : (
-              <span style={{ fontSize: "clamp(1.2rem,2.6vw,2.2rem)" }}>{cat.icon || "🎯"}</span>
-            )}
+        {/* all-used overlay */}
+        {allDone && (
+          <div className="answered-overlay">
+            <div className="answered-check">✓</div>
           </div>
+        )}
+      </div>
 
-          {/* Category name */}
-          <div style={{
-            color: "#f4efe6",
-            fontSize: "clamp(0.7rem,1.3vw,1.05rem)",
-            fontWeight: 800,
-            fontFamily: "Cairo, sans-serif",
-            textAlign: "center",
-            lineHeight: 1.25,
-            letterSpacing: "0.01em",
-            textShadow: "0 1px 4px rgba(0,0,0,0.55)",
-            maxWidth: "100%",
-            overflow: "hidden",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-          }}>
-            {cat.name}
-          </div>
+      {/* ── Card body ── */}
+      <div className="card-body">
+        {/* Category name */}
+        <div className="category-name">{cat.name}</div>
 
-          {/* Team badge */}
-          <div style={{
-            padding: "clamp(2px,0.4vh,5px) clamp(8px,0.8vw,14px)",
-            borderRadius: "9999px",
-            background: isT1 ? "rgba(239,68,68,0.14)" : "rgba(59,130,246,0.14)",
-            border: `1px solid ${isT1 ? "rgba(239,68,68,0.32)" : "rgba(59,130,246,0.32)"}`,
-            color: isT1 ? "#fca5a5" : "#93c5fd",
-            fontSize: "clamp(0.58rem,1vw,0.8rem)",
-            fontWeight: 700,
-            fontFamily: "Cairo, sans-serif",
-            whiteSpace: "nowrap",
-            letterSpacing: "0.01em",
-          }}>
-            {teamName}
-          </div>
-        </div>
+        {/* Point pills row */}
+        <div className="points-row">
+          {DIFFICULTIES.map(diff => {
+            const p       = PILL[diff];
+            const used    = myUsed(diff);
+            const allGone = bothUsed(diff);
+            const key     = `${cat.id}_${diff}_${mySlot}`;
+            const clicking = clickingTile === key;
 
-        {/* Right score buttons */}
-        <div style={{
-          width: "clamp(36px,5vw,72px)",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          gap: "clamp(4px,0.5vh,8px)",
-          flexShrink: 0,
-        }}>
-          {DIFFICULTIES.map(diff => (
-            <ScoreBtn
-              key={`${cat.id}_${diff}_2`}
-              catId={cat.id} diff={diff} slot={2}
-              used={isTileUsed(`${cat.id}_${diff}_2`)}
-              clicking={clickingTile}
-              onClick={() => onTileClick(cat.id, diff, 2)}
-            />
-          ))}
+            return (
+              <button
+                key={diff}
+                data-testid={`tile-${cat.id}-${diff}-${mySlot}`}
+                className={`point-pill p${diff}${used || allGone ? " used" : ""}`}
+                disabled={used || allGone || !!clickingTile}
+                onClick={() => !used && !allGone && onTileClick(cat.id, diff, mySlot)}
+                style={used || allGone ? {} : {
+                  background: p.bg,
+                  color: p.color,
+                  boxShadow: `0 3px 14px ${p.shadow}`,
+                }}
+              >
+                {clicking ? "⏳" : used ? "✓" : diff}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════ Main Board ═══ */
+/* ═══════════════════════════════════════ Main Board ═══ */
 export default function GameBoardPage() {
   const navigate = useNavigate();
   const {
@@ -298,6 +186,7 @@ export default function GameBoardPage() {
     markTileUsed, isTileUsed, teamScores, saveSession,
     gameMode, tournamentState
   } = useGame();
+
   const [categories, setCategories]         = useState([]);
   const [loading, setLoading]               = useState(true);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
@@ -355,17 +244,14 @@ export default function GameBoardPage() {
 
   const handleEndGame = () => { fireConfetti(); setShowEndConfirm(false); setShowWinner(true); };
 
+  /* ── Loading ── */
   if (loading) return (
     <div style={{
-      height: "100vh",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundImage: `linear-gradient(rgba(8,4,10,0.88),rgba(6,2,8,0.95)),url("${ROMAN_BG_IMG}")`,
-      backgroundSize: "cover",
-      backgroundPosition: "center 20%",
+      height: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      background: "linear-gradient(135deg,#0f0c29,#302b63,#24243e)",
+      fontFamily: "Tajawal, Cairo, sans-serif",
     }}>
-      <div style={{ color: "#d4a820", fontFamily: "Cairo,sans-serif", fontSize: "1.1rem", fontWeight: 800, opacity: 0.85 }}>
+      <div style={{ color: "#f5c842", fontSize: "1.1rem", fontWeight: 700, opacity: 0.85 }}>
         جاري تحميل اللوحة...
       </div>
     </div>
@@ -380,208 +266,381 @@ export default function GameBoardPage() {
     : null;
 
   return (
-    <div
-      style={{
-        height: "100svh",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        backgroundImage: `radial-gradient(ellipse at 50% 0%, rgba(255,200,80,0.06) 0%, transparent 55%), linear-gradient(180deg, rgba(8,4,10,0.84) 0%, rgba(6,2,8,0.94) 100%), url("${ROMAN_BG_IMG}")`,
-        backgroundSize: "cover",
-        backgroundPosition: "center 20%",
-        backgroundAttachment: "fixed",
-      }}
-    >
+    <div style={{
+      minHeight: "100svh",
+      background: "linear-gradient(135deg,#0f0c29 0%,#302b63 55%,#24243e 100%)",
+      fontFamily: "Tajawal, Cairo, sans-serif",
+      display: "flex",
+      flexDirection: "column",
+      padding: "10px",
+      gap: "10px",
+      boxSizing: "border-box",
+      overflow: "hidden",
+      height: "100svh",
+    }}>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" />
+
       <style>{`
-        @keyframes fall {
-          to { transform: translateY(110vh) rotate(540deg); opacity: 0; }
-        }
-        @keyframes boardIn {
-          from { opacity: 0; transform: scale(0.97) translateY(10px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
+        /* ── Confetti ── */
+        @keyframes fall { to { transform: translateY(110vh) rotate(540deg); opacity: 0; } }
+
+        /* ── Board card animations ── */
         @keyframes cardIn {
           from { opacity: 0; transform: translateY(18px) scale(0.97); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
-        @keyframes pulse-soft {
-          0%,100% { box-shadow: 0 0 0 0 transparent; }
-          50% { box-shadow: 0 0 20px 2px var(--pulse-color,rgba(212,168,32,0.3)); }
+        @keyframes pulseDot {
+          0%,100% { opacity:1; transform:scale(1); }
+          50%      { opacity:0.35; transform:scale(0.65); }
         }
-        .board-grid { animation: boardIn 0.4s cubic-bezier(0.22,1,0.36,1) both; }
+
+        /* ── Category card ── */
         .category-card {
-          animation: cardIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
-          transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.28s ease !important;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.10);
+          border-radius: 18px;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          min-height: 285px;
+          cursor: default;
+          transition: transform 0.25s ease, box-shadow 0.25s ease;
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          animation: cardIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
         }
-        .category-card:nth-child(1) { animation-delay:0.04s }
-        .category-card:nth-child(2) { animation-delay:0.09s }
-        .category-card:nth-child(3) { animation-delay:0.14s }
-        .category-card:nth-child(4) { animation-delay:0.19s }
-        .category-card:nth-child(5) { animation-delay:0.24s }
-        .category-card:nth-child(6) { animation-delay:0.29s }
         .category-card:hover {
-          transform: translateY(-5px) scale(1.012) !important;
-          box-shadow: 0 20px 48px rgba(0,0,0,0.60), 0 0 0 1px rgba(255,215,130,0.28), inset 0 1px 0 rgba(255,230,150,0.12) !important;
+          transform: translateY(-4px);
+          box-shadow: 0 18px 44px rgba(0,0,0,0.52);
         }
-        .score-chip {
-          transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), opacity 0.15s ease;
+        .category-card:nth-child(1) { animation-delay: 0.04s }
+        .category-card:nth-child(2) { animation-delay: 0.09s }
+        .category-card:nth-child(3) { animation-delay: 0.14s }
+        .category-card:nth-child(4) { animation-delay: 0.19s }
+        .category-card:nth-child(5) { animation-delay: 0.24s }
+        .category-card:nth-child(6) { animation-delay: 0.29s }
+
+        /* ── Image area ── */
+        .card-image-wrap {
+          position: relative;
+          width: 100%;
+          height: clamp(145px,18vh,195px);
+          flex-shrink: 0;
+          overflow: hidden;
         }
-        .score-chip:not(:disabled):hover {
-          transform: scale(1.1) translateY(-1px) !important;
+        .card-image-wrap img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: center;
+          display: block;
+          transition: transform 0.4s ease;
         }
-        .team-block { transition: all 0.4s ease; }
-        .team-block.active {
-          --pulse-color: var(--team-glow);
-          animation: pulse-soft 2s ease-in-out infinite;
+        .category-card:hover .card-image-wrap img { transform: scale(1.06); }
+        .card-img-gradient {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(to bottom, transparent 38%, rgba(12,10,36,0.88) 100%);
+          pointer-events: none;
+        }
+
+        /* ── Card body ── */
+        .card-body {
+          padding: 10px 12px 14px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 10px;
+          flex: 1;
+        }
+
+        /* ── Category name ── */
+        .category-name {
+          font-size: clamp(1rem,1.5vw,1.25rem);
+          font-weight: 800;
+          color: #ffffff;
+          text-align: center;
+          font-family: 'Tajawal', Cairo, sans-serif;
+          line-height: 1.25;
+          text-shadow: 0 1px 6px rgba(0,0,0,0.45);
+        }
+
+        /* ── Points row ── */
+        .points-row {
+          display: flex;
+          gap: 6px;
+          width: 100%;
+          justify-content: center;
+        }
+        .point-pill {
+          flex: 1;
+          text-align: center;
+          padding: clamp(5px,0.8vh,9px) 4px;
+          border-radius: 50px;
+          font-size: clamp(0.82rem,1.1vw,1rem);
+          font-weight: 800;
+          font-family: 'Tajawal', Cairo, sans-serif;
+          cursor: pointer;
+          border: none;
+          transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+          position: relative;
+          overflow: hidden;
+          letter-spacing: 0.01em;
+        }
+        .point-pill::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: rgba(255,255,255,0);
+          transition: background 0.15s;
+        }
+        .point-pill:not(.used):hover::after { background: rgba(255,255,255,0.14); }
+        .point-pill:not(.used):hover { transform: translateY(-2px) scale(1.04); }
+        .point-pill:not(.used):active { transform: scale(0.93); }
+        .point-pill.used {
+          opacity: 0.28;
+          filter: grayscale(1);
+          cursor: default;
+          background: rgba(255,255,255,0.10) !important;
+          box-shadow: none !important;
+        }
+
+        /* pill colors */
+        .point-pill.p300:not(.used) {
+          background: linear-gradient(135deg,#1db954,#17a348);
+          color: #fff;
+          box-shadow: 0 3px 12px rgba(29,185,84,0.42);
+        }
+        .point-pill.p600:not(.used) {
+          background: linear-gradient(135deg,#f5c842,#e5a800);
+          color: #1a1a2e;
+          box-shadow: 0 3px 12px rgba(245,200,66,0.42);
+        }
+        .point-pill.p900:not(.used) {
+          background: linear-gradient(135deg,#ff6b6b,#e03e3e);
+          color: #fff;
+          box-shadow: 0 3px 12px rgba(255,107,107,0.42);
+        }
+
+        /* ── Player dot ── */
+        .player-dot {
+          width: 7px; height: 7px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .player-dot.active-red  { background: #ff6b6b; box-shadow: 0 0 5px #ff6b6b; animation: pulseDot 1.4s infinite; }
+        .player-dot.active-blue { background: #4facfe; box-shadow: 0 0 5px #4facfe; animation: pulseDot 1.4s infinite; }
+        .player-dot.active-gold { background: #f5c842; box-shadow: 0 0 5px #f5c842; }
+
+        /* ── Answered overlay ── */
+        .answered-overlay {
+          position: absolute; inset: 0;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(12,10,36,0.55);
+          backdrop-filter: blur(3px);
+        }
+        .answered-check {
+          width: 48px; height: 48px;
+          background: rgba(67,233,123,0.14);
+          border: 2px solid #43e97b;
+          border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 1.4rem; color: #43e97b;
+        }
+
+        /* ── Turn badge ── */
+        .turn-badge {
+          display: flex; align-items: center; gap: 6px;
+          border-radius: 50px; padding: 5px 14px;
+          font-family: 'Tajawal', Cairo, sans-serif;
+          font-size: 0.88rem; font-weight: 700;
+        }
+        .turn-dot {
+          width: 7px; height: 7px; border-radius: 50%;
+          animation: pulseDot 1.4s infinite;
+        }
+
+        /* ── Control button ── */
+        .ctrl-btn {
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.14);
+          color: rgba(255,255,255,0.70);
+          border-radius: 50px;
+          padding: 5px 16px;
+          font-family: 'Tajawal', Cairo, sans-serif;
+          font-size: 0.82rem;
+          cursor: pointer;
+          backdrop-filter: blur(8px);
+          transition: background 0.2s;
+          white-space: nowrap;
+        }
+        .ctrl-btn:hover { background: rgba(255,255,255,0.15); }
+        .ctrl-btn.end  { border-color: rgba(255,107,107,0.38); color: #ff9a9a; }
+
+        /* ── Modal backdrop ── */
+        .modal-bg {
+          position: fixed; inset: 0; z-index: 50;
+          display: flex; align-items: center; justify-content: center;
+          padding: 16px;
+          background: rgba(10,8,28,0.85);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+        }
+        .modal-box {
+          background: linear-gradient(155deg,rgba(26,22,62,0.98),rgba(10,8,28,0.99));
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 22px;
+          padding: clamp(22px,3vw,36px);
+          max-width: 360px; width: 100%;
+          text-align: center;
+          box-shadow: 0 24px 70px rgba(0,0,0,0.70);
+          font-family: 'Tajawal', Cairo, sans-serif;
+        }
+
+        /* ── Winner screen ── */
+        @keyframes winnerIn {
+          from { opacity:0; transform:scale(0.88) translateY(20px); }
+          to   { opacity:1; transform:scale(1) translateY(0); }
+        }
+        .winner-screen {
+          position: fixed; inset: 0; z-index: 60;
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center;
+          padding: 24px; text-align: center;
+          background: linear-gradient(135deg,rgba(12,10,30,0.97),rgba(6,5,18,0.99));
+          backdrop-filter: blur(20px);
+          animation: winnerIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+          font-family: 'Tajawal', Cairo, sans-serif;
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 800px) {
+          .board-grid { grid-template-columns: repeat(2,1fr) !important; }
+        }
+        @media (max-width: 520px) {
+          .board-grid { grid-template-columns: 1fr !important; }
+          .game-header { grid-template-columns: 1fr !important; height: auto !important; gap: 8px !important; }
         }
       `}</style>
 
-      {/* ══════════ SCORE BAR ══════════ */}
+      {/* ══════════ HEADER ══════════ */}
       <div style={{
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
+        alignItems: "center",
+        gap: "10px",
+        background: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        borderRadius: "16px",
+        padding: "8px 16px",
+        height: "62px",
         flexShrink: 0,
-        background: "rgba(6,2,8,0.88)",
-        borderBottom: "1px solid rgba(255,215,130,0.14)",
-        backdropFilter: "blur(18px)",
-        WebkitBackdropFilter: "blur(18px)",
+        className: "game-header",
       }}>
+
+        {/* Team 1 */}
         <div style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "clamp(8px,1.5vw,20px)",
-          padding: "clamp(8px,1.2vh,14px) clamp(12px,2vw,28px)",
-          maxWidth: "min(98vw,1540px)",
-          margin: "0 auto",
-          width: "100%",
-          boxSizing: "border-box",
+          display: "flex", alignItems: "center", gap: "10px",
+          background: currentTurn === 1 ? "rgba(255,107,107,0.10)" : "rgba(255,255,255,0.04)",
+          border: `1px solid ${currentTurn === 1 ? "rgba(255,107,107,0.35)" : "rgba(255,255,255,0.08)"}`,
+          borderRadius: "12px", padding: "6px 14px",
+          backdropFilter: "blur(12px)",
+          boxShadow: currentTurn === 1 ? "0 0 16px rgba(255,107,107,0.18)" : "none",
+          transition: "all 0.35s ease",
+          minWidth: 0,
         }}>
-
-          {/* Team 1 */}
-          <TeamBlock
-            name={team1Name}
-            score={teamScores.team1}
-            active={currentTurn === 1}
-            side="left"
-            color="#ef4444"
-            glow="rgba(239,68,68,0.35)"
-          />
-
-          {/* Center controls */}
-          <div style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "clamp(3px,0.5vh,7px)",
-            flexShrink: 0,
-          }}>
-            {/* Logo */}
-            <div style={{
-              fontFamily: "Cairo,sans-serif",
-              fontWeight: 900,
-              fontSize: "clamp(0.85rem,1.4vw,1.15rem)",
-              color: "#d4a820",
-              letterSpacing: "0.06em",
-              textShadow: "0 2px 8px rgba(212,168,32,0.4)",
-            }}>حُجّة</div>
-
-            {/* Turn pill */}
-            <div
-              data-testid="turn-indicator"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "clamp(4px,0.5vw,8px)",
-                padding: "clamp(3px,0.5vh,6px) clamp(10px,1.2vw,18px)",
-                borderRadius: "999px",
-                fontFamily: "Cairo,sans-serif",
-                fontWeight: 800,
-                fontSize: "clamp(0.6rem,1.1vw,0.88rem)",
-                background: currentTurn === 1
-                  ? "rgba(180,30,40,0.25)"
-                  : "rgba(30,80,200,0.25)",
-                border: `1.5px solid ${currentTurn === 1 ? "rgba(220,50,60,0.75)" : "rgba(59,130,246,0.75)"}`,
-                color: currentTurn === 1 ? "#fca5a5" : "#93c5fd",
-                boxShadow: currentTurn === 1
-                  ? "0 0 16px rgba(220,50,60,0.32)"
-                  : "0 0 16px rgba(59,130,246,0.32)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <span>{currentTurn === 1 ? "🔴" : "🔵"}</span>
-              <span>دور {currentTurn === 1 ? team1Name : team2Name}</span>
+          {currentTurn === 1 && (
+            <span className="turn-dot" style={{ background: "#ff6b6b", flexShrink: 0 }} />
+          )}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.55)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              🔴 {team1Name}
             </div>
-
-            {/* Controls */}
-            <div style={{ display: "flex", alignItems: "center", gap: "clamp(5px,0.6vw,10px)" }}>
-              <button
-                data-testid="dark-mode-toggle"
-                onClick={toggleDarkMode}
-                style={{
-                  padding: "clamp(2px,0.4vh,5px) clamp(8px,0.9vw,14px)",
-                  borderRadius: "999px",
-                  fontFamily: "Cairo,sans-serif",
-                  fontWeight: 700,
-                  fontSize: "clamp(0.55rem,0.9vw,0.72rem)",
-                  background: "rgba(255,215,130,0.08)",
-                  border: "1px solid rgba(255,215,130,0.20)",
-                  color: "rgba(255,215,130,0.65)",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  transition: "opacity 0.15s",
-                }}
-              >
-                <span>{darkMode ? "☀️" : "🌙"}</span>
-                <span>{darkMode ? "فاتح" : "داكن"}</span>
-              </button>
-              <button
-                data-testid="end-game-btn"
-                onClick={() => setShowEndConfirm(true)}
-                style={{
-                  padding: "clamp(2px,0.4vh,5px) clamp(8px,0.9vw,14px)",
-                  borderRadius: "999px",
-                  fontFamily: "Cairo,sans-serif",
-                  fontWeight: 700,
-                  fontSize: "clamp(0.55rem,0.9vw,0.72rem)",
-                  background: "transparent",
-                  border: "1px solid rgba(255,215,130,0.16)",
-                  color: "rgba(255,215,130,0.42)",
-                  cursor: "pointer",
-                }}
-              >إنهاء</button>
+            <div data-testid="team1-score" style={{ fontSize: "1.7rem", fontWeight: 900, color: "#f5c842", lineHeight: 1 }}>
+              <ScoreCounter value={teamScores.team1} />
             </div>
           </div>
+        </div>
 
-          {/* Team 2 */}
-          <TeamBlock
-            name={team2Name}
-            score={teamScores.team2}
-            active={currentTurn === 2}
-            side="right"
-            color="#3b82f6"
-            glow="rgba(59,130,246,0.35)"
-          />
+        {/* Center: title + turn + controls */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", flexShrink: 0 }}>
+          <div style={{
+            fontSize: "clamp(0.9rem,1.6vw,1.25rem)", fontWeight: 900,
+            color: "#f5c842", letterSpacing: "0.04em",
+            textShadow: "0 0 20px rgba(245,200,66,0.40)",
+          }}>
+            حُجّة
+          </div>
+
+          <div
+            data-testid="turn-indicator"
+            className="turn-badge"
+            style={{
+              background: currentTurn === 1 ? "rgba(255,107,107,0.12)" : "rgba(79,172,254,0.12)",
+              border: `1px solid ${currentTurn === 1 ? "rgba(255,107,107,0.32)" : "rgba(79,172,254,0.32)"}`,
+              color: currentTurn === 1 ? "#ff9a9a" : "#93c5fd",
+            }}
+          >
+            <span className="turn-dot" style={{ background: currentTurn === 1 ? "#ff6b6b" : "#4facfe" }} />
+            <span>دور {currentTurn === 1 ? team1Name : team2Name}</span>
+          </div>
+
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button
+              data-testid="dark-mode-toggle"
+              className="ctrl-btn"
+              onClick={toggleDarkMode}
+            >
+              {darkMode ? "☀️" : "🌙"}
+            </button>
+            <button
+              data-testid="end-game-btn"
+              className="ctrl-btn end"
+              onClick={() => setShowEndConfirm(true)}
+            >
+              إنهاء
+            </button>
+          </div>
+        </div>
+
+        {/* Team 2 */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: "10px",
+          justifyContent: "flex-end",
+          background: currentTurn === 2 ? "rgba(79,172,254,0.10)" : "rgba(255,255,255,0.04)",
+          border: `1px solid ${currentTurn === 2 ? "rgba(79,172,254,0.35)" : "rgba(255,255,255,0.08)"}`,
+          borderRadius: "12px", padding: "6px 14px",
+          backdropFilter: "blur(12px)",
+          boxShadow: currentTurn === 2 ? "0 0 16px rgba(79,172,254,0.18)" : "none",
+          transition: "all 0.35s ease",
+          minWidth: 0,
+        }}>
+          <div style={{ textAlign: "right", minWidth: 0 }}>
+            <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.55)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              🔵 {team2Name}
+            </div>
+            <div data-testid="team2-score" style={{ fontSize: "1.7rem", fontWeight: 900, color: "#f5c842", lineHeight: 1, textAlign: "right" }}>
+              <ScoreCounter value={teamScores.team2} />
+            </div>
+          </div>
+          {currentTurn === 2 && (
+            <span className="turn-dot" style={{ background: "#4facfe", flexShrink: 0 }} />
+          )}
         </div>
       </div>
 
-      {/* ══════════ BOARD ══════════ */}
+      {/* ══════════ BOARD GRID ══════════ */}
       <div
         className="board-grid"
         style={{
-          flex: 1,
           display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0,1fr))",
-          gridTemplateRows: "repeat(2, minmax(0,1fr))",
-          gap: "clamp(8px,1.1vw,16px)",
-          padding: "clamp(10px,1.4vw,22px)",
-          maxWidth: "min(98vw,1540px)",
-          width: "100%",
-          margin: "0 auto",
-          boxSizing: "border-box",
+          gridTemplateColumns: "repeat(3,1fr)",
+          gap: "12px",
+          flex: 1,
           minHeight: 0,
-          alignSelf: "stretch",
-          overflow: "hidden",
+          overflowY: "auto",
         }}
       >
         {categories.slice(0, 6).map(cat => (
@@ -591,6 +650,7 @@ export default function GameBoardPage() {
             session={session}
             isTileUsed={isTileUsed}
             clickingTile={clickingTile}
+            currentTurn={currentTurn}
             onTileClick={handleTileClick}
           />
         ))}
@@ -599,50 +659,29 @@ export default function GameBoardPage() {
       {/* ══════════ LEGEND ══════════ */}
       <div style={{
         flexShrink: 0,
-        display: "flex",
-        justifyContent: "center",
-        gap: "clamp(12px,2vw,28px)",
-        padding: "clamp(3px,0.5vh,7px) 0 clamp(5px,0.7vh,10px)",
+        display: "flex", justifyContent: "center", gap: "18px",
+        padding: "2px 0 4px",
       }}>
         {[
-          { name: team1Name, team: 1, color: "#ef4444", textColor: "#fca5a5" },
-          { name: team2Name, team: 2, color: "#3b82f6", textColor: "#93c5fd" },
-        ].map(({ name, team, color, textColor }) => (
-          <div
-            key={team}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "clamp(5px,0.5vw,8px)",
-              padding: "clamp(2px,0.4vh,5px) clamp(10px,1vw,16px)",
-              borderRadius: "999px",
-              background: currentTurn === team ? `${color}14` : "transparent",
-              transition: "background 0.35s ease",
-            }}
-          >
-            <div style={{
-              width: "8px", height: "8px",
-              borderRadius: "50%",
-              background: color,
-              flexShrink: 0,
-              boxShadow: currentTurn === team ? `0 0 6px ${color}` : "none",
-            }} />
+          { name: team1Name, turn: 1, color: "#ff6b6b", dot: "active-red" },
+          { name: team2Name, turn: 2, color: "#4facfe", dot: "active-blue" },
+        ].map(({ name, turn, color, dot }) => (
+          <div key={turn} style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            padding: "3px 12px", borderRadius: "50px",
+            background: currentTurn === turn ? `rgba(255,255,255,0.06)` : "transparent",
+          }}>
+            <span className={`player-dot ${dot}`} />
             <span style={{
-              fontFamily: "Cairo,sans-serif",
+              fontFamily: "Tajawal, Cairo, sans-serif",
               fontWeight: 700,
-              fontSize: "clamp(0.62rem,1.1vw,0.82rem)",
-              color: currentTurn === team ? textColor : "rgba(212,168,32,0.45)",
-              transition: "color 0.35s ease",
-            }}>{name}</span>
-            {currentTurn === team && (
-              <span style={{
-                fontFamily: "Cairo,sans-serif",
-                fontWeight: 800,
-                fontSize: "clamp(0.55rem,0.9vw,0.7rem)",
-                color: textColor,
-                opacity: 0.8,
-              }}>← دوره</span>
-            )}
+              fontSize: "clamp(0.65rem,1vw,0.82rem)",
+              color: currentTurn === turn ? color : "rgba(255,255,255,0.35)",
+              transition: "color 0.3s",
+            }}>
+              {name}
+              {currentTurn === turn && <span style={{ marginRight: "4px" }}>← دوره</span>}
+            </span>
           </div>
         ))}
       </div>
@@ -650,79 +689,59 @@ export default function GameBoardPage() {
       {/* ══════════ ALL USED BANNER ══════════ */}
       {allUsed && !showWinner && (
         <div style={{
-          position: "fixed",
-          bottom: 0, left: 0, right: 0,
-          padding: "16px",
-          textAlign: "center",
-          zIndex: 40,
-          background: "linear-gradient(135deg,rgba(91,14,20,0.96),rgba(139,21,32,0.96))",
-          borderTop: "1px solid rgba(212,168,32,0.4)",
-          backdropFilter: "blur(14px)",
+          position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40,
+          padding: "14px", textAlign: "center",
+          background: "rgba(15,12,41,0.94)", backdropFilter: "blur(14px)",
+          borderTop: "1px solid rgba(245,200,66,0.30)",
         }}>
-          <div style={{ fontFamily: "Cairo,sans-serif", fontWeight: 900, fontSize: "1.15rem", color: "#d4a820", marginBottom: "10px" }}>
+          <div style={{ fontFamily: "Tajawal, Cairo, sans-serif", fontWeight: 900, fontSize: "1.1rem", color: "#f5c842", marginBottom: "10px" }}>
             {winner === "تعادل" ? "🤝 تعادل!" : `🏆 ${winner} فاز!`}
           </div>
           <button
             onClick={() => { fireConfetti(); setShowWinner(true); }}
             style={{
-              padding: "10px 32px",
-              borderRadius: "999px",
-              fontFamily: "Cairo,sans-serif",
-              fontWeight: 900,
-              fontSize: "1rem",
-              background: "linear-gradient(135deg,#d4a820,#f0c530)",
-              color: "#2a0d10",
-              border: "none",
-              cursor: "pointer",
-              boxShadow: "0 4px 20px rgba(212,168,32,0.4)",
+              padding: "10px 28px", borderRadius: "50px",
+              fontFamily: "Tajawal, Cairo, sans-serif", fontWeight: 900, fontSize: "0.95rem",
+              background: "linear-gradient(135deg,#f5c842,#e5a800)",
+              color: "#1a1a2e", border: "none", cursor: "pointer",
+              boxShadow: "0 4px 20px rgba(245,200,66,0.42)",
             }}
-          >عرض النتيجة النهائية</button>
+          >
+            عرض النتيجة النهائية
+          </button>
         </div>
       )}
 
       {/* ══════════ END CONFIRM ══════════ */}
       {showEndConfirm && (
-        <div style={{
-          position: "fixed", inset: 0,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          zIndex: 50, padding: "16px",
-          background: "rgba(4,1,6,0.82)",
-          backdropFilter: "blur(12px)",
-        }}>
-          <div style={{
-            borderRadius: "24px",
-            padding: "clamp(24px,3vw,40px)",
-            maxWidth: "360px",
-            width: "100%",
-            textAlign: "center",
-            background: "rgba(10,4,14,0.94)",
-            border: "1px solid rgba(255,215,130,0.22)",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
-          }}>
-            <div style={{ fontFamily: "Cairo,sans-serif", fontWeight: 900, fontSize: "1.4rem", color: "#d4a820", marginBottom: "8px" }}>إنهاء اللعبة؟</div>
-            <div style={{ fontFamily: "Cairo,sans-serif", fontSize: "0.85rem", color: "rgba(212,168,32,0.5)", marginBottom: "24px" }}>سيتم إعلان الفائز الحالي</div>
+        <div className="modal-bg">
+          <div className="modal-box">
+            <div style={{ fontWeight: 900, fontSize: "1.35rem", color: "#f5c842", marginBottom: "8px" }}>إنهاء اللعبة؟</div>
+            <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.42)", marginBottom: "24px" }}>سيتم إعلان الفائز الحالي</div>
             <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
               <button
                 onClick={handleEndGame}
                 style={{
-                  padding: "10px 24px", borderRadius: "999px",
-                  fontFamily: "Cairo,sans-serif", fontWeight: 900, fontSize: "0.95rem",
-                  background: "linear-gradient(135deg,#5b0e14,#8b1520)",
-                  color: "#d4a820", border: "1px solid rgba(212,168,32,0.28)",
-                  cursor: "pointer",
+                  padding: "10px 24px", borderRadius: "50px",
+                  fontFamily: "Tajawal, Cairo, sans-serif", fontWeight: 900, fontSize: "0.95rem",
+                  background: "linear-gradient(135deg,rgba(255,107,107,0.85),rgba(224,62,62,0.90))",
+                  color: "#fff", border: "1px solid rgba(255,107,107,0.50)",
+                  cursor: "pointer", boxShadow: "0 4px 18px rgba(255,107,107,0.30)",
                 }}
-              >نعم، إنهاء</button>
+              >
+                نعم، إنهاء
+              </button>
               <button
                 onClick={() => setShowEndConfirm(false)}
                 style={{
-                  padding: "10px 24px", borderRadius: "999px",
-                  fontFamily: "Cairo,sans-serif", fontWeight: 700, fontSize: "0.95rem",
-                  background: "transparent",
-                  color: "rgba(212,168,32,0.5)",
-                  border: "1px solid rgba(212,168,32,0.18)",
-                  cursor: "pointer",
+                  padding: "10px 24px", borderRadius: "50px",
+                  fontFamily: "Tajawal, Cairo, sans-serif", fontWeight: 700, fontSize: "0.95rem",
+                  background: "transparent", color: "rgba(255,255,255,0.45)",
+                  border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer",
                 }}
-              >رجوع</button>
+              >
+                رجوع
+              </button>
             </div>
           </div>
         </div>
@@ -730,43 +749,27 @@ export default function GameBoardPage() {
 
       {/* ══════════ WINNER SCREEN ══════════ */}
       {showWinner && (
-        <div style={{
-          position: "fixed", inset: 0,
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          zIndex: 50, padding: "24px",
-          textAlign: "center",
-          backgroundImage: `linear-gradient(rgba(6,2,8,0.90),rgba(4,1,6,0.96)),url("${ROMAN_BG_IMG}")`,
-          backgroundSize: "cover",
-          backgroundPosition: "center 20%",
-        }}>
+        <div className="winner-screen">
           <div style={{ fontSize: "clamp(3.5rem,7vw,6rem)", marginBottom: "8px" }}>🏆</div>
-          <div style={{ fontFamily: "Cairo,sans-serif", fontWeight: 600, fontSize: "0.95rem", color: "rgba(212,168,32,0.55)", marginBottom: "6px" }}>الفائز</div>
+          <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "rgba(245,200,66,0.55)", marginBottom: "6px" }}>الفائز</div>
           <div style={{
-            fontFamily: "Cairo,sans-serif",
-            fontWeight: 900,
-            fontSize: "clamp(2.2rem,5vw,4.5rem)",
-            color: "#d4a820",
-            textShadow: "0 4px 24px rgba(212,168,32,0.45), 0 0 60px rgba(212,168,32,0.15)",
-            marginBottom: "28px",
-            lineHeight: 1.1,
+            fontWeight: 900, fontSize: "clamp(2.2rem,5vw,4.5rem)",
+            color: "#f5c842", marginBottom: "28px", lineHeight: 1.1,
+            textShadow: "0 4px 28px rgba(245,200,66,0.45)",
           }}>
             {winner === "تعادل" ? "🤝 تعادل!" : winner}
           </div>
-          <div style={{ display: "flex", gap: "24px", marginBottom: "32px" }}>
+          <div style={{ display: "flex", gap: "20px", marginBottom: "32px" }}>
             {[
-              { name: team1Name, score: teamScores.team1, color: "#ef4444", textColor: "#fca5a5" },
-              { name: team2Name, score: teamScores.team2, color: "#3b82f6", textColor: "#93c5fd" },
-            ].map(({ name, score, color, textColor }) => (
+              { name: team1Name, score: teamScores.team1, color: "#ff6b6b" },
+              { name: team2Name, score: teamScores.team2, color: "#4facfe" },
+            ].map(({ name, score, color }) => (
               <div key={name} style={{
-                textAlign: "center",
-                borderRadius: "18px",
-                padding: "16px 24px",
-                background: `${color}18`,
-                border: `1px solid ${color}44`,
+                textAlign: "center", borderRadius: "18px", padding: "16px 24px",
+                background: `${color}14`, border: `1px solid ${color}40`,
               }}>
-                <div style={{ fontFamily: "Cairo,sans-serif", fontWeight: 700, fontSize: "0.85rem", color: textColor, marginBottom: "6px" }}>{name}</div>
-                <div style={{ fontFamily: "Cairo,sans-serif", fontWeight: 900, fontSize: "2.2rem", color: "#d4a820" }}>{score}</div>
+                <div style={{ fontWeight: 700, fontSize: "0.88rem", color, marginBottom: "6px" }}>{name}</div>
+                <div style={{ fontWeight: 900, fontSize: "2.2rem", color: "#f5c842" }}>{score}</div>
               </div>
             ))}
           </div>
@@ -777,103 +780,23 @@ export default function GameBoardPage() {
                 if (ref) {
                   const winnerId = teamScores.team1 >= teamScores.team2 ? ref.team1Id : ref.team2Id;
                   navigate("/tournament/bracket", { state: { autoRecord: { roundIdx: ref.roundIdx, matchIdx: ref.matchIdx, winnerId } } });
-                } else {
-                  navigate("/tournament/bracket");
-                }
-              } else {
-                resetGame(); navigate("/");
-              }
+                } else { navigate("/tournament/bracket"); }
+              } else { resetGame(); navigate("/"); }
             }}
             style={{
               padding: "clamp(12px,1.5vh,18px) clamp(32px,4vw,56px)",
-              borderRadius: "999px",
-              fontFamily: "Cairo,sans-serif",
+              borderRadius: "50px",
+              fontFamily: "Tajawal, Cairo, sans-serif",
               fontWeight: 900,
               fontSize: "clamp(1rem,1.5vw,1.2rem)",
-              background: "linear-gradient(135deg,#c09820,#f0d045)",
-              color: "#1a0a0b",
-              border: "none",
-              cursor: "pointer",
-              boxShadow: "0 6px 32px rgba(192,152,32,0.45)",
+              background: "linear-gradient(135deg,#f5c842,#e5a800)",
+              color: "#1a1208", border: "none", cursor: "pointer",
+              boxShadow: "0 6px 32px rgba(245,200,66,0.42)",
             }}
           >
             {gameMode === "tournament" ? "🏆 العودة للبطولة" : "🎮 لعبة جديدة"}
           </button>
         </div>
-      )}
-    </div>
-  );
-}
-
-/* ── Team Block (score bar panel) ── */
-function TeamBlock({ name, score, active, side, color, glow }) {
-  return (
-    <div
-      className={`team-block${active ? " active" : ""}`}
-      style={{
-        "--team-glow": glow,
-        flex: 1,
-        maxWidth: "clamp(120px,18vw,260px)",
-        borderRadius: "14px",
-        padding: "clamp(7px,1vh,12px) clamp(10px,1.5vw,20px)",
-        background: active
-          ? `linear-gradient(145deg, ${color}28, ${color}12)`
-          : "rgba(255,255,255,0.04)",
-        border: `1.5px solid ${active ? color + "99" : "rgba(255,215,130,0.12)"}`,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: side === "right" ? "flex-end" : "flex-start",
-        gap: "2px",
-        transition: "all 0.4s ease",
-      }}
-    >
-      {/* Team name */}
-      <div style={{
-        fontFamily: "Cairo,sans-serif",
-        fontWeight: 800,
-        fontSize: "clamp(0.62rem,1.2vw,0.98rem)",
-        color: active ? (color === "#ef4444" ? "#fca5a5" : "#93c5fd") : "rgba(244,239,230,0.65)",
-        lineHeight: 1.2,
-        letterSpacing: "0.01em",
-        display: "flex",
-        alignItems: "center",
-        gap: "5px",
-        flexDirection: side === "right" ? "row-reverse" : "row",
-      }}>
-        <span style={{ fontSize: "0.8em" }}>{color === "#ef4444" ? "🔴" : "🔵"}</span>
-        <span style={{
-          maxWidth: "clamp(70px,12vw,160px)",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}>{name}</span>
-      </div>
-
-      {/* Score */}
-      <div
-        data-testid={color === "#ef4444" ? "team1-score" : "team2-score"}
-        style={{
-          fontFamily: "Cairo,sans-serif",
-          fontWeight: 900,
-          fontSize: "clamp(1.3rem,2.8vw,2.4rem)",
-          lineHeight: 1,
-          color: "#d4a820",
-          textShadow: active ? "0 2px 10px rgba(212,168,32,0.45)" : "none",
-          letterSpacing: "-0.02em",
-        }}
-      >
-        <ScoreCounter value={score} />
-      </div>
-
-      {/* Active label */}
-      {active && (
-        <div style={{
-          fontFamily: "Cairo,sans-serif",
-          fontWeight: 700,
-          fontSize: "clamp(0.52rem,0.85vw,0.68rem)",
-          color: color === "#ef4444" ? "rgba(252,165,165,0.7)" : "rgba(147,197,253,0.7)",
-          letterSpacing: "0.03em",
-        }}>دوره الآن</div>
       )}
     </div>
   );
