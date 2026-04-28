@@ -1939,6 +1939,7 @@ export default function AdminDashboard() {
 
       {/* ── SECURITY TAB ── */}
       {activeTab === "security" && (
+        <div style={{ background: "#0d1117", minHeight: "calc(100vh - 64px)" }}>
         <SecurityDashboard
           overview={secOverview}
           users={secUsers}
@@ -1956,6 +1957,7 @@ export default function AdminDashboard() {
           onRemoveDevice={removeDevice}
           onClearLogs={clearLogs}
         />
+        </div>
       )}
 
       {/* ── ANALYTICS TAB ── */}
@@ -1995,7 +1997,7 @@ export default function AdminDashboard() {
         );
 
         if (!analytics) return (
-          <div style={{ padding: "64px", background: A_BG, minHeight: "100%", textAlign: "center" }}>
+          <div style={{ padding: "64px", background: A_BG, minHeight: "calc(100vh - 64px)", textAlign: "center" }}>
             <div style={{ fontSize: "3rem", marginBottom: "16px" }}>📊</div>
             <div style={{ color: A_MUTED, fontSize: "1rem" }}>جاري تحميل الإحصاءات...</div>
           </div>
@@ -2011,7 +2013,7 @@ export default function AdminDashboard() {
         const maxTrend = Math.max(...trend.map(t => t.amount), 1);
 
         return (
-          <div style={{ padding: "clamp(16px,2.5vw,28px)", background: A_BG, minHeight: "100%",
+          <div style={{ padding: "clamp(16px,2.5vw,28px)", background: A_BG, minHeight: "calc(100vh - 64px)",
                         fontFamily: "Cairo, sans-serif", color: A_TEXT }}>
             {/* ── Header ── */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "28px", gap: "12px", flexWrap: "wrap" }}>
