@@ -3172,7 +3172,7 @@ async def ai_save_questions(body: dict, admin=Depends(get_admin)):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Hujjah API v2 – حُجّة", "version": "2.0"}
+    return {"message": "Hujjah API v2 – حُجّة", "version": "2.1"}
 
 @api_router.get("/ping")
 async def ping():
