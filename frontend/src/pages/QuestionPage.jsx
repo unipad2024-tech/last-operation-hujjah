@@ -6,8 +6,10 @@ import { toast } from "sonner";
 import { X, ZoomIn, Pause, Play, RotateCcw } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   ALL LOGIC PRESERVED — ONLY UI / LAYOUT REDESIGNED
+   ALL LOGIC PRESERVED — UI REBUILT WITH 3-COLUMN GRID + INLINE ANSWER REVEAL
    ═══════════════════════════════════════════════════════════════════════════ */
+
+const ROMAN_BG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
 export default function QuestionPage() {
   const navigate = useNavigate();
@@ -30,7 +32,7 @@ export default function QuestionPage() {
   const [tensionDone, setTensionDone] = useState(false);
   const [zoomedImage, setZoomedImage] = useState(null);
   const [imgLoaded, setImgLoaded]     = useState(false);
-  const [panelVisible, setPanelVisible] = useState(false);
+  const [ansImgLoaded, setAnsImgLoaded] = useState(false);
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -47,15 +49,6 @@ export default function QuestionPage() {
       toast.error("⏰ انتهى الوقت!", { duration: 3000 });
     }
   }, [timeLeft, timerOn, tensionDone]);
-
-  // Animate panel in after reveal
-  useEffect(() => {
-    if (showAnswer) {
-      requestAnimationFrame(() => requestAnimationFrame(() => setPanelVisible(true)));
-    } else {
-      setPanelVisible(false);
-    }
-  }, [showAnswer]);
 
   const playTension = () => {
     try {
@@ -117,308 +110,602 @@ export default function QuestionPage() {
 
   if (!question) { navigate("/game"); return null; }
 
-  /* ── Derived display values ── */
+  /* ── Derived values ── */
   const pct      = (timeLeft / TIMER_DURATION) * 100;
   const R        = 38;
   const circ     = 2 * Math.PI * R;
   const dash     = circ * (1 - pct / 100);
-  const timerCol = timeLeft > 20 ? "#F1E194" : timeLeft > 10 ? "#f59e0b" : "#ef4444";
+  const timerCol = timeLeft > 20 ? "#ffb347" : timeLeft > 10 ? "#f59e0b" : "#ef4444";
   const isSecret = question.question_type === "secret_word";
   const secretUrl = `${window.location.origin}/secret/${question.id}`;
   const isTeam1  = slot === 1;
-  const activeTeamName  = isTeam1 ? session?.team1_name  : session?.team2_name;
-  const activeTeamColor = isTeam1 ? "#f87171"             : "#60a5fa";
-  const activeBg        = isTeam1 ? "rgba(239,68,68,0.15)" : "rgba(59,130,246,0.15)";
-  const activeBorder    = isTeam1 ? "rgba(239,68,68,0.45)" : "rgba(59,130,246,0.45)";
 
   const diffBadge = (
     question.difficulty === 300
-      ? { label: "سهل",   color: "#6ee7b7", bg: "rgba(52,211,153,0.12)",  border: "rgba(52,211,153,0.3)"  }
+      ? { label: "سهل",   color: "#6ee7b7", bg: "rgba(52,211,153,0.12)",  border: "rgba(52,211,153,0.28)"  }
       : question.difficulty === 600
-      ? { label: "متوسط", color: "#fcd34d", bg: "rgba(252,211,77,0.12)",  border: "rgba(252,211,77,0.3)"  }
-      : { label: "صعب",   color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.3)" }
+      ? { label: "متوسط", color: "#fcd34d", bg: "rgba(252,211,77,0.12)",  border: "rgba(252,211,77,0.28)"  }
+      : { label: "صعب",   color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.28)" }
   );
 
-  const LIFELINES = ["⏱️", "🔄", "🎯"];
-
-  const ROMAN_BG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
+  /* Answer type: image | text | mixed */
+  const answerType = (question.answer_image_url && question.answer)
+    ? "mixed"
+    : question.answer_image_url
+    ? "image"
+    : "text";
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden select-none"
       style={{
         minHeight: "100svh",
-        backgroundImage: `
-          radial-gradient(ellipse 110% 60% at 50% 0%, rgba(61,8,16,0.82) 0%, rgba(10,1,1,0.90) 55%, rgba(4,0,1,0.96) 100%),
+        overflow: "auto",
+        fontFamily: "Cairo, sans-serif",
+        color: "var(--q-text)",
+        background: `
+          linear-gradient(180deg, rgba(8,5,12,0.87) 0%, rgba(6,3,10,0.95) 100%),
           url("${ROMAN_BG}")
         `,
         backgroundSize: "cover",
         backgroundPosition: "center 30%",
         backgroundAttachment: "fixed",
-        fontFamily: "Cairo, sans-serif",
       }}
     >
       <style>{`
+        :root {
+          --q-bg: #09070c;
+          --q-panel: rgba(20,15,28,0.85);
+          --q-panel-2: rgba(32,26,42,0.90);
+          --q-stroke: rgba(255,151,87,0.30);
+          --q-stroke-2: rgba(255,201,130,0.20);
+          --q-text: #f7f1e8;
+          --q-muted: rgba(247,241,232,0.65);
+          --q-accent: #ff7a2f;
+          --q-accent-2: #ffb347;
+          --q-shadow: 0 18px 50px rgba(0,0,0,0.45);
+        }
+
+        /* ── Grid layout ── */
+        .question-layout {
+          display: grid;
+          grid-template-columns: 220px minmax(0,1fr) 220px;
+          gap: 14px;
+          align-items: start;
+          width: 100%;
+          max-width: 1600px;
+          margin: 0 auto;
+          padding: 14px 16px 20px;
+          box-sizing: border-box;
+        }
+
+        /* ── Top bar (spans all 3 cols) ── */
+        .q-top-bar {
+          grid-column: 1 / -1;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 12px 16px;
+          border-radius: 20px;
+          background: rgba(10,7,16,0.78);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border: 1px solid rgba(255,180,80,0.12);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+
+        /* ── Team pill ── */
+        .q-team-pill {
+          min-width: 150px;
+          padding: 12px 18px;
+          border-radius: 16px;
+          background: var(--q-panel);
+          border: 1.5px solid rgba(255,255,255,0.07);
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .q-team-pill.active-t1 {
+          background: rgba(239,68,68,0.13);
+          border-color: rgba(239,68,68,0.45);
+          box-shadow: 0 0 18px rgba(239,68,68,0.15);
+        }
+        .q-team-pill.active-t2 {
+          background: rgba(59,130,246,0.13);
+          border-color: rgba(59,130,246,0.45);
+          box-shadow: 0 0 18px rgba(59,130,246,0.15);
+        }
+        .q-team-pill .pill-name {
+          font-weight: 800;
+          font-size: clamp(0.72rem,1.2vw,0.95rem);
+          line-height: 1.1;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .q-team-pill .pill-score {
+          font-size: clamp(1.4rem,2.8vw,2.2rem);
+          font-weight: 900;
+          color: #d4a820;
+          line-height: 1;
+          letter-spacing: -0.02em;
+        }
+        .q-team-pill .pill-turn {
+          font-size: 0.65rem;
+          font-weight: 700;
+          opacity: 0.75;
+          letter-spacing: 0.03em;
+        }
+
+        /* ── Timer area (center of top bar) ── */
+        .q-timer-center {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          flex: 1;
+          min-width: 0;
+        }
+        .q-timer-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .q-timer-pill {
+          width: clamp(90px,10vw,120px);
+          height: clamp(90px,10vw,120px);
+          flex-shrink: 0;
+        }
+        .q-controls {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+        .q-ctrl-btn {
+          border-radius: 10px;
+          padding: 4px 10px;
+          font-family: Cairo, sans-serif;
+          font-weight: 700;
+          font-size: 0.68rem;
+          cursor: pointer;
+          border: 1px solid;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          transition: transform 0.15s, opacity 0.15s;
+        }
+        .q-ctrl-btn:hover { transform: scale(1.06); }
+        .q-ctrl-btn:active { transform: scale(0.93); }
+
+        /* ── Sidebar ── */
+        .q-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .q-helper-card {
+          padding: 14px 14px;
+          border-radius: 18px;
+          background: var(--q-panel);
+          border: 1px solid rgba(255,180,80,0.10);
+          box-shadow: var(--q-shadow);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+        }
+        .q-helper-title {
+          font-weight: 800;
+          font-size: 0.72rem;
+          color: var(--q-muted);
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          margin-bottom: 8px;
+        }
+        .q-helper-buttons {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 7px;
+        }
+        .q-helper-btn {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          border: 1px solid rgba(255,180,80,0.14);
+          background: rgba(255,255,255,0.05);
+          color: var(--q-text);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1rem;
+          cursor: pointer;
+          transition: background 0.2s, transform 0.15s;
+        }
+        .q-helper-btn:hover { background: rgba(255,180,80,0.10); transform: scale(1.08); }
+
+        /* ── Question panel (center) ── */
+        .q-panel {
+          position: relative;
+          border-radius: 28px;
+          padding: clamp(18px,2vw,28px);
+          background:
+            linear-gradient(175deg, rgba(255,130,55,0.10) 0%, rgba(16,12,22,0.92) 45%),
+            rgba(16,12,22,0.90);
+          border: 2px solid rgba(255,130,55,0.60);
+          box-shadow:
+            0 0 0 1px rgba(255,180,80,0.06) inset,
+            0 24px 70px rgba(0,0,0,0.55);
+          overflow: hidden;
+        }
+        .q-panel::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(ellipse at top right, rgba(255,185,115,0.10), transparent 36%),
+            radial-gradient(ellipse at bottom left, rgba(255,120,60,0.09), transparent 34%);
+          pointer-events: none;
+        }
+        .q-panel-inner {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          min-height: 62vh;
+        }
+
+        /* meta row */
+        .q-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-shrink: 0;
+        }
+        .q-points-badge {
+          padding: 10px 16px;
+          border-radius: 14px;
+          background: linear-gradient(175deg, rgba(255,207,93,0.95), rgba(255,158,61,0.95));
+          color: #1a1208;
+          font-size: clamp(1.5rem,3vw,2.4rem);
+          font-weight: 900;
+          text-align: center;
+          min-width: 80px;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+          line-height: 1;
+        }
+        .q-points-label {
+          font-size: 0.58rem;
+          font-weight: 700;
+          color: rgba(26,18,8,0.7);
+          text-align: center;
+          margin-top: 3px;
+        }
+        .q-active-team {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 14px;
+          border-radius: 12px;
+        }
+
+        /* image */
+        .q-image-wrap {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          flex-shrink: 0;
+        }
+        .q-image {
+          width: min(100%, 380px);
+          aspect-ratio: 16/10;
+          object-fit: cover;
+          border-radius: 18px;
+          background: rgba(255,255,255,0.05);
+          border: 1.5px solid rgba(255,180,80,0.16);
+          box-shadow: 0 14px 44px rgba(0,0,0,0.40);
+          cursor: zoom-in;
+          transition: transform 0.25s;
+        }
+        .q-image:hover { transform: scale(1.015); }
+
+        /* question text */
+        .q-text {
+          margin: 0 auto;
+          max-width: 900px;
+          font-size: clamp(1.4rem,2.8vw,3rem);
+          line-height: 1.2;
+          font-weight: 900;
+          text-align: center;
+          color: var(--q-text);
+          text-shadow: 0 2px 18px rgba(0,0,0,0.50);
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        /* reveal button */
+        .q-reveal-btn {
+          align-self: center;
+          font-family: Cairo, sans-serif;
+          font-weight: 900;
+          border-radius: 999px;
+          font-size: clamp(1rem,1.8vw,1.3rem);
+          padding: clamp(12px,1.8vw,18px) clamp(36px,6vw,72px);
+          background: linear-gradient(135deg, rgba(92,14,20,0.90), rgba(61,8,16,0.95));
+          border: 2px solid rgba(241,225,148,0.55);
+          color: #F1E194;
+          letter-spacing: 0.04em;
+          text-shadow: 0 0 16px rgba(241,225,148,0.40);
+          cursor: pointer;
+          transition: transform 0.2s, box-shadow 0.2s;
+          animation: revealPulse 2s ease-in-out infinite;
+          flex-shrink: 0;
+        }
+        .q-reveal-btn:hover { transform: scale(1.05); }
+        .q-reveal-btn:active { transform: scale(0.95); }
+
+        /* answer area (slides in) */
+        .q-answer-area {
+          display: flex;
+          justify-content: center;
+          flex-shrink: 0;
+          animation: answerSlideIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+        }
+        .q-answer-card {
+          width: min(100%, 620px);
+          padding: clamp(18px,2.5vw,28px) clamp(20px,2.5vw,32px);
+          border-radius: 22px;
+          background: linear-gradient(175deg, rgba(255,255,255,0.09), rgba(255,255,255,0.05));
+          border: 1.5px solid rgba(255,225,140,0.22);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          box-shadow: 0 12px 48px rgba(0,0,0,0.38);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 14px;
+        }
+        .q-answer-label {
+          font-size: 0.7rem;
+          font-weight: 700;
+          color: rgba(241,225,148,0.45);
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+        }
+        .q-answer-img {
+          width: 100%;
+          max-height: clamp(140px,22vh,260px);
+          object-fit: contain;
+          border-radius: 14px;
+          cursor: zoom-in;
+        }
+        .q-answer-text {
+          font-size: clamp(1.8rem,4.5vw,3.4rem);
+          font-weight: 900;
+          text-align: center;
+          color: var(--q-text);
+          line-height: 1.1;
+          animation: answerGlow 2.5s ease-in-out infinite;
+        }
+
+        /* score buttons */
+        .q-score-row {
+          display: flex;
+          gap: 10px;
+          justify-content: center;
+          flex-wrap: wrap;
+          flex-shrink: 0;
+          animation: scoreRowIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
+          animation-delay: 0.15s;
+        }
+        .q-score-btn {
+          font-family: Cairo, sans-serif;
+          font-weight: 900;
+          border-radius: 18px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          min-width: clamp(130px,16vw,200px);
+          padding: clamp(10px,1.5vw,16px) clamp(16px,2.5vw,28px);
+          cursor: pointer;
+          border: 1.5px solid;
+          transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s;
+        }
+        .q-score-btn:hover { transform: scale(1.05) translateY(-3px); }
+        .q-score-btn:active { transform: scale(0.95); }
+        .q-skip-btn {
+          font-family: Cairo, sans-serif;
+          font-weight: 700;
+          font-size: 0.88rem;
+          border-radius: 14px;
+          padding: 10px 20px;
+          cursor: pointer;
+          background: transparent;
+          border: 1.5px solid rgba(241,225,148,0.18);
+          color: rgba(241,225,148,0.40);
+          align-self: center;
+          transition: opacity 0.2s;
+        }
+        .q-skip-btn:hover { opacity: 0.8; }
+
+        /* post-assign */
+        .q-post-assign {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+          flex-shrink: 0;
+          animation: scoreRowIn 0.4s ease both;
+        }
+        .q-continue-btn {
+          font-family: Cairo, sans-serif;
+          font-weight: 900;
+          font-size: clamp(1rem,1.6vw,1.2rem);
+          padding: clamp(10px,1.4vw,14px) clamp(28px,4.5vw,52px);
+          border-radius: 999px;
+          background: linear-gradient(135deg, #c09820, #f0d045);
+          color: #1a0a0b;
+          border: none;
+          cursor: pointer;
+          box-shadow: 0 0 28px rgba(192,152,32,0.40);
+          transition: transform 0.2s;
+        }
+        .q-continue-btn:hover { transform: scale(1.05); }
+        .q-continue-btn:active { transform: scale(0.95); }
+
+        /* diff tag */
+        .q-diff-tag {
+          padding: 6px 14px;
+          border-radius: 10px;
+          font-weight: 800;
+          font-size: 0.82rem;
+          letter-spacing: 0.02em;
+        }
+
+        /* back btn */
+        .q-back-btn {
+          font-family: Cairo, sans-serif;
+          font-weight: 700;
+          font-size: 0.75rem;
+          padding: 6px 12px;
+          border-radius: 10px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,180,80,0.14);
+          color: rgba(255,225,140,0.55);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          transition: background 0.2s;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .q-back-btn:hover { background: rgba(255,180,80,0.08); }
+
+        /* Keyframes */
+        @keyframes answerSlideIn {
+          from { opacity: 0; transform: translateY(18px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes scoreRowIn {
+          from { opacity: 0; transform: translateY(14px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
         @keyframes answerGlow {
-          0%, 100% { text-shadow: 0 0 24px rgba(241,225,148,0.45), 0 0 70px rgba(241,225,148,0.18); }
-          50%       { text-shadow: 0 0 50px rgba(241,225,148,0.80), 0 0 120px rgba(241,225,148,0.35); }
+          0%,100% { text-shadow: 0 0 24px rgba(241,225,148,0.45), 0 0 70px rgba(241,225,148,0.16); }
+          50%      { text-shadow: 0 0 50px rgba(241,225,148,0.80), 0 0 120px rgba(241,225,148,0.30); }
+        }
+        @keyframes revealPulse {
+          0%,100% { box-shadow: 0 0 0 0 rgba(241,225,148,0.0), 0 0 20px rgba(241,225,148,0.10); }
+          50%     { box-shadow: 0 0 0 7px rgba(241,225,148,0.10), 0 0 36px rgba(241,225,148,0.22); }
         }
         @keyframes goldShimmer {
           0%   { background-position: 200% center; }
           100% { background-position: -200% center; }
         }
-        @keyframes pointsPop {
-          0%   { transform: scale(0.4) translateY(12px); opacity: 0; }
-          65%  { transform: scale(1.18) translateY(-4px); }
-          100% { transform: scale(1) translateY(0);  opacity: 1; }
-        }
-        @keyframes ctaFadeUp {
-          from { transform: translateY(20px); opacity: 0; }
-          to   { transform: translateY(0);    opacity: 1; }
-        }
-        @keyframes answerWordIn {
-          0%   { opacity: 0; transform: scale(0.82) translateY(10px); filter: blur(6px); }
-          60%  { filter: blur(0px); }
-          100% { opacity: 1; transform: scale(1)    translateY(0);    filter: blur(0px); }
-        }
-        @keyframes revealFlash {
-          0%   { opacity: 0; }
-          18%  { opacity: 0.22; }
-          100% { opacity: 0; }
-        }
-        @keyframes revealBtnPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(241,225,148,0.0), 0 0 20px rgba(241,225,148,0.10); }
-          50%      { box-shadow: 0 0 0 8px rgba(241,225,148,0.12), 0 0 36px rgba(241,225,148,0.22); }
-        }
-        @keyframes cineBar {
-          from { transform: scaleX(0); opacity: 0; }
-          to   { transform: scaleX(1); opacity: 1; }
-        }
 
-        /* ── Answer panel ── */
-        .answer-panel {
-          position: fixed;
-          bottom: 0;
-          left: 50%;
-          transform: translateX(-50%) translateY(100%);
-          opacity: 0;
-          width: min(800px, 94vw);
-          z-index: 50;
-          border-radius: 28px 28px 0 0;
-          padding: clamp(20px,3vw,36px) clamp(20px,3vw,36px) clamp(18px,2.5vh,28px);
-          background: rgba(4,0,2,0.94);
-          backdrop-filter: blur(32px) saturate(1.6);
-          -webkit-backdrop-filter: blur(32px) saturate(1.6);
-          border: 1.5px solid rgba(241,225,148,0.16);
-          border-bottom: none;
-          box-shadow:
-            0 -24px 90px rgba(0,0,0,0.75),
-            0 -2px 0 rgba(241,225,148,0.12),
-            inset 0 1px 0 rgba(241,225,148,0.06);
-          transition: transform 0.58s cubic-bezier(0.16,1,0.3,1), opacity 0.38s ease;
+        /* ── Responsive ── */
+        @media (max-width: 1100px) {
+          .question-layout { grid-template-columns: 170px minmax(0,1fr) 170px; }
         }
-        .answer-panel.visible {
-          transform: translateX(-50%) translateY(0);
-          opacity: 1;
+        @media (max-width: 820px) {
+          .question-layout {
+            grid-template-columns: 1fr;
+            padding: 10px 12px 16px;
+          }
+          .q-sidebar { order: 3; }
+          .q-sidebar.left-side { order: 2; }
+          .q-panel-inner { min-height: auto; }
         }
-
-        /* ── Overlay ── */
-        .answer-overlay {
-          position: fixed;
-          inset: 0;
-          z-index: 40;
-          background: rgba(0,0,0,0);
-          backdrop-filter: blur(0px);
-          -webkit-backdrop-filter: blur(0px);
-          transition: background 0.5s ease, backdrop-filter 0.5s ease;
-          pointer-events: none;
-        }
-        .answer-overlay.visible {
-          background: rgba(0,0,0,0.68);
-          backdrop-filter: blur(4px);
-          -webkit-backdrop-filter: blur(4px);
-          pointer-events: auto;
-        }
-
-        /* Flash burst when answer is revealed */
-        .answer-overlay.visible::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: radial-gradient(ellipse 60% 40% at 50% 80%, rgba(241,225,148,0.18) 0%, transparent 70%);
-          animation: revealFlash 0.8s ease-out forwards;
-          pointer-events: none;
-        }
-
-        /* Cinematic top/bottom bars */
-        .answer-overlay.visible::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background:
-            linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 12%),
-            linear-gradient(to top,    rgba(0,0,0,0.5) 0%, transparent 18%);
-          pointer-events: none;
-        }
-
-        /* ── Text / button animations ── */
-        .answer-text-glow    { animation: answerGlow 2.6s ease-in-out infinite; }
-        .answer-word-in      { animation: answerWordIn 0.55s cubic-bezier(0.22,1,0.36,1) both; }
-        .points-badge-pop    { animation: pointsPop 0.55s cubic-bezier(0.34,1.56,0.64,1) both; animation-delay: 0.12s; }
-        .cta-fade-up         { animation: ctaFadeUp 0.5s ease both; animation-delay: 0.08s; }
-        .reveal-btn-pulse    { animation: revealBtnPulse 2s ease-in-out infinite; }
-
-        .score-btn-reveal {
-          transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s ease;
-        }
-        .score-btn-reveal:hover  { transform: scale(1.06) translateY(-4px); }
-        .score-btn-reveal:active { transform: scale(0.95); }
-
-        html, body { overflow-x: hidden; }
       `}</style>
 
-      {/* ════════════ IMAGE ZOOM MODAL ════════════ */}
+      {/* ════════════ ZOOM MODAL ════════════ */}
       {zoomedImage && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.94)", backdropFilter: "blur(8px)" }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 100,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(0,0,0,0.94)", backdropFilter: "blur(8px)",
+          }}
           onClick={() => setZoomedImage(null)}
         >
-          <div className="relative max-w-5xl w-full px-4" onClick={e => e.stopPropagation()}>
+          <div
+            style={{ position: "relative", maxWidth: "min(90vw,1100px)", width: "100%", padding: "0 16px" }}
+            onClick={e => e.stopPropagation()}
+          >
             <button
-              className="absolute -top-10 right-4 text-white/60 hover:text-white transition-colors flex items-center gap-2 text-sm"
+              style={{
+                position: "absolute", top: "-36px", right: "16px",
+                color: "rgba(255,255,255,0.55)", background: "none", border: "none",
+                cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                fontSize: "0.85rem", fontFamily: "Cairo, sans-serif",
+              }}
               onClick={() => setZoomedImage(null)}
             >
               <X size={18} /> إغلاق
             </button>
             <img
-              src={zoomedImage}
-              alt="zoomed"
-              className="max-w-full max-h-[85vh] object-contain rounded-2xl mx-auto block"
-              style={{ boxShadow: "0 0 80px rgba(0,0,0,0.9)" }}
+              src={zoomedImage} alt="zoomed"
+              style={{
+                maxWidth: "100%", maxHeight: "85vh", objectFit: "contain",
+                borderRadius: "18px", display: "block", margin: "0 auto",
+                boxShadow: "0 0 80px rgba(0,0,0,0.9)",
+              }}
             />
           </div>
         </div>
       )}
 
-      {/* ════════════ ANSWER OVERLAY (darkens bg when answer shown) ════════════ */}
-      <div className={`answer-overlay${panelVisible ? " visible" : ""}`} />
+      {/* ════════════ 3-COLUMN GRID ════════════ */}
+      <div className="question-layout">
 
-      {/* ════════════ TOP BAR ════════════ */}
-      <header
-        className="shrink-0 flex items-center justify-between px-4 md:px-6"
-        style={{
-          height: "clamp(52px, 7vh, 68px)",
-          background: "rgba(5,0,1,0.7)",
-          borderBottom: "1px solid rgba(241,225,148,0.10)",
-          backdropFilter: "blur(10px)",
-        }}
-      >
-        <button
-          data-testid="back-to-board"
-          onClick={handleBack}
-          className="flex items-center gap-1.5 rounded-xl px-3 py-2 transition-all hover:bg-secondary/10 hover:text-secondary group"
-          style={{ color: "rgba(241,225,148,0.45)", fontSize: "clamp(0.75rem,1.3vw,0.9rem)", fontWeight: 700 }}
-        >
-          <span className="group-hover:-translate-x-0.5 transition-transform">←</span>
-          <span>اللوحة</span>
-        </button>
+        {/* ══════ TOP BAR ══════ */}
+        <div className="q-top-bar">
 
-        <div className="flex flex-col items-center leading-tight">
-          <span className="font-black text-secondary/80" style={{ fontSize: "clamp(0.8rem,1.6vw,1.1rem)" }}>
-            {session?.name || "كأس حُجّة"}
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-secondary/40 font-medium" style={{ fontSize: "clamp(0.62rem,1.1vw,0.78rem)" }}>
-              {catName}
-            </span>
-            <span className="text-secondary/20 text-xs">·</span>
-            <span className="font-black" style={{ color: diffBadge?.color, fontSize: "clamp(0.62rem,1.1vw,0.78rem)" }}>
-              {diffBadge?.label}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 md:gap-5">
-          <div
-            className="flex flex-col items-center rounded-xl px-3 py-1.5 transition-all"
-            style={{
-              background: isTeam1 ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.06)",
-              border: `1.5px solid ${isTeam1 ? "rgba(239,68,68,0.5)" : "rgba(239,68,68,0.15)"}`,
-              boxShadow: isTeam1 ? "0 0 12px rgba(239,68,68,0.2)" : "none",
-            }}
-          >
-            <span className="text-red-300/80 font-bold leading-none truncate" style={{ fontSize: "clamp(0.6rem,1vw,0.75rem)", maxWidth: "80px" }}>
-              🔴 {session?.team1_name}
-            </span>
-            <span className="text-secondary font-black leading-none tabular-nums" style={{ fontSize: "clamp(1.2rem,2.2vw,1.8rem)" }}>
-              {teamScores.team1}
-            </span>
+          {/* Team 1 pill */}
+          <div className={`q-team-pill${isTeam1 ? " active-t1" : ""}`}>
+            <div className="pill-name" style={{ color: isTeam1 ? "#fca5a5" : "rgba(247,241,232,0.65)" }}>
+              <span>🔴</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "110px" }}>
+                {session?.team1_name || "الفريق الأول"}
+              </span>
+              {isTeam1 && (
+                <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#ef4444", animation: "pulse 1.2s ease-in-out infinite", flexShrink: 0 }} />
+              )}
+            </div>
+            <div className="pill-score">{teamScores.team1}</div>
+            {isTeam1 && <div className="pill-turn" style={{ color: "#fca5a5" }}>دوره الآن</div>}
           </div>
 
-          <span className="text-secondary/20 font-bold text-xs">VS</span>
-
-          <div
-            className="flex flex-col items-center rounded-xl px-3 py-1.5 transition-all"
-            style={{
-              background: !isTeam1 ? "rgba(59,130,246,0.15)" : "rgba(59,130,246,0.06)",
-              border: `1.5px solid ${!isTeam1 ? "rgba(59,130,246,0.5)" : "rgba(59,130,246,0.15)"}`,
-              boxShadow: !isTeam1 ? "0 0 12px rgba(59,130,246,0.2)" : "none",
-            }}
-          >
-            <span className="text-blue-300/80 font-bold leading-none truncate" style={{ fontSize: "clamp(0.6rem,1vw,0.75rem)", maxWidth: "80px" }}>
-              {session?.team2_name} 🔵
-            </span>
-            <span className="text-secondary font-black leading-none tabular-nums" style={{ fontSize: "clamp(1.2rem,2.2vw,1.8rem)" }}>
-              {teamScores.team2}
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* ════════════ MAIN BODY ════════════ */}
-      <div className="flex-1 flex gap-3 p-3 md:p-4 overflow-hidden min-h-0">
-
-        {/* ── QUESTION CARD ── */}
-        <div
-          className="flex-1 flex flex-col rounded-3xl overflow-hidden"
-          style={{
-            background: "rgba(8,1,3,0.78)",
-            border: "1.5px solid rgba(241,225,148,0.13)",
-            boxShadow: "0 0 70px rgba(0,0,0,0.65), inset 0 1px 0 rgba(241,225,148,0.08)",
-            backdropFilter: "blur(20px) saturate(1.3)",
-            WebkitBackdropFilter: "blur(20px) saturate(1.3)",
-          }}
-        >
-          {/* ── CARD HEADER ── */}
-          <div
-            className="shrink-0 flex items-center justify-between px-5 py-3"
-            style={{ background: activeBg, borderBottom: `1px solid ${activeBorder}` }}
-          >
-            {/* Active team */}
-            <div className="flex items-center gap-2.5">
-              <div
-                className="w-2.5 h-2.5 rounded-full animate-pulse shrink-0"
-                style={{ background: activeTeamColor, boxShadow: `0 0 8px ${activeTeamColor}` }}
-              />
-              <div>
-                <div className="text-secondary/45 font-bold" style={{ fontSize: "clamp(0.58rem,1vw,0.7rem)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  يجيب الآن
-                </div>
-                <div
-                  className="font-black leading-none truncate"
-                  style={{ color: activeTeamColor, fontSize: "clamp(0.9rem,1.8vw,1.25rem)", maxWidth: "clamp(80px,15vw,180px)", textShadow: `0 0 12px ${activeTeamColor}60` }}
-                >
-                  {activeTeamName}
+          {/* Timer center */}
+          <div className="q-timer-center">
+            {/* Game name + category */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+              <button className="q-back-btn" onClick={handleBack}>
+                ← اللوحة
+              </button>
+              <div style={{ textAlign: "center" }}>
+                <div style={{
+                  color: "rgba(212,168,32,0.75)", fontWeight: 900,
+                  fontSize: "clamp(0.7rem,1.3vw,0.95rem)", lineHeight: 1.1,
+                }}>
+                  {catName || "حُجّة"}
                 </div>
               </div>
             </div>
 
-            {/* Timer */}
-            <div className="flex flex-col items-center gap-1.5">
-              <div style={{ width: "clamp(86px,10vw,110px)", height: "clamp(86px,10vw,110px)" }}>
+            {/* Timer + controls */}
+            <div className="q-timer-row">
+              <div className="q-timer-pill">
                 <svg width="100%" height="100%" viewBox="0 0 90 90">
-                  <circle cx="45" cy="45" r={R} fill="rgba(0,0,0,0.5)" stroke="rgba(241,225,148,0.08)" strokeWidth="8" />
+                  <circle cx="45" cy="45" r={R} fill="rgba(0,0,0,0.55)" stroke="rgba(255,180,80,0.10)" strokeWidth="8" />
                   <circle
                     cx="45" cy="45" r={R}
                     fill="none" stroke={timerCol} strokeWidth="8" strokeLinecap="round"
@@ -429,450 +716,423 @@ export default function QuestionPage() {
                   <text
                     x="45" y="45" textAnchor="middle" dominantBaseline="central"
                     fill={timerCol} fontSize="22" fontWeight="900" fontFamily="Cairo,sans-serif"
-                    className={timeLeft <= 10 ? "animate-countdown" : ""}
                   >
                     {timeLeft}
                   </text>
                 </svg>
               </div>
-              <div className="flex gap-1.5 items-center">
+
+              <div className="q-controls">
                 <button
                   data-testid="timer-pause-resume-btn"
+                  className="q-ctrl-btn"
                   onClick={() => setTimerOn(t => !t)}
-                  className="rounded-lg px-2 py-1 font-black transition-all hover:scale-110 active:scale-95 flex items-center gap-1"
                   style={{
-                    background: timerOn ? "rgba(251,191,36,0.15)" : "rgba(34,197,94,0.15)",
-                    border: `1px solid ${timerOn ? "rgba(251,191,36,0.4)" : "rgba(34,197,94,0.4)"}`,
+                    background: timerOn ? "rgba(251,191,36,0.12)" : "rgba(34,197,94,0.12)",
+                    borderColor: timerOn ? "rgba(251,191,36,0.38)" : "rgba(34,197,94,0.38)",
                     color: timerOn ? "#fbbf24" : "#4ade80",
-                    fontSize: "clamp(0.55rem,0.9vw,0.72rem)",
                   }}
                 >
-                  {timerOn ? <Pause size={10} /> : <Play size={10} />}
+                  {timerOn ? <Pause size={11} /> : <Play size={11} />}
                   {timerOn ? "إيقاف" : "تشغيل"}
                 </button>
                 <button
                   data-testid="timer-reset-btn"
+                  className="q-ctrl-btn"
                   onClick={() => { setTimeLeft(TIMER_DURATION); setTimerOn(false); setTensionDone(false); }}
-                  className="rounded-lg p-1.5 transition-all hover:scale-110 active:scale-95"
-                  style={{ background: "rgba(156,163,175,0.12)", border: "1px solid rgba(156,163,175,0.25)", color: "rgba(209,213,219,0.7)" }}
+                  style={{ background: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.14)", color: "rgba(209,213,219,0.65)" }}
                 >
-                  <RotateCcw size={10} />
+                  <RotateCcw size={11} />
                 </button>
                 <button
                   data-testid="timer-start-btn"
+                  className="q-ctrl-btn"
                   onClick={() => { setTimeLeft(TIMER_DURATION); setTimerOn(true); setTensionDone(false); }}
-                  className="rounded-lg px-2 py-1 font-black transition-all hover:scale-110 active:scale-95 flex items-center gap-1"
-                  style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.25)", color: "rgba(74,222,128,0.8)", fontSize: "clamp(0.55rem,0.9vw,0.72rem)" }}
+                  style={{ background: "rgba(34,197,94,0.10)", borderColor: "rgba(34,197,94,0.28)", color: "rgba(74,222,128,0.85)" }}
                 >
-                  <Play size={10} />ابدأ
+                  <Play size={11} />ابدأ
                 </button>
               </div>
             </div>
-
-            {/* Points badge */}
-            <div
-              className="flex flex-col items-center rounded-2xl px-4 py-2"
-              style={{ background: diffBadge?.bg, border: `1.5px solid ${diffBadge?.border}` }}
-            >
-              <span className="font-black tabular-nums" style={{ color: diffBadge?.color, fontSize: "clamp(1.5rem,3vw,2.4rem)", lineHeight: 1 }}>
-                {question.difficulty}
-              </span>
-              <span style={{ color: diffBadge?.color, fontSize: "clamp(0.58rem,0.9vw,0.7rem)", fontWeight: 700, opacity: 0.7 }}>
-                نقطة
-              </span>
-            </div>
           </div>
 
-          {/* ── CARD BODY: Question ── */}
-          <div className="flex-1 flex flex-col justify-center overflow-y-auto px-5 md:px-8 py-4 min-h-0">
-            {isSecret ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4">
-                <div className="text-secondary font-black text-center" style={{ fontSize: "clamp(1.2rem,2.5vw,1.8rem)" }}>
-                  وصّف الكلمة السرية
-                </div>
-                <div className="text-secondary/50 text-sm text-center">الملاعب يمسح الـ QR — بس هو يشوف الكلمة!</div>
-                <div className="bg-white p-4 rounded-2xl" style={{ boxShadow: "0 0 40px rgba(241,225,148,0.25)" }}>
-                  <QRCodeSVG value={secretUrl} size={Math.min(window.innerWidth - 100, 200)} data-testid="qr-code" />
-                </div>
-                <p className="text-secondary/20 text-[10px] font-mono break-all max-w-xs text-center">{secretUrl}</p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-5">
-
-                {/* Question image */}
-                {question.image_url && (
-                  <div className="relative group w-full flex justify-center shrink-0" data-testid="question-image-container">
-                    <div className="relative inline-flex flex-col items-center gap-2">
-                      {!imgLoaded && (
-                        <div
-                          className="animate-pulse rounded-2xl flex items-center justify-center"
-                          style={{
-                            width: "clamp(180px,32vw,360px)",
-                            height: "clamp(110px,20vh,220px)",
-                            background: "rgba(241,225,148,0.05)",
-                            border: "1.5px dashed rgba(241,225,148,0.15)",
-                          }}
-                        >
-                          <span className="text-secondary/25 text-sm">تحميل الصورة...</span>
-                        </div>
-                      )}
-                      <img
-                        src={question.image_url}
-                        alt="question"
-                        data-testid="question-image"
-                        onLoad={() => setImgLoaded(true)}
-                        onError={e => { e.target.style.display = "none"; }}
-                        className="object-contain rounded-2xl cursor-zoom-in transition-all duration-300 hover:scale-[1.02]"
-                        style={{
-                          maxHeight: "clamp(140px,26vh,300px)",
-                          maxWidth: "min(100%,520px)",
-                          border: "1.5px solid rgba(241,225,148,0.18)",
-                          boxShadow: "0 12px 50px rgba(0,0,0,0.65), 0 4px 16px rgba(241,225,148,0.06)",
-                          display: imgLoaded ? "block" : "none",
-                        }}
-                        onClick={() => setZoomedImage(question.image_url)}
-                      />
-                      {imgLoaded && (
-                        <div
-                          className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-2xl cursor-zoom-in"
-                          style={{ background: "rgba(0,0,0,0.35)" }}
-                          onClick={() => setZoomedImage(question.image_url)}
-                        >
-                          <ZoomIn size={28} className="text-white" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Question text */}
-                <p
-                  data-testid="question-text"
-                  className="text-secondary font-bold text-center leading-relaxed"
-                  style={{
-                    fontSize: question.image_url ? "clamp(1.25rem,3vw,2.4rem)" : "clamp(1.5rem,3.8vw,3rem)",
-                    textShadow: "0 2px 12px rgba(0,0,0,0.6)",
-                    maxWidth: "720px",
-                    margin: "0 auto",
-                  }}
-                >
-                  {question.text}
-                </p>
-
-              </div>
-            )}
-          </div>
-
-          {/* ── CARD FOOTER: Reveal button ── */}
-          {!showAnswer && (
-            <div className="shrink-0 px-5 py-4" style={{ borderTop: "1px solid rgba(241,225,148,0.08)" }}>
-              <div className="flex justify-center">
-                <button
-                  data-testid="reveal-answer-btn"
-                  onClick={handleReveal}
-                  className="reveal-btn-pulse font-black rounded-full transition-all duration-200 hover:scale-105 active:scale-95"
-                  style={{
-                    background: "linear-gradient(135deg, rgba(92,14,20,0.85) 0%, rgba(61,8,16,0.92) 100%)",
-                    border: "2px solid rgba(241,225,148,0.55)",
-                    color: "#F1E194",
-                    fontSize: "clamp(1rem,1.9vw,1.3rem)",
-                    padding: "clamp(12px,1.8vw,18px) clamp(36px,6vw,72px)",
-                    letterSpacing: "0.04em",
-                    textShadow: "0 0 16px rgba(241,225,148,0.4)",
-                  }}
-                >
-                  ◆ كشف الإجابة ◆
-                </button>
-              </div>
+          {/* Team 2 pill */}
+          <div className={`q-team-pill${!isTeam1 ? " active-t2" : ""}`} style={{ textAlign: "right" }}>
+            <div className="pill-name" style={{ color: !isTeam1 ? "#93c5fd" : "rgba(247,241,232,0.65)", justifyContent: "flex-end" }}>
+              {!isTeam1 && (
+                <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#3b82f6", animation: "pulse 1.2s ease-in-out infinite", flexShrink: 0 }} />
+              )}
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "110px" }}>
+                {session?.team2_name || "الفريق الثاني"}
+              </span>
+              <span>🔵</span>
             </div>
-          )}
+            <div className="pill-score" style={{ textAlign: "right" }}>{teamScores.team2}</div>
+            {!isTeam1 && <div className="pill-turn" style={{ color: "#93c5fd", textAlign: "right" }}>دوره الآن</div>}
+          </div>
         </div>
 
-        {/* ════════════ SIDE PANEL ════════════ */}
-        <aside
-          className="shrink-0 flex flex-col gap-3 overflow-y-auto"
-          style={{ width: "clamp(160px, 18vw, 220px)" }}
-        >
+        {/* ══════ LEFT SIDEBAR ══════ */}
+        <div className="q-sidebar left-side">
+          {/* Active team indicator */}
           <div
-            className="text-center rounded-2xl py-2.5 shrink-0"
+            className="q-helper-card"
             style={{
-              background: "rgba(241,225,148,0.06)",
-              border: "1px solid rgba(241,225,148,0.12)",
-              color: "rgba(241,225,148,0.55)",
-              fontSize: "clamp(0.62rem,1vw,0.75rem)",
-              fontWeight: 700,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
+              background: isTeam1 ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)",
+              borderColor: isTeam1 ? "rgba(239,68,68,0.32)" : "rgba(59,130,246,0.32)",
             }}
           >
-            وسائل المساعدة
+            <div className="q-helper-title">يجيب الآن</div>
+            <div style={{
+              fontWeight: 900,
+              fontSize: "clamp(0.85rem,1.4vw,1.1rem)",
+              color: isTeam1 ? "#fca5a5" : "#93c5fd",
+              display: "flex", alignItems: "center", gap: "6px",
+            }}>
+              <span style={{
+                width: "8px", height: "8px", borderRadius: "50%",
+                background: isTeam1 ? "#ef4444" : "#3b82f6",
+                animation: "pulse 1.2s ease-in-out infinite",
+              }} />
+              {isTeam1 ? (session?.team1_name || "الفريق الأول") : (session?.team2_name || "الفريق الثاني")}
+            </div>
           </div>
 
-          {/* Team 1 */}
+          {/* Category + difficulty */}
+          <div className="q-helper-card">
+            <div className="q-helper-title">التصنيف</div>
+            <div style={{ fontWeight: 800, fontSize: "0.92rem", color: "rgba(212,168,32,0.9)", marginBottom: "8px", lineHeight: 1.2 }}>
+              {catName || "—"}
+            </div>
+            <div
+              className="q-diff-tag"
+              style={{ background: diffBadge.bg, border: `1px solid ${diffBadge.border}`, color: diffBadge.color, display: "inline-block" }}
+            >
+              {diffBadge.label}
+            </div>
+          </div>
+
+          {/* Points badge */}
+          <div className="q-helper-card" style={{ textAlign: "center" }}>
+            <div className="q-helper-title">النقاط</div>
+            <div style={{ fontSize: "clamp(2rem,3.5vw,3rem)", fontWeight: 900, color: "#d4a820", lineHeight: 1 }}>
+              {question.difficulty}
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "rgba(212,168,32,0.55)", fontWeight: 700, marginTop: "3px" }}>نقطة</div>
+          </div>
+        </div>
+
+        {/* ══════ QUESTION CENTER ══════ */}
+        <div className="question-center">
+          <div className="q-panel">
+            <div className="q-panel-inner">
+
+              {/* ── Secret word path ── */}
+              {isSecret ? (
+                <div style={{
+                  flex: 1, display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center", gap: "16px",
+                }}>
+                  <div style={{ fontWeight: 900, fontSize: "clamp(1.2rem,2.5vw,1.8rem)", color: "var(--q-text)", textAlign: "center" }}>
+                    وصّف الكلمة السرية
+                  </div>
+                  <div style={{ color: "rgba(247,241,232,0.45)", fontSize: "0.88rem", textAlign: "center" }}>
+                    الملاعب يمسح الـ QR — بس هو يشوف الكلمة!
+                  </div>
+                  <div style={{ background: "#fff", padding: "16px", borderRadius: "18px", boxShadow: "0 0 40px rgba(241,225,148,0.20)" }}>
+                    <QRCodeSVG value={secretUrl} size={Math.min(window.innerWidth - 120, 200)} data-testid="qr-code" />
+                  </div>
+                  <p style={{ color: "rgba(247,241,232,0.20)", fontSize: "0.68rem", fontFamily: "monospace", wordBreak: "break-all", maxWidth: "280px", textAlign: "center" }}>
+                    {secretUrl}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* ── Question image ── */}
+                  {question.image_url && (
+                    <div className="q-image-wrap" data-testid="question-image-container">
+                      {!imgLoaded && (
+                        <div style={{
+                          width: "min(100%, 380px)", aspectRatio: "16/10",
+                          borderRadius: "18px", background: "rgba(255,255,255,0.04)",
+                          border: "1.5px dashed rgba(255,180,80,0.14)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          animation: "pulse 1.5s ease-in-out infinite",
+                        }}>
+                          <span style={{ color: "rgba(247,241,232,0.22)", fontSize: "0.85rem" }}>تحميل الصورة...</span>
+                        </div>
+                      )}
+                      <div style={{ position: "relative", display: imgLoaded ? "inline-flex" : "none" }}>
+                        <img
+                          src={question.image_url}
+                          alt="question"
+                          data-testid="question-image"
+                          className="q-image"
+                          onLoad={() => setImgLoaded(true)}
+                          onError={e => { e.target.style.display = "none"; setImgLoaded(true); }}
+                          onClick={() => setZoomedImage(question.image_url)}
+                        />
+                        <div style={{
+                          position: "absolute", inset: 0, borderRadius: "18px",
+                          opacity: 0, background: "rgba(0,0,0,0.35)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          cursor: "zoom-in", transition: "opacity 0.2s",
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = "1"}
+                          onMouseLeave={e => e.currentTarget.style.opacity = "0"}
+                          onClick={() => setZoomedImage(question.image_url)}
+                        >
+                          <ZoomIn size={28} style={{ color: "#fff" }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Question text ── */}
+                  <p
+                    data-testid="question-text"
+                    className="q-text"
+                    style={{
+                      fontSize: question.image_url
+                        ? "clamp(1.2rem,2.4vw,2.4rem)"
+                        : "clamp(1.5rem,3.2vw,3rem)",
+                    }}
+                  >
+                    {question.text}
+                  </p>
+
+                  {/* ── Reveal button ── */}
+                  {!showAnswer && (
+                    <button
+                      data-testid="reveal-answer-btn"
+                      className="q-reveal-btn"
+                      onClick={handleReveal}
+                    >
+                      ◆ كشف الإجابة ◆
+                    </button>
+                  )}
+
+                  {/* ── Answer reveal (inline) ── */}
+                  {showAnswer && (
+                    <>
+                      <div className="q-answer-area">
+                        <div className="q-answer-card">
+                          <div className="q-answer-label">◆ الإجابة ◆</div>
+
+                          {/* image type */}
+                          {(answerType === "image" || answerType === "mixed") && question.answer_image_url && (
+                            <img
+                              src={question.answer_image_url}
+                              alt="answer"
+                              data-testid="answer-image"
+                              className="q-answer-img"
+                              style={{
+                                border: "1.5px solid rgba(241,225,148,0.22)",
+                                boxShadow: "0 8px 40px rgba(0,0,0,0.50)",
+                                opacity: ansImgLoaded ? 1 : 0,
+                                transition: "opacity 0.3s",
+                              }}
+                              onLoad={() => setAnsImgLoaded(true)}
+                              onClick={() => setZoomedImage(question.answer_image_url)}
+                              onError={e => { e.target.style.display = "none"; }}
+                            />
+                          )}
+
+                          {/* text type */}
+                          {(answerType === "text" || answerType === "mixed") && question.answer && (
+                            <div
+                              data-testid="answer-text"
+                              className="q-answer-text"
+                            >
+                              {question.answer}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Points shimmer badge */}
+                      {!assigned && (
+                        <div style={{ display: "flex", justifyContent: "center", flexShrink: 0 }}>
+                          <div style={{
+                            background: "linear-gradient(135deg,#92400e,#d97706,#fbbf24,#d97706,#92400e)",
+                            backgroundSize: "200% auto",
+                            animation: "goldShimmer 3s linear infinite",
+                            color: "#000",
+                            fontWeight: 900,
+                            fontSize: "clamp(0.82rem,1.3vw,0.98rem)",
+                            padding: "7px 22px",
+                            borderRadius: "999px",
+                            boxShadow: "0 0 24px rgba(251,191,36,0.35), 0 4px 16px rgba(0,0,0,0.35)",
+                            letterSpacing: "0.04em",
+                          }}>
+                            {question.difficulty} نقطة
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Score assignment */}
+                      {!assigned && (
+                        <>
+                          <div style={{
+                            textAlign: "center", flexShrink: 0,
+                            color: "rgba(241,225,148,0.35)", fontSize: "0.78rem",
+                            fontWeight: 700, letterSpacing: "0.1em",
+                          }}>
+                            من أجاب صح؟
+                          </div>
+                          <div className="q-score-row">
+                            <button
+                              data-testid="assign-team1-btn"
+                              className="q-score-btn"
+                              onClick={() => handleAssign(1)}
+                              style={{
+                                background: "linear-gradient(160deg,rgba(220,38,38,0.92),rgba(153,27,27,0.97))",
+                                borderColor: "rgba(248,113,113,0.50)",
+                                boxShadow: "0 6px 28px rgba(239,68,68,0.32)",
+                              }}
+                            >
+                              <span style={{ color: "rgba(255,255,255,0.88)", fontWeight: 900, fontSize: "clamp(0.82rem,1.4vw,1.05rem)" }}>
+                                🔴 {session?.team1_name}
+                              </span>
+                              <span style={{ color: "#fecaca", fontWeight: 900, fontSize: "clamp(1.4rem,2.6vw,2rem)", lineHeight: 1 }}>
+                                +{question.difficulty}
+                              </span>
+                            </button>
+
+                            <button
+                              data-testid="assign-team2-btn"
+                              className="q-score-btn"
+                              onClick={() => handleAssign(2)}
+                              style={{
+                                background: "linear-gradient(160deg,rgba(29,78,216,0.92),rgba(30,58,138,0.97))",
+                                borderColor: "rgba(96,165,250,0.50)",
+                                boxShadow: "0 6px 28px rgba(59,130,246,0.32)",
+                              }}
+                            >
+                              <span style={{ color: "rgba(255,255,255,0.88)", fontWeight: 900, fontSize: "clamp(0.82rem,1.4vw,1.05rem)" }}>
+                                🔵 {session?.team2_name}
+                              </span>
+                              <span style={{ color: "#bfdbfe", fontWeight: 900, fontSize: "clamp(1.4rem,2.6vw,2rem)", lineHeight: 1 }}>
+                                +{question.difficulty}
+                              </span>
+                            </button>
+
+                            <button
+                              data-testid="skip-points-btn"
+                              className="q-skip-btn"
+                              onClick={handleSkip}
+                            >
+                              لا أحد
+                            </button>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Post-assign */}
+                      {assigned && (
+                        <div className="q-post-assign">
+                          {scoredTeam && (
+                            <div style={{
+                              color: "var(--q-text)", fontWeight: 900,
+                              fontSize: "clamp(0.95rem,1.8vw,1.3rem)",
+                              textShadow: "0 0 20px rgba(241,225,148,0.35)",
+                              textAlign: "center",
+                            }}>
+                              ✓ +{question.difficulty} ← {scoredTeam === 1 ? session?.team1_name : session?.team2_name}
+                            </div>
+                          )}
+                          <button
+                            data-testid="continue-btn"
+                            className="q-continue-btn"
+                            onClick={handleBack}
+                          >
+                            العودة للوحة ←
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ══════ RIGHT SIDEBAR ══════ */}
+        <div className="q-sidebar">
+          {/* Lifelines */}
+          <div className="q-helper-card">
+            <div className="q-helper-title">وسائل المساعدة</div>
+            <div className="q-helper-buttons">
+              {[
+                { icon: "⏱️", label: "مزيد وقت" },
+                { icon: "🔄", label: "تغيير السؤال" },
+                { icon: "🎯", label: "مساعدة الجمهور" },
+              ].map((h, i) => (
+                <button
+                  key={i}
+                  className="q-helper-btn"
+                  title={h.label}
+                >
+                  {h.icon}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Team 1 mini score */}
           <div
-            className="rounded-2xl p-3 flex flex-col gap-2.5 shrink-0"
+            className="q-helper-card"
             style={{
-              background: isTeam1 ? "rgba(239,68,68,0.10)" : "rgba(15,2,5,0.7)",
-              border: `1.5px solid ${isTeam1 ? "rgba(239,68,68,0.35)" : "rgba(241,225,148,0.10)"}`,
-              boxShadow: isTeam1 ? "0 0 16px rgba(239,68,68,0.12)" : "none",
-              transition: "all 0.3s",
+              background: isTeam1 ? "rgba(239,68,68,0.10)" : "rgba(12,6,18,0.70)",
+              borderColor: isTeam1 ? "rgba(239,68,68,0.30)" : "rgba(255,180,80,0.08)",
             }}
           >
-            <div className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${isTeam1 ? "animate-pulse" : ""}`}
-                style={{ background: "#f87171", boxShadow: isTeam1 ? "0 0 6px #f87171" : "none" }}
-              />
-              <span className="font-black truncate" style={{ color: "#f87171", fontSize: "clamp(0.7rem,1.1vw,0.85rem)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "0.7rem" }}>🔴</span>
+              <span style={{ fontWeight: 800, fontSize: "0.82rem", color: "#fca5a5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {session?.team1_name || "الفريق الأول"}
               </span>
             </div>
-            {isTeam1 && (
-              <div className="text-center py-1 rounded-xl" style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)" }}>
-                <span style={{ color: "#f87171", fontSize: "0.65rem", fontWeight: 700 }}>دور الإجابة</span>
-              </div>
-            )}
-            <div className="text-center">
-              <span className="text-secondary font-black tabular-nums" style={{ fontSize: "clamp(1.4rem,2.2vw,1.8rem)" }}>
-                {teamScores.team1}
-              </span>
-              <span className="text-secondary/30 text-xs font-medium block">نقطة</span>
+            <div style={{ fontWeight: 900, fontSize: "clamp(1.4rem,2.2vw,1.9rem)", color: "#d4a820", lineHeight: 1 }}>
+              {teamScores.team1}
             </div>
-            <div className="flex justify-center gap-2">
-              {LIFELINES.map((icon, i) => (
-                <div key={i}
-                  className="flex items-center justify-center rounded-xl"
-                  style={{ width: "clamp(28px,3vw,38px)", height: "clamp(28px,3vw,38px)", background: "rgba(241,225,148,0.06)", border: "1px solid rgba(241,225,148,0.12)", fontSize: "clamp(0.75rem,1.3vw,1rem)" }}
-                  title={["مزيد وقت","تغيير سؤال","مساعدة"][i]}
-                >{icon}</div>
-              ))}
-            </div>
+            <div style={{ fontSize: "0.6rem", color: "rgba(212,168,32,0.45)", fontWeight: 700, marginTop: "2px" }}>نقطة</div>
           </div>
 
-          <div style={{ height: "1px", background: "rgba(241,225,148,0.07)" }} />
-
-          {/* Team 2 */}
+          {/* Team 2 mini score */}
           <div
-            className="rounded-2xl p-3 flex flex-col gap-2.5 shrink-0"
+            className="q-helper-card"
             style={{
-              background: !isTeam1 ? "rgba(59,130,246,0.10)" : "rgba(15,2,5,0.7)",
-              border: `1.5px solid ${!isTeam1 ? "rgba(59,130,246,0.35)" : "rgba(241,225,148,0.10)"}`,
-              boxShadow: !isTeam1 ? "0 0 16px rgba(59,130,246,0.12)" : "none",
-              transition: "all 0.3s",
+              background: !isTeam1 ? "rgba(59,130,246,0.10)" : "rgba(12,6,18,0.70)",
+              borderColor: !isTeam1 ? "rgba(59,130,246,0.30)" : "rgba(255,180,80,0.08)",
             }}
           >
-            <div className="flex items-center gap-1.5">
-              <div className={`w-2 h-2 rounded-full ${!isTeam1 ? "animate-pulse" : ""}`}
-                style={{ background: "#60a5fa", boxShadow: !isTeam1 ? "0 0 6px #60a5fa" : "none" }}
-              />
-              <span className="font-black truncate" style={{ color: "#60a5fa", fontSize: "clamp(0.7rem,1.1vw,0.85rem)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "0.7rem" }}>🔵</span>
+              <span style={{ fontWeight: 800, fontSize: "0.82rem", color: "#93c5fd", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {session?.team2_name || "الفريق الثاني"}
               </span>
             </div>
-            {!isTeam1 && (
-              <div className="text-center py-1 rounded-xl" style={{ background: "rgba(59,130,246,0.12)", border: "1px solid rgba(59,130,246,0.25)" }}>
-                <span style={{ color: "#60a5fa", fontSize: "0.65rem", fontWeight: 700 }}>دور الإجابة</span>
-              </div>
-            )}
-            <div className="text-center">
-              <span className="text-secondary font-black tabular-nums" style={{ fontSize: "clamp(1.4rem,2.2vw,1.8rem)" }}>
-                {teamScores.team2}
-              </span>
-              <span className="text-secondary/30 text-xs font-medium block">نقطة</span>
+            <div style={{ fontWeight: 900, fontSize: "clamp(1.4rem,2.2vw,1.9rem)", color: "#d4a820", lineHeight: 1 }}>
+              {teamScores.team2}
             </div>
-            <div className="flex justify-center gap-2">
-              {LIFELINES.map((icon, i) => (
-                <div key={i}
-                  className="flex items-center justify-center rounded-xl"
-                  style={{ width: "clamp(28px,3vw,38px)", height: "clamp(28px,3vw,38px)", background: "rgba(241,225,148,0.06)", border: "1px solid rgba(241,225,148,0.12)", fontSize: "clamp(0.75rem,1.3vw,1rem)" }}
-                  title={["مزيد وقت","تغيير سؤال","مساعدة"][i]}
-                >{icon}</div>
-              ))}
-            </div>
+            <div style={{ fontSize: "0.6rem", color: "rgba(212,168,32,0.45)", fontWeight: 700, marginTop: "2px" }}>نقطة</div>
           </div>
 
-          <div
-            className="rounded-2xl p-3 text-center shrink-0"
-            style={{ background: diffBadge?.bg, border: `1px solid ${diffBadge?.border}` }}
-          >
-            <div style={{ color: diffBadge?.color, fontSize: "clamp(1.6rem,2.8vw,2.4rem)", fontWeight: 900, lineHeight: 1 }}>
-              {question.difficulty}
-            </div>
-            <div style={{ color: diffBadge?.color, fontSize: "0.65rem", fontWeight: 700, opacity: 0.7 }}>
-              {diffBadge?.label}
-            </div>
-          </div>
-        </aside>
+          {/* Continue button (after assign) - also visible in sidebar for easy reach */}
+          {assigned && (
+            <button
+              className="q-continue-btn"
+              onClick={handleBack}
+              style={{ width: "100%" }}
+            >
+              العودة ←
+            </button>
+          )}
+        </div>
 
       </div>
-
-      {/* ════════════ CINEMATIC ANSWER PANEL (slides up from bottom) ════════════ */}
-      {showAnswer && (
-        <div className={`answer-panel${panelVisible ? " visible" : ""}`}>
-
-          {/* Handle bar */}
-          <div className="flex justify-center mb-4">
-            <div style={{ width: 40, height: 4, borderRadius: 99, background: "rgba(241,225,148,0.2)" }} />
-          </div>
-
-          {/* Answer image */}
-          {question.answer_image_url && (
-            <div className="flex justify-center mb-4">
-              <img
-                src={question.answer_image_url}
-                alt="answer"
-                data-testid="answer-image"
-                className="object-contain rounded-2xl cursor-zoom-in transition-transform hover:scale-[1.02]"
-                style={{
-                  maxHeight: "clamp(80px,14vh,160px)",
-                  maxWidth: "min(100%,400px)",
-                  border: "1.5px solid rgba(241,225,148,0.2)",
-                  boxShadow: "0 8px 40px rgba(0,0,0,0.6), 0 0 30px rgba(241,225,148,0.08)",
-                }}
-                onClick={() => setZoomedImage(question.answer_image_url)}
-                onError={e => { e.target.style.display = "none"; }}
-              />
-            </div>
-          )}
-
-          {/* "الإجابة" label */}
-          <div
-            className="text-center mb-2"
-            style={{ color: "rgba(241,225,148,0.4)", fontSize: "clamp(0.65rem,1.1vw,0.8rem)", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase" }}
-          >
-            ◆ الإجابة ◆
-          </div>
-
-          {/* Answer text — BIG, glowing, animated entrance */}
-          <div
-            data-testid="answer-text"
-            className="text-secondary font-black text-center answer-text-glow answer-word-in"
-            style={{
-              fontSize: "clamp(2rem,5.5vw,4rem)",
-              lineHeight: 1.1,
-              letterSpacing: "-0.01em",
-              marginBottom: "clamp(14px,2.2vh,24px)",
-            }}
-          >
-            {question.answer}
-          </div>
-
-          {/* Points badge — gradient gold */}
-          {!assigned && (
-            <div className="flex justify-center mb-4 points-badge-pop">
-              <div
-                style={{
-                  background: "linear-gradient(135deg, #92400e, #d97706, #fbbf24, #d97706, #92400e)",
-                  backgroundSize: "200% auto",
-                  animation: "goldShimmer 3s linear infinite",
-                  color: "#000",
-                  fontWeight: 900,
-                  fontSize: "clamp(0.85rem,1.4vw,1rem)",
-                  padding: "8px 24px",
-                  borderRadius: 99,
-                  boxShadow: "0 0 24px rgba(251,191,36,0.4), 0 4px 16px rgba(0,0,0,0.4)",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                {question.difficulty} نقطة
-              </div>
-            </div>
-          )}
-
-          {/* Score assignment */}
-          {!assigned && (
-            <div>
-              <div
-                className="text-center mb-3"
-                style={{ color: "rgba(241,225,148,0.35)", fontSize: "clamp(0.7rem,1.1vw,0.82rem)", fontWeight: 700, letterSpacing: "0.1em" }}
-              >
-                من أجاب صح؟
-              </div>
-              <div className="flex gap-3 justify-center flex-wrap">
-                <button
-                  data-testid="assign-team1-btn"
-                  onClick={() => handleAssign(1)}
-                  className="score-btn-reveal flex flex-col items-center justify-center rounded-2xl font-bold"
-                  style={{
-                    background: "linear-gradient(160deg, rgba(220,38,38,0.9) 0%, rgba(153,27,27,0.95) 100%)",
-                    border: "1.5px solid rgba(248,113,113,0.5)",
-                    padding: "clamp(10px,1.8vw,18px) clamp(22px,4vw,52px)",
-                    minWidth: "clamp(140px,18vw,220px)",
-                    boxShadow: "0 6px 28px rgba(239,68,68,0.35)",
-                  }}
-                >
-                  <span className="text-white/90 font-black leading-tight" style={{ fontSize: "clamp(0.85rem,1.5vw,1.1rem)" }}>
-                    🔴 {session?.team1_name}
-                  </span>
-                  <span className="text-red-200 font-black tabular-nums leading-none" style={{ fontSize: "clamp(1.5rem,2.8vw,2.2rem)" }}>
-                    +{question.difficulty}
-                  </span>
-                </button>
-
-                <button
-                  data-testid="assign-team2-btn"
-                  onClick={() => handleAssign(2)}
-                  className="score-btn-reveal flex flex-col items-center justify-center rounded-2xl font-bold"
-                  style={{
-                    background: "linear-gradient(160deg, rgba(29,78,216,0.9) 0%, rgba(30,58,138,0.95) 100%)",
-                    border: "1.5px solid rgba(96,165,250,0.5)",
-                    padding: "clamp(10px,1.8vw,18px) clamp(22px,4vw,52px)",
-                    minWidth: "clamp(140px,18vw,220px)",
-                    boxShadow: "0 6px 28px rgba(59,130,246,0.35)",
-                  }}
-                >
-                  <span className="text-white/90 font-black leading-tight" style={{ fontSize: "clamp(0.85rem,1.5vw,1.1rem)" }}>
-                    🔵 {session?.team2_name}
-                  </span>
-                  <span className="text-blue-200 font-black tabular-nums leading-none" style={{ fontSize: "clamp(1.5rem,2.8vw,2.2rem)" }}>
-                    +{question.difficulty}
-                  </span>
-                </button>
-
-                <button
-                  data-testid="skip-points-btn"
-                  onClick={handleSkip}
-                  className="rounded-2xl font-bold text-sm transition-all hover:scale-105 active:scale-95 self-center"
-                  style={{
-                    border: "1.5px solid rgba(241,225,148,0.18)",
-                    color: "rgba(241,225,148,0.35)",
-                    padding: "clamp(10px,1.8vw,18px) clamp(14px,2.5vw,24px)",
-                  }}
-                >
-                  لا أحد
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Post-assignment CTA */}
-          {assigned && (
-            <div className="flex flex-col items-center gap-3 cta-fade-up">
-              {scoredTeam && (
-                <div
-                  className="text-secondary font-black text-center"
-                  style={{ fontSize: "clamp(1rem,2vw,1.4rem)", textShadow: "0 0 20px rgba(241,225,148,0.4)" }}
-                >
-                  ✓ +{question.difficulty} ← {scoredTeam === 1 ? session?.team1_name : session?.team2_name}
-                </div>
-              )}
-              <button
-                data-testid="continue-btn"
-                onClick={handleBack}
-                className="bg-secondary text-primary font-black rounded-full transition-all hover:scale-105 active:scale-95"
-                style={{
-                  fontSize: "clamp(1rem,1.8vw,1.3rem)",
-                  padding: "clamp(10px,1.5vw,16px) clamp(28px,5vw,52px)",
-                  boxShadow: "0 0 32px rgba(241,225,148,0.3)",
-                }}
-              >
-                العودة للوحة ←
-              </button>
-            </div>
-          )}
-
-        </div>
-      )}
-
     </div>
   );
 }
