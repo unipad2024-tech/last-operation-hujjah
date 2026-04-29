@@ -287,13 +287,7 @@ export default function GameBoardPage() {
         /* ── Page ── */
         .game-page {
           min-height: 100svh;
-          height: 100svh;
-          overflow: hidden;
-          padding: 14px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          background: var(--bg);
+          background: #0b0f1a;
           color: var(--text);
           direction: rtl;
           font-family: 'Tajawal', Cairo, sans-serif;
@@ -334,15 +328,14 @@ export default function GameBoardPage() {
           grid-template-columns: 1fr auto 1fr;
           gap: 12px;
           align-items: center;
-          padding: 12px 16px;
-          border-radius: var(--radius-xl);
-          background: linear-gradient(180deg, rgba(20,23,38,0.90), rgba(10,13,24,0.78));
-          border: 1px solid var(--border-soft);
-          border-bottom-color: rgba(214,175,83,0.18);
-          box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
+          padding: 12px 20px;
+          background: linear-gradient(180deg, rgba(20,23,38,0.95), rgba(10,13,24,0.90));
+          border-bottom: 1px solid rgba(214,175,83,0.12);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
-          flex-shrink: 0;
+          position: sticky;
+          top: 0;
+          z-index: 10;
         }
 
         .topbar-left  { display:flex; align-items:center; gap:10px; justify-content:flex-start; }
@@ -449,18 +442,11 @@ export default function GameBoardPage() {
         .end-game-btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
 
         /* ── Board ── */
-        .board-wrap {
-          flex: 1;
-          min-height: 0;
-          display: flex;
-        }
-
         .game-board {
-          width: 100%;
           display: grid;
-          grid-template-columns: repeat(3, minmax(0,1fr));
+          grid-template-columns: repeat(3, 1fr);
           gap: 22px;
-          align-content: stretch;
+          padding: 20px;
         }
 
         /* ── Category Card ── */
@@ -705,19 +691,17 @@ export default function GameBoardPage() {
       </div>
 
       {/* ════════════════ BOARD ════════════════ */}
-      <div className="board-wrap">
-        <div className="game-board">
-          {categories.slice(0, 6).map(cat => (
-            <CategoryCard
-              key={cat.id}
-              cat={cat}
-              isTileUsed={isTileUsed}
-              clickingTile={clickingTile}
-              currentTurn={currentTurn}
-              onTileClick={handleTileClick}
-            />
-          ))}
-        </div>
+      <div className="game-board">
+        {categories.slice(0, 6).map(cat => (
+          <CategoryCard
+            key={cat.id}
+            cat={cat}
+            isTileUsed={isTileUsed}
+            clickingTile={clickingTile}
+            currentTurn={currentTurn}
+            onTileClick={handleTileClick}
+          />
+        ))}
       </div>
 
       {/* ════════════════ ALL DONE BANNER ════════════════ */}
