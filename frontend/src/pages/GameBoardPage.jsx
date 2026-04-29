@@ -305,12 +305,9 @@ export default function GameBoardPage() {
           content: "";
           position: fixed;
           inset: 0;
-          background:
-            linear-gradient(180deg, rgba(8,11,20,0.66), rgba(8,11,20,0.92)),
-            url("/roman-art-bg.jpg") center/cover no-repeat;
-          filter: blur(12px) grayscale(100%) saturate(0.55) brightness(0.72);
-          opacity: 0.18;
-          transform: scale(1.08);
+          background: url("/roman-bg.jpg") center/cover no-repeat;
+          filter: blur(14px) grayscale(100%);
+          opacity: 0.06;
           z-index: 0;
           pointer-events: none;
         }
@@ -462,45 +459,28 @@ export default function GameBoardPage() {
           width: 100%;
           display: grid;
           grid-template-columns: repeat(3, minmax(0,1fr));
-          gap: 16px;
+          gap: 22px;
           align-content: stretch;
         }
 
         /* ── Category Card ── */
         .category-card {
-          border-radius: var(--radius-xl);
-          background: linear-gradient(180deg, rgba(22,26,46,0.94), rgba(11,14,26,0.90));
-          border: 1px solid rgba(214,175,83,0.20);
-          box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,0.04);
-          backdrop-filter: blur(18px);
-          -webkit-backdrop-filter: blur(18px);
-          padding: 14px;
+          height: 340px;
+          border-radius: 22px;
+          background: linear-gradient(180deg, rgba(20,24,40,0.95), rgba(10,12,22,0.90));
+          border: 1px solid rgba(255,255,255,0.06);
+          padding: 16px;
           display: flex;
           flex-direction: column;
-          gap: 12px;
           position: relative;
           overflow: hidden;
           animation: cardIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
-          transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
-        }
-
-        /* subtle inner radial glow */
-        .category-card::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(circle at top, rgba(255,255,255,0.05), transparent 40%),
-            linear-gradient(180deg, rgba(214,175,83,0.03), transparent 50%);
-          pointer-events: none;
+          transition: transform 0.2s ease, filter 0.2s ease;
         }
 
         .category-card:hover {
-          transform: translateY(-3px);
-          border-color: rgba(214,175,83,0.34);
-          box-shadow:
-            0 24px 72px rgba(0,0,0,0.54),
-            inset 0 1px 0 rgba(255,255,255,0.06);
+          transform: translateY(-2px);
+          filter: brightness(1.04);
         }
 
         .category-card:nth-child(1) { animation-delay:0.05s }
@@ -513,30 +493,24 @@ export default function GameBoardPage() {
         /* Card header */
         .category-header {
           text-align: center;
-          position: relative;
-          z-index: 1;
-          padding-bottom: 8px;
-          border-bottom: 1px solid rgba(214,175,83,0.14);
+          margin-bottom: 12px;
         }
 
         .category-title {
-          font-size: clamp(0.92rem,1.3vw,1.12rem);
-          font-weight: 900;
+          font-size: 18px;
+          font-weight: 800;
           color: var(--text);
           line-height: 1.3;
-          text-shadow: 0 2px 10px rgba(0,0,0,0.55);
         }
 
-        /* Card body: [82px | 1fr | 82px] */
+        /* Card body: [80px | 1fr | 80px] */
         .category-body {
           flex: 1;
           min-height: 0;
           display: grid;
-          grid-template-columns: 82px minmax(0,1fr) 82px;
+          grid-template-columns: 80px 1fr 80px;
           gap: 10px;
           align-items: stretch;
-          position: relative;
-          z-index: 1;
         }
 
         /* Value columns */
@@ -544,17 +518,15 @@ export default function GameBoardPage() {
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          gap: 8px;
+          gap: 6px;
         }
 
         /* Center image */
         .center-image {
           position: relative;
-          border-radius: 18px;
+          border-radius: 16px;
           overflow: hidden;
-          border: 1px solid rgba(255,255,255,0.08);
-          background: rgba(255,255,255,0.03);
-          min-height: 190px;
+          background: url("/cat.jpg") center/cover no-repeat;
         }
 
         .center-image img {
@@ -563,74 +535,47 @@ export default function GameBoardPage() {
           object-fit: cover;
           object-position: center;
           display: block;
-          opacity: 0.70;
-          filter: grayscale(0.14) brightness(0.82) contrast(1.03);
-          transform: scale(1.03);
-          transition: transform 0.42s ease;
         }
-        .category-card:hover .center-image img { transform: scale(1.08); }
 
         .center-image::after {
           content: "";
           position: absolute;
           inset: 0;
-          background: linear-gradient(180deg, rgba(0,0,0,0.04), rgba(0,0,0,0.22));
+          background: rgba(0,0,0,0.30);
           pointer-events: none;
         }
 
         /* Value buttons */
         .value-btn {
-          flex: 1;
-          min-height: 0;
+          height: 55px;
           border: none;
-          border-radius: 13px;
-          font-size: clamp(0.85rem,1.1vw,1rem);
+          border-radius: 12px;
+          font-size: 18px;
           font-weight: 900;
           font-family: 'Tajawal', Cairo, sans-serif;
           color: #fff;
           cursor: pointer;
-          box-shadow: 0 6px 16px rgba(0,0,0,0.18);
-          transition: transform 0.18s cubic-bezier(0.34,1.56,0.64,1), filter 0.18s, box-shadow 0.18s;
-          position: relative;
-          overflow: hidden;
-          letter-spacing: 0.01em;
+          transition: transform 0.2s, filter 0.2s;
         }
-        .value-btn::after {
-          content: '';
-          position: absolute;
-          inset: 0;
-          background: rgba(255,255,255,0);
-          transition: background 0.14s;
+        .value-btn:not(.used):not(.waiting):hover {
+          transform: scale(1.05);
+          filter: brightness(1.1);
         }
-        .value-btn:not(.used):not(.waiting):hover::after { background: rgba(255,255,255,0.14); }
-        .value-btn:not(.used):not(.waiting):hover  { transform: translateY(-2px) scale(1.04); }
-        .value-btn:not(.used):not(.waiting):active { transform: scale(0.91); }
+        .value-btn:not(.used):not(.waiting):active { transform: scale(0.92); }
 
-        .value-btn.p300 {
-          background: linear-gradient(180deg, rgba(47,189,109,0.98), rgba(31,153,87,0.98));
-          box-shadow: 0 6px 16px rgba(47,189,109,0.32);
-        }
-        .value-btn.p600 {
-          background: linear-gradient(180deg, rgba(201,146,44,0.98), rgba(161,113,26,0.98));
-          box-shadow: 0 6px 16px rgba(201,146,44,0.32);
-        }
-        .value-btn.p900 {
-          background: linear-gradient(180deg, rgba(185,74,87,0.98), rgba(143,50,61,0.98));
-          box-shadow: 0 6px 16px rgba(185,74,87,0.32);
-        }
+        .value-btn.p300 { background: linear-gradient(180deg, #2ecc71, #1e9e57); }
+        .value-btn.p600 { background: linear-gradient(180deg, #e1a624, #b98517); }
+        .value-btn.p900 { background: linear-gradient(180deg, #d64550, #a9323b); }
 
         .value-btn.waiting {
           opacity: 0.28;
           filter: saturate(0.25);
           cursor: not-allowed;
-          box-shadow: none;
         }
         .value-btn.used {
           background: rgba(255,255,255,0.06) !important;
-          box-shadow: none !important;
           color: rgba(255,255,255,0.20);
           cursor: default;
-          opacity: 1;
           border: 1px solid rgba(255,255,255,0.06);
         }
 
