@@ -40,7 +40,7 @@ function ScoreCounter({ value }) {
 
 /* ── Confetti ── */
 function fireConfetti() {
-  const colors = ["#d8b15a","#ff6b6b","#43e97b","#4facfe","#a78bfa","#fff"];
+  const colors = ["#c9a84c","#e8d08a","#ff6b6b","#43e97b","#fff"];
   for (let i = 0; i < 90; i++) {
     const el = document.createElement("div");
     Object.assign(el.style, {
@@ -60,9 +60,7 @@ function fireConfetti() {
 
 /* ══════════════════════════════════════════════════════
    Category Card
-   Layout: [title] → [left-col (300/600/900) | image | right-col (300/600/900)]
-   left  = slot 1 (team 1)
-   right = slot 2 (team 2)
+   Layout: [left-col team1 | center image+title | right-col team2]
    ══════════════════════════════════════════════════════ */
 function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn }) {
   const [imgErr, setImgErr] = useState(false);
@@ -71,14 +69,17 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
   const bothUsed = (diff)       => slotUsed(diff, 1) && slotUsed(diff, 2);
   const allDone  = DIFFICULTIES.every(d => bothUsed(d));
 
-  const renderValueBtn = (diff, slot) => {
+  const renderBtn = (diff, slot) => {
     const used     = slotUsed(diff, slot);
     const allGone  = bothUsed(diff);
     const key      = `${cat.id}_${diff}_${slot}`;
     const clicking = clickingTile === key;
     const isMyTurn = currentTurn === slot;
     const disabled = used || allGone || !!clickingTile || !isMyTurn;
-    const cls      = `value-btn p${diff}${used || allGone ? " used" : isMyTurn ? "" : " waiting"}`;
+
+    let cls = "point-btn";
+    if (used || allGone) cls += " used";
+    else if (!isMyTurn)  cls += " waiting";
 
     return (
       <button
@@ -94,52 +95,41 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
   };
 
   return (
-    <div className="category-card" style={{ opacity: allDone ? 0.44 : 1 }}>
+    <div className="category-card" style={{ opacity: allDone ? 0.45 : 1 }}>
 
-      {/* Completed overlay */}
       {allDone && (
         <div className="answered-overlay">
-          <div className="answered-check">✓</div>
+          <span className="answered-check">✓</span>
         </div>
       )}
 
-      {/* Title */}
-      <div className="category-header">
-        <h3 className="category-title">{cat.name}</h3>
+      {/* LEFT — Team 1 */}
+      <div className="left-buttons">
+        {DIFFICULTIES.map(d => renderBtn(d, 1))}
       </div>
 
-      {/* Body: left col | image | right col */}
-      <div className="category-body">
-
-        {/* Left — slot 1 (team 1) */}
-        <div className="value-col">
-          {DIFFICULTIES.map(d => renderValueBtn(d, 1))}
-        </div>
-
-        {/* Center image */}
-        <div className="center-image">
+      {/* CENTER — title + image */}
+      <div className="card-center">
+        <div className="category-name">{cat.name}</div>
+        <div className="category-image-wrap">
           {cat.image_url && !imgErr ? (
             <img
+              className="category-image"
               src={cat.image_url}
               alt={cat.name}
               onError={() => setImgErr(true)}
             />
           ) : (
-            <div style={{
-              width: "100%", height: "100%",
-              background: `linear-gradient(135deg,${cat.color || "#1d1b4b"}cc,${cat.color || "#080520"}55)`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "2.6rem",
-            }}>
-              {cat.icon || "🎯"}
+            <div className="category-fallback">
+              <span style={{ fontSize: "2.2rem" }}>{cat.icon || "🎯"}</span>
             </div>
           )}
         </div>
+      </div>
 
-        {/* Right — slot 2 (team 2) */}
-        <div className="value-col">
-          {DIFFICULTIES.map(d => renderValueBtn(d, 2))}
-        </div>
+      {/* RIGHT — Team 2 */}
+      <div className="right-buttons">
+        {DIFFICULTIES.map(d => renderBtn(d, 2))}
       </div>
     </div>
   );
@@ -163,7 +153,7 @@ export default function GameBoardPage() {
   const [clickingTile,   setClickingTile]   = useState(null);
 
   const team1Name = session?.team1_name || "الفريق الأحمر";
-  const team2Name = session?.team2_name || "الفريق الأزرق";
+  const team2Name = session?.team2_name || "الفريق الأخضر";
 
   useEffect(() => {
     if (!session) { navigate("/"); return; }
@@ -224,9 +214,9 @@ export default function GameBoardPage() {
   if (loading) return (
     <div style={{
       height: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-      background: "#080b14", fontFamily: "Tajawal, Cairo, sans-serif",
+      background: "#0d0a07", fontFamily: "Amiri, serif",
     }}>
-      <div style={{ color: "#d8b15a", fontSize: "1.1rem", fontWeight: 700, opacity: 0.85 }}>
+      <div style={{ color: "#c9a84c", fontSize: "1.2rem", fontWeight: 700 }}>
         جاري تحميل اللوحة...
       </div>
     </div>
@@ -242,80 +232,58 @@ export default function GameBoardPage() {
 
   return (
     <div className="game-page">
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap"
-      />
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap" />
 
       {/* ════════════════ ALL STYLES ════════════════ */}
       <style>{`
         :root {
-          --bg:          #080b14;
-          --panel:       rgba(16, 19, 33, 0.82);
-          --panel-2:     rgba(21, 25, 42, 0.78);
-          --border:      rgba(214, 175, 83, 0.38);
-          --border-soft: rgba(255, 255, 255, 0.08);
-          --text:        #f5f0e6;
-          --muted:       rgba(245, 240, 230, 0.72);
-          --gold:        #d8b15a;
-          --gold-soft:   #f1d28d;
-          --emerald:     #2fbd6d;
-          --amber:       #c9922c;
-          --rose:        #b94a57;
-          --shadow:      0 18px 60px rgba(0,0,0,0.42);
-          --radius-xl:   28px;
-          --radius-lg:   22px;
-          --radius-md:   16px;
+          --bg:          #0d0a07;
+          --bg-card:     #12100a;
+          --gold:        #c9a84c;
+          --gold-light:  #e8d08a;
+          --gold-border: #8b6914;
+          --card-border: #6b4f10;
+          --green-btn:   #0f2d0f;
+          --text-cream:  #f5e6c8;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         @keyframes gbFall { to { transform: translateY(110vh) rotate(540deg); opacity:0; } }
         @keyframes cardIn {
-          from { opacity:0; transform:translateY(20px) scale(0.96); }
-          to   { opacity:1; transform:translateY(0)   scale(1);    }
+          from { opacity:0; transform:translateY(16px) scale(0.97); }
+          to   { opacity:1; transform:translateY(0)    scale(1);    }
         }
         @keyframes pulseDot {
           0%,100% { opacity:1; transform:scale(1); }
-          50%      { opacity:0.28; transform:scale(0.58); }
+          50%      { opacity:0.3; transform:scale(0.5); }
         }
         @keyframes winnerIn {
           from { opacity:0; transform:scale(0.88) translateY(20px); }
-          to   { opacity:1; transform:scale(1)    translateY(0);   }
+          to   { opacity:1; transform:scale(1)    translateY(0);    }
         }
 
         /* ── Page ── */
         .game-page {
-          min-height: 100svh;
-          background: #0b0f1a;
-          color: var(--text);
+          min-height: 100vh;
+          background: var(--bg);
+          background-image:
+            radial-gradient(ellipse at 20% 50%, rgba(139,105,20,0.08) 0%, transparent 60%),
+            radial-gradient(ellipse at 80% 50%, rgba(139,105,20,0.08) 0%, transparent 60%);
+          color: var(--text-cream);
           direction: rtl;
-          font-family: 'Tajawal', Cairo, sans-serif;
+          font-family: 'Noto Naskh Arabic', 'Amiri', serif;
           position: relative;
         }
 
-        /* Roman full-page background */
+        /* Roman texture overlay */
         .game-page::before {
           content: "";
           position: fixed;
           inset: 0;
           background: url("/roman-bg.jpg") center/cover no-repeat;
-          filter: blur(14px) grayscale(100%);
-          opacity: 0.06;
-          z-index: 0;
-          pointer-events: none;
-        }
-
-        /* Ambient color glows */
-        .game-page::after {
-          content: "";
-          position: fixed;
-          inset: 0;
-          background:
-            radial-gradient(circle at top left,     rgba(216,177,90,0.14),  transparent 26%),
-            radial-gradient(circle at top right,    rgba(111,87,255,0.10),  transparent 30%),
-            radial-gradient(circle at bottom left,  rgba(216,177,90,0.08),  transparent 24%),
-            radial-gradient(circle at bottom right, rgba(53,208,127,0.06),  transparent 24%);
+          filter: blur(14px) grayscale(100%) sepia(30%);
+          opacity: 0.07;
           z-index: 0;
           pointer-events: none;
         }
@@ -326,149 +294,149 @@ export default function GameBoardPage() {
         .topbar {
           display: grid;
           grid-template-columns: 1fr auto 1fr;
-          gap: 12px;
+          gap: 16px;
           align-items: center;
-          padding: 12px 20px;
-          background: linear-gradient(180deg, rgba(20,23,38,0.95), rgba(10,13,24,0.90));
-          border-bottom: 1px solid rgba(214,175,83,0.12);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
+          padding: 14px 24px;
+          background: linear-gradient(180deg, rgba(18,14,8,0.98), rgba(10,8,4,0.92));
+          border-bottom: 1px solid var(--gold-border);
           position: sticky;
           top: 0;
           z-index: 10;
         }
 
-        .topbar-left  { display:flex; align-items:center; gap:10px; justify-content:flex-start; }
-        .topbar-right { display:flex; align-items:center; gap:10px; justify-content:flex-end; }
+        .topbar-left  { display:flex; align-items:center; justify-content:flex-start; }
+        .topbar-right { display:flex; align-items:center; justify-content:flex-end; gap:10px; }
         .topbar-center {
           display: flex;
-          align-items: center;
-          justify-content: center;
           flex-direction: column;
-          gap: 5px;
-          text-align: center;
-          flex-shrink: 0;
-        }
-
-        .game-title {
-          font-size: clamp(1.6rem, 2.2vw, 2.4rem);
-          font-weight: 900;
-          color: var(--gold-soft);
-          line-height: 1;
-          letter-spacing: 0.5px;
-          text-shadow: 0 0 28px rgba(241,210,141,0.35);
-        }
-
-        /* Score card (left/right panels) */
-        .score-card {
-          padding: 9px 16px;
-          border-radius: 18px;
-          background: linear-gradient(180deg, rgba(22,26,44,0.94), rgba(12,15,27,0.82));
-          border: 1px solid rgba(214,175,83,0.20);
-          display: flex;
           align-items: center;
-          gap: 12px;
-          box-shadow: 0 10px 28px rgba(0,0,0,0.22);
-          transition: all 0.32s ease;
-        }
-        .score-card.active-t1 {
-          border-color: rgba(47,189,109,0.34);
-          box-shadow: 0 0 20px rgba(47,189,109,0.14), 0 10px 28px rgba(0,0,0,0.22);
-        }
-        .score-card.active-t2 {
-          border-color: rgba(79,172,254,0.34);
-          box-shadow: 0 0 20px rgba(79,172,254,0.14), 0 10px 28px rgba(0,0,0,0.22);
+          gap: 6px;
+          flex-shrink: 0;
         }
 
-        .score-label {
-          font-size: 0.80rem;
+        /* Title */
+        .game-title {
+          font-family: 'Amiri', serif;
+          font-size: clamp(2rem, 3vw, 3rem);
           font-weight: 700;
-          color: var(--muted);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          max-width: 120px;
-        }
-        .score-value {
-          font-size: 1.7rem;
-          font-weight: 900;
-          color: var(--gold-soft);
+          background: linear-gradient(180deg, #f0d070 0%, #c9a84c 50%, #8b6914 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          text-shadow: none;
+          letter-spacing: 0.05em;
           line-height: 1;
         }
 
-        /* Turn dot */
-        .turn-dot {
-          width: 7px; height: 7px;
-          border-radius: 50%;
-          flex-shrink: 0;
-          animation: pulseDot 1.4s infinite;
-        }
-
-        /* Turn badge (center) */
+        /* Turn indicator */
         .turn-badge {
-          display: flex; align-items: center; gap: 5px;
+          display: flex; align-items: center; gap: 6px;
           padding: 4px 14px;
-          border-radius: 999px;
+          border-radius: 20px;
           font-size: 0.82rem;
           font-weight: 700;
+          border: 1px solid var(--gold-border);
+          color: var(--gold);
+          background: rgba(201,168,76,0.06);
           white-space: nowrap;
+          font-family: 'Noto Naskh Arabic', serif;
         }
-        .turn-badge.t1 {
-          background: rgba(47,189,109,0.10);
-          border: 1px solid rgba(47,189,109,0.28);
-          color: #6febb0;
-        }
-        .turn-badge.t2 {
-          background: rgba(79,172,254,0.10);
-          border: 1px solid rgba(79,172,254,0.28);
-          color: #93c5fd;
+        .turn-dot {
+          width: 6px; height: 6px;
+          border-radius: 50%;
+          animation: pulseDot 1.4s infinite;
+          flex-shrink: 0;
         }
 
-        /* End game button */
+        /* Score card */
+        .score-card {
+          background: linear-gradient(135deg, #1a1208, #0d0a07);
+          border: 1.5px solid var(--gold-border);
+          border-radius: 8px;
+          padding: 8px 16px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          box-shadow: inset 0 1px 0 rgba(201,168,76,0.15), 0 4px 12px rgba(0,0,0,0.5);
+          transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .score-card.active-t1 {
+          border-color: #4a8c4a;
+          box-shadow: 0 0 14px rgba(74,140,74,0.2), inset 0 1px 0 rgba(201,168,76,0.15);
+        }
+        .score-card.active-t2 {
+          border-color: #8c4a4a;
+          box-shadow: 0 0 14px rgba(140,74,74,0.2), inset 0 1px 0 rgba(201,168,76,0.15);
+        }
+        .score-label {
+          font-size: 0.78rem;
+          font-weight: 700;
+          color: rgba(232,208,138,0.65);
+          white-space: nowrap;
+          font-family: 'Noto Naskh Arabic', serif;
+        }
+        .score-value {
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: var(--gold-light);
+          line-height: 1;
+          font-family: 'Amiri', serif;
+          text-shadow: 0 0 10px rgba(201,168,76,0.4);
+        }
+
+        /* End btn */
         .end-game-btn {
-          border: none;
+          background: linear-gradient(160deg, #3a0f0f, #250909);
+          border: 1.5px solid #6b2020;
+          border-radius: 6px;
+          color: #e8a0a0;
+          font-family: 'Noto Naskh Arabic', serif;
+          font-weight: 700;
+          font-size: 0.85rem;
+          padding: 8px 16px;
           cursor: pointer;
-          padding: 10px 18px;
-          border-radius: 999px;
-          font-family: 'Tajawal', Cairo, sans-serif;
-          font-weight: 800;
-          font-size: 0.88rem;
-          color: #fff;
-          background: linear-gradient(180deg, rgba(176,65,77,0.95), rgba(130,43,54,0.95));
-          box-shadow: 0 10px 26px rgba(176,65,77,0.20);
-          transition: transform 0.16s ease, filter 0.16s ease;
+          transition: all 0.2s;
           white-space: nowrap;
         }
-        .end-game-btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
+        .end-game-btn:hover {
+          border-color: #a03030;
+          background: linear-gradient(160deg, #4a1515, #350c0c);
+          color: #ffc0c0;
+        }
 
         /* ── Board ── */
         .game-board {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 22px;
+          gap: 16px;
           padding: 20px;
         }
 
         /* ── Category Card ── */
         .category-card {
-          height: 340px;
-          border-radius: 22px;
-          background: linear-gradient(180deg, rgba(20,24,40,0.95), rgba(10,12,22,0.90));
-          border: 1px solid rgba(255,255,255,0.06);
-          padding: 16px;
-          display: flex;
-          flex-direction: column;
-          position: relative;
+          background: linear-gradient(160deg, #1c1508 0%, #100d06 100%);
+          border: 2px solid var(--card-border);
+          border-radius: 12px;
           overflow: hidden;
-          animation: cardIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
-          transition: transform 0.2s ease, filter 0.2s ease;
+          position: relative;
+          display: grid;
+          grid-template-columns: 80px 1fr 80px;
+          min-height: 220px;
+          box-shadow:
+            0 0 0 1px rgba(201,168,76,0.12),
+            0 8px 32px rgba(0,0,0,0.6),
+            inset 0 1px 0 rgba(201,168,76,0.08);
+          animation: cardIn 0.4s cubic-bezier(0.22,1,0.36,1) both;
+          transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
         }
-
         .category-card:hover {
+          border-color: var(--gold);
+          box-shadow:
+            0 0 0 1px rgba(201,168,76,0.35),
+            0 12px 40px rgba(0,0,0,0.7),
+            0 0 22px rgba(201,168,76,0.08);
           transform: translateY(-2px);
-          filter: brightness(1.04);
         }
-
         .category-card:nth-child(1) { animation-delay:0.05s }
         .category-card:nth-child(2) { animation-delay:0.10s }
         .category-card:nth-child(3) { animation-delay:0.15s }
@@ -476,161 +444,184 @@ export default function GameBoardPage() {
         .category-card:nth-child(5) { animation-delay:0.25s }
         .category-card:nth-child(6) { animation-delay:0.30s }
 
-        /* Card header */
-        .category-header {
-          text-align: center;
-          margin-bottom: 12px;
-        }
-
-        .category-title {
-          font-size: 18px;
-          font-weight: 800;
-          color: var(--text);
-          line-height: 1.3;
-        }
-
-        /* Card body: [80px | 1fr | 80px] */
-        .category-body {
-          flex: 1;
-          min-height: 0;
-          display: grid;
-          grid-template-columns: 80px 1fr 80px;
-          gap: 10px;
-          align-items: stretch;
-        }
-
-        /* Value columns */
-        .value-col {
+        /* Button columns */
+        .left-buttons, .right-buttons {
           display: flex;
           flex-direction: column;
+          justify-content: space-evenly;
+          align-items: center;
+          padding: 12px 8px;
+          gap: 8px;
+          background: rgba(0,0,0,0.18);
+        }
+        .left-buttons  { border-left:  1px solid rgba(107,79,16,0.4); }
+        .right-buttons { border-right: 1px solid rgba(107,79,16,0.4); }
+
+        /* Center column */
+        .card-center {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
           justify-content: space-between;
+          padding: 10px 8px;
+          gap: 8px;
+        }
+
+        /* Category name */
+        .category-name {
+          color: var(--gold-light);
+          font-family: 'Amiri', serif;
+          font-size: 1rem;
+          font-weight: 700;
+          text-align: center;
+          text-shadow: 0 0 8px rgba(201,168,76,0.35);
+          display: flex;
+          align-items: center;
           gap: 6px;
+          line-height: 1.3;
         }
+        .category-name::before { content: '✦'; color: var(--gold-border); font-size: 0.65em; flex-shrink: 0; }
+        .category-name::after  { content: '✦'; color: var(--gold-border); font-size: 0.65em; flex-shrink: 0; }
 
-        /* Center image */
-        .center-image {
-          position: relative;
-          border-radius: 16px;
+        /* Image */
+        .category-image-wrap {
+          flex: 1;
+          width: 100%;
+          border-radius: 8px;
           overflow: hidden;
-          background: url("/cat.jpg") center/cover no-repeat;
+          border: 1px solid var(--gold-border);
+          min-height: 0;
         }
-
-        .center-image img {
+        .category-image {
           width: 100%;
           height: 100%;
           object-fit: cover;
-          object-position: center;
           display: block;
+          filter: brightness(0.88) saturate(0.8) sepia(0.12);
+        }
+        .category-fallback {
+          width: 100%;
+          height: 100%;
+          min-height: 100px;
+          background: linear-gradient(135deg, #1c1508, #0d0a07);
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
-        .center-image::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: rgba(0,0,0,0.30);
-          pointer-events: none;
-        }
-
-        /* Value buttons */
-        .value-btn {
-          height: 55px;
-          border: none;
-          border-radius: 12px;
-          font-size: 18px;
-          font-weight: 900;
-          font-family: 'Tajawal', Cairo, sans-serif;
-          color: #fff;
+        /* Point buttons */
+        .point-btn {
+          background: linear-gradient(160deg, #1a3a1a 0%, #0f2510 100%);
+          border: 1.5px solid var(--gold-border);
+          border-radius: 8px;
+          color: var(--gold-light);
+          font-family: 'Noto Naskh Arabic', serif;
+          font-size: 0.92rem;
+          font-weight: 700;
+          width: 64px;
+          height: 44px;
           cursor: pointer;
-          transition: transform 0.2s, filter 0.2s;
+          transition: all 0.2s ease;
+          text-shadow: 0 0 6px rgba(201,168,76,0.25);
+          box-shadow: inset 0 1px 0 rgba(201,168,76,0.12), 0 2px 8px rgba(0,0,0,0.4);
+          position: relative;
+          overflow: hidden;
         }
-        .value-btn:not(.used):not(.waiting):hover {
-          transform: scale(1.05);
-          filter: brightness(1.1);
+        .point-btn::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(201,168,76,0.35), transparent);
         }
-        .value-btn:not(.used):not(.waiting):active { transform: scale(0.92); }
-
-        .value-btn.p300 { background: linear-gradient(180deg, #2ecc71, #1e9e57); }
-        .value-btn.p600 { background: linear-gradient(180deg, #e1a624, #b98517); }
-        .value-btn.p900 { background: linear-gradient(180deg, #d64550, #a9323b); }
-
-        .value-btn.waiting {
-          opacity: 0.28;
-          filter: saturate(0.25);
+        .point-btn:not(.used):not(.waiting):hover {
+          background: linear-gradient(160deg, #2a5a2a 0%, #1a3a1a 100%);
+          border-color: var(--gold);
+          color: #fff;
+          transform: scale(1.06);
+          box-shadow: 0 0 12px rgba(201,168,76,0.25), inset 0 1px 0 rgba(201,168,76,0.25);
+        }
+        .point-btn:not(.used):not(.waiting):active {
+          transform: scale(0.95);
+        }
+        .point-btn.waiting {
+          opacity: 0.22;
           cursor: not-allowed;
+          filter: saturate(0.1);
         }
-        .value-btn.used {
-          background: rgba(255,255,255,0.06) !important;
-          color: rgba(255,255,255,0.20);
+        .point-btn.used {
+          background: #0d0d0d !important;
+          border-color: #2a2a2a !important;
+          color: #333 !important;
           cursor: default;
-          border: 1px solid rgba(255,255,255,0.06);
+          box-shadow: none;
         }
+        .point-btn.used::before { display: none; }
 
         /* Answered overlay */
         .answered-overlay {
           position: absolute; inset: 0; z-index: 2;
           display: flex; align-items: center; justify-content: center;
-          background: rgba(7,5,20,0.65);
-          backdrop-filter: blur(4px);
+          background: rgba(5,4,2,0.72);
+          backdrop-filter: blur(3px);
         }
         .answered-check {
-          width: 52px; height: 52px;
-          background: rgba(47,189,109,0.12);
-          border: 2px solid #2fbd6d;
+          width: 48px; height: 48px;
+          background: rgba(201,168,76,0.1);
+          border: 2px solid var(--gold-border);
           border-radius: 50%;
           display: flex; align-items: center; justify-content: center;
-          font-size: 1.5rem; color: #2fbd6d;
-          font-family: sans-serif;
+          font-size: 1.4rem; color: var(--gold);
         }
 
         /* ── Modal ── */
         .modal-bg {
           position: fixed; inset: 0; z-index: 50;
           display: flex; align-items: center; justify-content: center; padding: 16px;
-          background: rgba(8,6,20,0.88);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
+          background: rgba(5,3,1,0.90);
+          backdrop-filter: blur(10px);
         }
         .modal-box {
-          background: linear-gradient(155deg, rgba(22,18,56,0.98), rgba(8,6,22,0.99));
-          border: 1px solid rgba(214,175,83,0.22);
-          border-radius: 24px;
+          background: linear-gradient(160deg, #1c1508, #100d06);
+          border: 2px solid var(--card-border);
+          border-radius: 14px;
           padding: clamp(22px,3vw,36px);
           max-width: 360px; width: 100%;
           text-align: center;
-          box-shadow: 0 24px 80px rgba(0,0,0,0.72);
-          font-family: 'Tajawal', Cairo, sans-serif;
+          box-shadow: 0 0 0 1px rgba(201,168,76,0.12), 0 24px 80px rgba(0,0,0,0.8);
+          font-family: 'Noto Naskh Arabic', serif;
         }
 
-        /* ── Winner ── */
+        /* ── Winner screen ── */
         .winner-screen {
           position: fixed; inset: 0; z-index: 60;
           display: flex; flex-direction: column;
           align-items: center; justify-content: center;
           padding: 24px; text-align: center;
-          background: linear-gradient(135deg,rgba(8,6,20,0.97),rgba(4,3,12,0.99));
+          background: radial-gradient(ellipse at center, #1a1208 0%, #0d0a07 100%);
           backdrop-filter: blur(24px);
           animation: winnerIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
-          font-family: 'Tajawal', Cairo, sans-serif;
+          font-family: 'Amiri', serif;
         }
 
         /* ── Done banner ── */
         .done-banner {
           position: fixed; bottom:0; left:0; right:0; z-index:40;
           padding: 14px; text-align: center;
-          background: rgba(8,6,20,0.96);
-          backdrop-filter: blur(14px);
-          border-top: 1px solid rgba(214,175,83,0.26);
+          background: rgba(10,8,4,0.97);
+          border-top: 1px solid var(--gold-border);
         }
 
         /* ── Responsive ── */
         @media (max-width: 1100px) {
-          .game-board { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
-          .topbar { grid-template-columns: 1fr !important; text-align: center; }
+          .game-board { grid-template-columns: repeat(2,1fr) !important; }
+          .topbar { grid-template-columns: 1fr !important; }
           .topbar-left, .topbar-right { justify-content: center; }
         }
         @media (max-width: 700px) {
           .game-board { grid-template-columns: 1fr !important; }
-          .category-body { grid-template-columns: 68px minmax(0,1fr) 68px; gap:8px; }
+          .category-card { grid-template-columns: 72px 1fr 72px; }
+          .point-btn { width: 58px; font-size: 0.82rem; }
         }
       `}</style>
 
@@ -640,9 +631,7 @@ export default function GameBoardPage() {
         {/* Left — Team 1 */}
         <div className="topbar-left">
           <div className={`score-card ${currentTurn === 1 ? "active-t1" : ""}`}>
-            {currentTurn === 1 && (
-              <span className="turn-dot" style={{ background: "#2fbd6d" }} />
-            )}
+            {currentTurn === 1 && <span className="turn-dot" style={{ background: "#4a8c4a" }} />}
             <div>
               <div className="score-label">🔴 {team1Name}</div>
               <div data-testid="team1-score" className="score-value">
@@ -652,17 +641,11 @@ export default function GameBoardPage() {
           </div>
         </div>
 
-        {/* Center — Title + turn */}
+        {/* Center */}
         <div className="topbar-center">
           <div className="game-title">حُجّة</div>
-          <div
-            data-testid="turn-indicator"
-            className={`turn-badge ${currentTurn === 1 ? "t1" : "t2"}`}
-          >
-            <span
-              className="turn-dot"
-              style={{ background: currentTurn === 1 ? "#2fbd6d" : "#4facfe" }}
-            />
+          <div data-testid="turn-indicator" className="turn-badge">
+            <span className="turn-dot" style={{ background: currentTurn === 1 ? "#4a8c4a" : "#8c4a4a" }} />
             دور {currentTurn === 1 ? team1Name : team2Name}
           </div>
         </div>
@@ -671,20 +654,14 @@ export default function GameBoardPage() {
         <div className="topbar-right">
           <div className={`score-card ${currentTurn === 2 ? "active-t2" : ""}`}>
             <div style={{ textAlign: "left" }}>
-              <div className="score-label">🔵 {team2Name}</div>
+              <div className="score-label">🟢 {team2Name}</div>
               <div data-testid="team2-score" className="score-value" style={{ textAlign: "left" }}>
                 <ScoreCounter value={teamScores.team2} />
               </div>
             </div>
-            {currentTurn === 2 && (
-              <span className="turn-dot" style={{ background: "#4facfe" }} />
-            )}
+            {currentTurn === 2 && <span className="turn-dot" style={{ background: "#8c4a4a" }} />}
           </div>
-          <button
-            data-testid="end-game-btn"
-            className="end-game-btn"
-            onClick={() => setShowEndConfirm(true)}
-          >
+          <button data-testid="end-game-btn" className="end-game-btn" onClick={() => setShowEndConfirm(true)}>
             إنهاء
           </button>
         </div>
@@ -707,20 +684,16 @@ export default function GameBoardPage() {
       {/* ════════════════ ALL DONE BANNER ════════════════ */}
       {allUsed && !showWinner && (
         <div className="done-banner">
-          <div style={{
-            fontWeight: 900, fontSize: "1.1rem",
-            color: "var(--gold-soft)", marginBottom: "10px",
-          }}>
+          <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "var(--gold-light)", marginBottom: "10px", fontFamily: "Amiri, serif" }}>
             {winner === "تعادل" ? "🤝 تعادل!" : `🏆 ${winner} فاز!`}
           </div>
           <button
             onClick={() => { fireConfetti(); setShowWinner(true); }}
             style={{
-              padding: "10px 28px", borderRadius: "50px",
-              fontFamily: "Tajawal, Cairo, sans-serif", fontWeight: 900, fontSize: "0.95rem",
-              background: "linear-gradient(135deg,#d8b15a,#b0902a)",
-              color: "#0d0900", border: "none", cursor: "pointer",
-              boxShadow: "0 4px 22px rgba(216,177,90,0.40)",
+              padding: "10px 28px", borderRadius: "8px",
+              fontFamily: "Noto Naskh Arabic, serif", fontWeight: 700, fontSize: "0.95rem",
+              background: "linear-gradient(160deg,#c9a84c,#8b6914)",
+              color: "#0d0a07", border: "none", cursor: "pointer",
             }}
           >
             عرض النتيجة النهائية
@@ -732,21 +705,21 @@ export default function GameBoardPage() {
       {showEndConfirm && (
         <div className="modal-bg">
           <div className="modal-box">
-            <div style={{ fontWeight: 900, fontSize: "1.35rem", color: "var(--gold-soft)", marginBottom: "8px" }}>
+            <div style={{ fontWeight: 700, fontSize: "1.3rem", color: "var(--gold-light)", marginBottom: "8px", fontFamily: "Amiri, serif" }}>
               إنهاء اللعبة؟
             </div>
-            <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.38)", marginBottom: "24px" }}>
+            <div style={{ fontSize: "0.85rem", color: "rgba(232,208,138,0.4)", marginBottom: "24px" }}>
               سيتم إعلان الفائز الحالي
             </div>
             <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
               <button
                 onClick={handleEndGame}
                 style={{
-                  padding: "10px 24px", borderRadius: "50px",
-                  fontFamily: "Tajawal, Cairo, sans-serif", fontWeight: 900, fontSize: "0.95rem",
-                  background: "linear-gradient(135deg,rgba(185,74,87,0.92),rgba(143,50,61,0.95))",
-                  color: "#fff", border: "1px solid rgba(185,74,87,0.44)",
-                  cursor: "pointer", boxShadow: "0 4px 18px rgba(185,74,87,0.28)",
+                  padding: "10px 24px", borderRadius: "8px",
+                  fontFamily: "Noto Naskh Arabic, serif", fontWeight: 700, fontSize: "0.95rem",
+                  background: "linear-gradient(160deg,#3a0f0f,#250909)",
+                  color: "#e8a0a0", border: "1.5px solid #6b2020",
+                  cursor: "pointer",
                 }}
               >
                 نعم، إنهاء
@@ -754,10 +727,10 @@ export default function GameBoardPage() {
               <button
                 onClick={() => setShowEndConfirm(false)}
                 style={{
-                  padding: "10px 24px", borderRadius: "50px",
-                  fontFamily: "Tajawal, Cairo, sans-serif", fontWeight: 700, fontSize: "0.95rem",
-                  background: "transparent", color: "rgba(255,255,255,0.40)",
-                  border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
+                  padding: "10px 24px", borderRadius: "8px",
+                  fontFamily: "Noto Naskh Arabic, serif", fontWeight: 700, fontSize: "0.95rem",
+                  background: "transparent", color: "rgba(232,208,138,0.4)",
+                  border: "1.5px solid rgba(107,79,16,0.4)", cursor: "pointer",
                 }}
               >
                 رجوع
@@ -771,30 +744,30 @@ export default function GameBoardPage() {
       {showWinner && (
         <div className="winner-screen">
           <div style={{ fontSize: "clamp(3.5rem,7vw,6rem)", marginBottom: "8px" }}>🏆</div>
-          <div style={{
-            fontWeight: 600, fontSize: "0.95rem",
-            color: "rgba(241,210,141,0.52)", marginBottom: "6px",
-          }}>
+          <div style={{ fontWeight: 400, fontSize: "1rem", color: "rgba(232,208,138,0.5)", marginBottom: "6px", fontFamily: "Amiri, serif" }}>
             الفائز
           </div>
           <div style={{
-            fontWeight: 900, fontSize: "clamp(2.2rem,5vw,4.5rem)",
-            color: "var(--gold-soft)", marginBottom: "28px", lineHeight: 1.1,
-            textShadow: "0 4px 30px rgba(241,210,141,0.42)",
+            fontWeight: 700, fontSize: "clamp(2rem,5vw,4rem)",
+            background: "linear-gradient(180deg,#f0d070,#c9a84c,#8b6914)",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+            backgroundClip: "text", marginBottom: "28px", lineHeight: 1.2,
+            fontFamily: "Amiri, serif",
           }}>
             {winner === "تعادل" ? "🤝 تعادل!" : winner}
           </div>
           <div style={{ display: "flex", gap: "20px", marginBottom: "32px" }}>
             {[
-              { name: team1Name, score: teamScores.team1, color: "#2fbd6d" },
-              { name: team2Name, score: teamScores.team2, color: "#4facfe" },
+              { name: team1Name, score: teamScores.team1, color: "#4a8c4a" },
+              { name: team2Name, score: teamScores.team2, color: "#8c4a4a" },
             ].map(({ name, score, color }) => (
               <div key={name} style={{
-                textAlign: "center", borderRadius: "18px", padding: "16px 28px",
-                background: `${color}10`, border: `1px solid ${color}32`,
+                textAlign: "center", borderRadius: "10px", padding: "14px 24px",
+                background: "linear-gradient(160deg,#1c1508,#100d06)",
+                border: `1.5px solid ${color}55`,
               }}>
-                <div style={{ fontWeight: 700, fontSize: "0.88rem", color, marginBottom: "6px" }}>{name}</div>
-                <div style={{ fontWeight: 900, fontSize: "2.2rem", color: "var(--gold-soft)" }}>{score}</div>
+                <div style={{ fontWeight: 700, fontSize: "0.85rem", color, marginBottom: "6px", fontFamily: "Noto Naskh Arabic, serif" }}>{name}</div>
+                <div style={{ fontWeight: 700, fontSize: "2rem", color: "var(--gold-light)", fontFamily: "Amiri, serif" }}>{score}</div>
               </div>
             ))}
           </div>
@@ -811,14 +784,11 @@ export default function GameBoardPage() {
               } else { resetGame(); navigate("/"); }
             }}
             style={{
-              padding: "clamp(12px,1.5vh,18px) clamp(32px,4vw,56px)",
-              borderRadius: "50px",
-              fontFamily: "Tajawal, Cairo, sans-serif",
-              fontWeight: 900,
-              fontSize: "clamp(1rem,1.5vw,1.2rem)",
-              background: "linear-gradient(135deg,#d8b15a,#b0902a)",
-              color: "#0a0700", border: "none", cursor: "pointer",
-              boxShadow: "0 6px 32px rgba(216,177,90,0.42)",
+              padding: "12px 44px", borderRadius: "8px",
+              fontFamily: "Noto Naskh Arabic, serif", fontWeight: 700, fontSize: "1rem",
+              background: "linear-gradient(160deg,#c9a84c,#8b6914)",
+              color: "#0d0a07", border: "none", cursor: "pointer",
+              boxShadow: "0 6px 24px rgba(201,168,76,0.3)",
             }}
           >
             {gameMode === "tournament" ? "🏆 العودة للبطولة" : "🎮 لعبة جديدة"}
