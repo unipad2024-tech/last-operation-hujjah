@@ -10,6 +10,7 @@ import { X, ZoomIn, Pause, Play, RotateCcw } from "lucide-react";
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const ROMAN_BG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
+const FONT_LINK = "https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;700;800;900&display=swap";
 
 export default function QuestionPage() {
   const navigate  = useNavigate();
@@ -101,14 +102,15 @@ export default function QuestionPage() {
   return (
     <div style={{
       minHeight: "100svh",
-      background: `linear-gradient(180deg,rgba(8,6,10,0.84),rgba(8,6,10,0.95)),url("${ROMAN_BG}")`,
+      background: `linear-gradient(180deg,rgba(8,6,12,0.70),rgba(8,6,12,0.80)),url("${ROMAN_BG}")`,
       backgroundSize: "cover", backgroundPosition: "center 30%", backgroundAttachment: "fixed",
-      fontFamily: "Cairo, sans-serif", color: "#f7f1e8", overflowX: "hidden",
+      fontFamily: "'Cairo', 'Tajawal', sans-serif", color: "#f7f1e8", overflowX: "hidden",
     }}>
+      <link rel="stylesheet" href={FONT_LINK} />
       <style>{`
         :root {
           --accent: #ff7a2f; --accent-2: #ffb347;
-          --panel: rgba(22,18,28,0.84); --panel-2: rgba(36,28,44,0.90);
+          --panel: rgba(255,255,255,0.07); --panel-2: rgba(255,255,255,0.10);
           --stroke: rgba(255,151,87,0.30); --stroke-2: rgba(255,201,130,0.20);
           --text: #f7f1e8; --muted: rgba(247,241,232,0.65);
           --shadow: 0 18px 50px rgba(0,0,0,0.40);
@@ -136,10 +138,10 @@ export default function QuestionPage() {
           gap: 14px;
           padding: 12px 16px;
           border-radius: 18px;
-          background: rgba(12,10,16,0.74);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          border: 1px solid rgba(255,255,255,0.07);
+          background: rgba(255,255,255,0.07);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          border: 1px solid rgba(255,255,255,0.11);
           box-shadow: var(--shadow);
         }
 
@@ -187,7 +189,7 @@ export default function QuestionPage() {
           min-height: 68vh;
           border-radius: 28px;
           padding: clamp(18px,2vw,28px);
-          background: linear-gradient(180deg,rgba(255,126,52,0.12),rgba(18,16,24,0.94)), rgba(18,16,24,0.92);
+          background: linear-gradient(180deg,rgba(255,126,52,0.10),rgba(255,255,255,0.06));
           border: 2px solid rgba(255,126,52,0.65);
           box-shadow: var(--shadow);
           overflow: hidden;
@@ -253,7 +255,7 @@ export default function QuestionPage() {
         }
         .answer-modal {
           width: min(620px,94vw);
-          background: linear-gradient(155deg,rgba(22,18,30,0.98),rgba(10,7,16,0.99));
+          background: rgba(255,255,255,0.08); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
           border: 1.5px solid rgba(255,126,52,0.45);
           border-radius: 26px;
           padding: clamp(26px,3.5vw,42px);

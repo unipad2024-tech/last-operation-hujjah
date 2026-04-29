@@ -94,10 +94,10 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
     const used      = isUsed(diff, slot);
     const gone      = bothDone(diff);
     const loading   = clickingTile === k;
-    const myTurn    = currentTurn === slot;
-    const disabled  = used || gone || !!clickingTile || !myTurn;
+    const disabled  = used || gone || !!clickingTile;
 
-    const p = used || gone ? DP[diff].spent : myTurn ? DP[diff].on : DP[diff].off;
+    /* no turn-locking — any team can pick at any time */
+    const p = used || gone ? DP[diff].spent : DP[diff].on;
 
     return (
       <button
@@ -126,13 +126,13 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
           overflow: "hidden",
         }}
         onMouseEnter={e => {
-          if (myTurn && !used && !gone) {
+          if (!used && !gone) {
             e.currentTarget.style.transform = "scale(1.07) translateY(-2px)";
             e.currentTarget.style.filter    = "brightness(1.28)";
           }
         }}
         onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.filter = ""; }}
-        onMouseDown={e  => { if (myTurn && !used && !gone) e.currentTarget.style.transform = "scale(.91)"; }}
+        onMouseDown={e  => { if (!used && !gone) e.currentTarget.style.transform = "scale(.91)"; }}
         onMouseUp={e    => { e.currentTarget.style.transform = ""; }}
       >
         {loading
