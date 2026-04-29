@@ -199,7 +199,7 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
   }
 
   /* ── card shell ── */
-  const cardShadow = "0 10px 50px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,.05)";
+  const cardShadow = "0 8px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.12), inset 0 0 0 1px rgba(255,255,255,.04)";
 
   return (
     <div
@@ -209,15 +209,15 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
         borderRadius: 24,
         overflow: "hidden",
         border: allDone
-          ? "1px solid rgba(255,255,255,.05)"
-          : "1px solid rgba(212,175,55,.18)",
+          ? "1px solid rgba(255,255,255,.07)"
+          : "1px solid rgba(212,175,55,.32)",
         opacity: allDone ? .34 : 1,
         display: "flex",
         flexDirection: "row",         /* LEFT PILLS | CENTER | RIGHT PILLS */
         alignItems: "stretch",
-        background: "rgba(10, 9, 18, .80)",
-        backdropFilter: "blur(32px) saturate(1.5)",
-        WebkitBackdropFilter: "blur(32px) saturate(1.5)",
+        background: "rgba(255,255,255,.07)",
+        backdropFilter: "blur(22px) saturate(1.6)",
+        WebkitBackdropFilter: "blur(22px) saturate(1.6)",
         boxShadow: cardShadow,
         transition: "transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .28s",
       }}
@@ -554,7 +554,7 @@ export default function GameBoardPage() {
   /* ════════════════════════════════════════════════════════════════ */
   return (
     <>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" />
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;700;800;900&display=swap" />
       <style>{`
         @keyframes hj-fall    { to { transform:translateY(110vh) rotate(560deg); opacity:0; } }
         @keyframes hj-fadein  { from { opacity:0; transform:translateY(20px) scale(.96); } to { opacity:1; transform:none; } }
@@ -570,11 +570,11 @@ export default function GameBoardPage() {
         height: "100vh",
         display: "flex",
         flexDirection: "column",
-        background: "#07080d",
+        background: "#0c0d14",
         backgroundImage: [
-          "radial-gradient(ellipse 80% 55% at 50% -8%, rgba(212,175,55,.09) 0%, transparent 65%)",
-          "radial-gradient(ellipse 55% 40% at 92% 105%, rgba(99,102,241,.05) 0%, transparent 60%)",
-          "radial-gradient(ellipse 42% 38% at 8%  100%, rgba(231,76,60,.04) 0%, transparent 58%)",
+          "radial-gradient(ellipse 80% 55% at 50% -8%, rgba(212,175,55,.14) 0%, transparent 65%)",
+          "radial-gradient(ellipse 55% 40% at 92% 105%, rgba(99,102,241,.07) 0%, transparent 60%)",
+          "radial-gradient(ellipse 42% 38% at 8%  100%, rgba(231,76,60,.06) 0%, transparent 58%)",
         ].join(","),
         direction: "rtl",
         fontFamily: "Cairo, sans-serif",
@@ -588,8 +588,13 @@ export default function GameBoardPage() {
           position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none",
           backgroundImage: "url('/roman-bg.jpg')",
           backgroundSize: "cover", backgroundPosition: "center",
-          opacity: .065,
-          filter: "blur(8px) grayscale(62%) sepia(18%)",
+          opacity: .18,
+          filter: "blur(5px) grayscale(50%) sepia(15%)",
+        }} />
+        {/* dark overlay so background doesn't distract */}
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none",
+          background: "linear-gradient(180deg, rgba(7,8,13,.72) 0%, rgba(7,8,13,.62) 50%, rgba(7,8,13,.78) 100%)",
         }} />
         {/* subtle noise */}
         <div style={{
@@ -609,11 +614,11 @@ export default function GameBoardPage() {
           alignItems: "center",
           gap: 12,
           padding: "10px 22px",
-          background: "rgba(7,8,13,.96)",
-          borderBottom: "1px solid rgba(212,175,55,.11)",
+          background: "rgba(255,255,255,.06)",
+          borderBottom: "1px solid rgba(212,175,55,.2)",
           backdropFilter: "blur(28px) saturate(1.6)",
           WebkitBackdropFilter: "blur(28px) saturate(1.6)",
-          boxShadow: "0 6px 50px rgba(0,0,0,.65), inset 0 -1px 0 rgba(212,175,55,.06)",
+          boxShadow: "0 6px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.08), inset 0 -1px 0 rgba(212,175,55,.1)",
         }}>
 
           {/* Team 1 */}
@@ -630,13 +635,17 @@ export default function GameBoardPage() {
           {/* Center */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
             <div style={{
-              fontFamily: "Cairo, sans-serif", fontWeight: 900,
-              fontSize: "clamp(1.9rem,2.6vw,2.8rem)",
+              fontFamily: "'Cairo', 'Tajawal', sans-serif",
+              fontWeight: 900,
+              fontSize: "clamp(1.85rem,2.5vw,2.7rem)",
               background: "linear-gradient(160deg,#f5e090 0%,#d4af37 45%,#8b6a10 100%)",
               WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
               backgroundClip: "text",
-              letterSpacing: ".06em", lineHeight: 1,
-              filter: "drop-shadow(0 0 20px rgba(212,175,55,.52))",
+              letterSpacing: "0",
+              lineHeight: 1.5,
+              padding: "0 6px",
+              overflow: "visible",
+              filter: "drop-shadow(0 0 18px rgba(212,175,55,.5))",
             }}>حُجّة</div>
 
             <div
