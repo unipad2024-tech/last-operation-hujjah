@@ -345,8 +345,8 @@ export default function GameModeSelectPage() {
             {/* Popular badge */}
             <div className="absolute top-5 left-5">
               <span
-                className="px-3 py-1.5 rounded-full font-black text-xs text-white"
-                style={{ background: "linear-gradient(135deg,#15803d,#166534)", boxShadow: "0 2px 10px rgba(22,163,74,0.4)" }}
+                className="px-3 py-1.5 rounded-full font-black text-xs"
+                style={{ background: "rgba(74,222,128,0.15)", border: "1.5px solid rgba(74,222,128,0.55)", color: "#4ade80", boxShadow: "0 0 14px rgba(74,222,128,0.25)" }}
               >
                 ⭐ الأكثر شيوعاً
               </span>
@@ -363,9 +363,9 @@ export default function GameModeSelectPage() {
               {/* Icon */}
               <div
                 className="text-[5.5rem] mb-5 leading-none transition-transform duration-400 group-hover:scale-110 inline-block"
-                style={{ filter: "drop-shadow(0 4px 24px rgba(241,225,148,0.3))" }}
+                style={{ filter: "drop-shadow(0 0 20px rgba(241,225,148,0.70)) drop-shadow(0 4px 12px rgba(0,0,0,0.8))" }}
               >
-                ⚔
+                ⚔️
               </div>
 
               {/* Title */}

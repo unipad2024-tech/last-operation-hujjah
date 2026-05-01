@@ -3,7 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { toast } from "sonner";
 
-const DARK_BG = { background: "radial-gradient(ellipse at top, #3D0810 0%, #1a0205 40%, #0f0102 100%)" };
+const ROMAN_BG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
+const DARK_BG = {
+  backgroundImage: `linear-gradient(rgba(8,0,2,0.78), rgba(4,0,1,0.90)), url("${ROMAN_BG}")`,
+  backgroundSize: "cover",
+  backgroundPosition: "center 30%",
+  backgroundAttachment: "fixed",
+};
 
 export default function TeamSetupPage() {
   const navigate = useNavigate();
