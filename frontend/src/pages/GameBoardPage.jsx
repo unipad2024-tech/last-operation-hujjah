@@ -769,41 +769,52 @@ export default function GameBoardPage() {
             display:"flex", flexDirection:"column",
             alignItems:"center", justifyContent:"center",
             padding:28, textAlign:"center",
-            background:"rgba(242,235,218,.96)",
-            backdropFilter:"blur(24px)",
+            background:"rgba(4,2,8,0.88)",
+            backdropFilter:"blur(18px)",
             animation:"hj-winner .5s cubic-bezier(.22,1,.36,1) both",
             fontFamily:"Cairo,sans-serif",
           }}>
-            {/* classical bg peek in winner */}
+            {/* Roman bg — dark cinematic */}
             <div style={{
               position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
               backgroundImage:"url('/roman-bg.jpg')",
               backgroundSize:"cover", backgroundPosition:"center",
-              opacity:.15, filter:"sepia(30%) brightness(1.1)",
+              opacity:.28, filter:"sepia(20%) brightness(.7) contrast(1.1)",
+            }}/>
+            {/* gold vignette glow */}
+            <div style={{
+              position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
+              background:"radial-gradient(ellipse at center, rgba(201,168,76,0.10) 0%, transparent 65%)",
             }}/>
             <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center" }}>
-              <div style={{ fontSize:"clamp(3rem,7vw,5rem)", marginBottom:8 }}>🏆</div>
-              <div style={{ fontSize:".78rem", fontWeight:700, color:"rgba(92,61,16,.5)", marginBottom:6, letterSpacing:".1em" }}>الفائز</div>
+              <div style={{ fontSize:"clamp(3rem,7vw,5rem)", marginBottom:8, filter:"drop-shadow(0 0 24px rgba(201,168,76,0.60))" }}>🏆</div>
               <div style={{
-                fontWeight:900, fontSize:"clamp(2rem,4.5vw,4rem)",
-                color:"#5c3d10",
-                textShadow:"0 2px 8px rgba(92,61,16,.2)",
-                marginBottom:28, lineHeight:1.15,
+                fontSize:".8rem", fontWeight:700,
+                color:"rgba(201,168,76,0.60)",
+                marginBottom:4, letterSpacing:".20em",
+                textTransform:"uppercase",
+              }}>الفريق الفائز</div>
+              <div style={{
+                fontWeight:900, fontSize:"clamp(2.2rem,5vw,4.4rem)",
+                color:"#f5e090",
+                textShadow:"0 0 36px rgba(201,168,76,0.55), 0 2px 8px rgba(0,0,0,0.60)",
+                marginBottom:32, lineHeight:1.15,
               }}>
                 {winner==="تعادل"?"🤝 تعادل!":winner}
               </div>
-              <div style={{ display:"flex", gap:20, marginBottom:32 }}>
-                {[{name:team1Name,score:teamScores.team1,c:"#b33a3a"},{name:team2Name,score:teamScores.team2,c:"#2a5fa8"}]
+              <div style={{ display:"flex", gap:20, marginBottom:36 }}>
+                {[{name:team1Name,score:teamScores.team1,c:"#f5a0a0"},{name:team2Name,score:teamScores.team2,c:"#90b8f0"}]
                   .map(({name,score,c})=>(
                     <div key={name} style={{
-                      textAlign:"center", borderRadius:16,
-                      padding:"16px 28px",
-                      background:"linear-gradient(155deg,#5c3d2a,#3d2418)",
-                      border:"2px solid #c9a84c",
-                      boxShadow:"0 0 0 1px #8b6a10, 0 8px 28px rgba(40,20,8,.4)",
+                      textAlign:"center", borderRadius:18,
+                      padding:"18px 32px",
+                      background:"rgba(255,255,255,0.06)",
+                      border:"1.5px solid rgba(201,168,76,0.35)",
+                      boxShadow:"0 0 0 1px rgba(139,106,16,0.25), 0 12px 40px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.08)",
+                      backdropFilter:"blur(10px)",
                     }}>
-                      <div style={{ fontSize:".72rem", fontWeight:700, color:c==="b33a3a"?"#f5a0a0":"#90b8f0", marginBottom:6, letterSpacing:".05em" }}>{name}</div>
-                      <div style={{ fontSize:"2.1rem", fontWeight:900, color:"#f5e090" }}>{score}</div>
+                      <div style={{ fontSize:".74rem", fontWeight:700, color:c, marginBottom:8, letterSpacing:".06em" }}>{name}</div>
+                      <div style={{ fontSize:"2.3rem", fontWeight:900, color:"#f5e090", textShadow:"0 0 18px rgba(201,168,76,0.40)" }}>{score}</div>
                     </div>
                   ))}
               </div>
@@ -818,13 +829,16 @@ export default function GameBoardPage() {
                   }else{ resetGame(); navigate("/"); }
                 }}
                 style={{
-                  padding:"13px 44px", borderRadius:12,
-                  fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:".98rem",
-                  background:"linear-gradient(145deg,#5c3d2a,#3d2418)",
-                  color:"#f5e090", border:"2px solid #c9a84c",
-                  boxShadow:"0 0 0 1px #8b6a10, 0 6px 24px rgba(40,20,8,.4), inset 0 1px 0 rgba(255,255,255,.15)",
+                  padding:"14px 50px", borderRadius:14,
+                  fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:"1rem",
+                  background:"linear-gradient(145deg,#c9a84c,#8b6a10)",
+                  color:"#1a0e04", border:"2px solid rgba(245,224,144,0.40)",
+                  boxShadow:"0 0 0 1px rgba(139,106,16,0.40), 0 8px 28px rgba(201,168,76,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
                   cursor:"pointer",
+                  transition:"filter .2s",
                 }}
+                onMouseEnter={e=>{ e.currentTarget.style.filter="brightness(1.15)"; }}
+                onMouseLeave={e=>{ e.currentTarget.style.filter=""; }}
               >
                 {gameMode==="tournament"?"🏆 العودة للبطولة":"🎮 لعبة جديدة"}
               </button>
