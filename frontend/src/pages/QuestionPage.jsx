@@ -214,7 +214,7 @@ export default function QuestionPage() {
         }
 
         /* image */
-        .question-image-wrap { display: block; width: 100%; flex-shrink: 0; }
+        .question-image-wrap { display: block; flex-shrink: 0; width: 380px; max-width: 100%; align-self: center; }
         .question-image {
           width: min(100%,380px); aspect-ratio: 16/10; object-fit: cover; border-radius: 18px;
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,180,80,0.16);
@@ -549,7 +549,7 @@ export default function QuestionPage() {
                           <span style={{ color:"rgba(247,241,232,0.22)", fontSize:"0.85rem" }}>تحميل الصورة...</span>
                         </div>
                       )}
-                      <div style={{ position:"relative", display:imgLoaded?"block":"none", width:"min(100%, 380px)", marginLeft:"auto", marginRight:"auto" }}>
+                      <div style={{ position:"relative", display:imgLoaded?"block":"none" }}>
                         <img src={question.image_url} alt="question" data-testid="question-image" className="question-image"
                           onLoad={() => setImgLoaded(true)} onError={e => { e.target.style.display="none"; setImgLoaded(true); }}
                           onClick={() => setZoomedImage(question.image_url)} />

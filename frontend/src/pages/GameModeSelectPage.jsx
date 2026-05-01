@@ -362,8 +362,15 @@ export default function GameModeSelectPage() {
             <div className="relative">
               {/* Icon */}
               <div
-                className="text-[5.5rem] mb-5 leading-none transition-transform duration-400 group-hover:scale-110 inline-block"
-                style={{ filter: "drop-shadow(0 0 20px rgba(241,225,148,0.70)) drop-shadow(0 4px 12px rgba(0,0,0,0.8))" }}
+                className="mb-5 inline-flex items-center justify-center transition-transform duration-400 group-hover:scale-110"
+                style={{
+                  width: "clamp(80px,11vw,108px)", height: "clamp(80px,11vw,108px)",
+                  borderRadius: "50%",
+                  background: "rgba(241,225,148,0.09)",
+                  border: "1.5px solid rgba(241,225,148,0.22)",
+                  boxShadow: "0 0 28px rgba(241,225,148,0.14)",
+                  fontSize: "clamp(2.8rem,4.5vw,3.8rem)",
+                }}
               >
                 ⚔️
               </div>

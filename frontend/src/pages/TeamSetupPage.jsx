@@ -4,12 +4,6 @@ import { useGame } from "@/context/GameContext";
 import { toast } from "sonner";
 
 const ROMAN_BG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
-const DARK_BG = {
-  backgroundImage: `linear-gradient(rgba(8,0,2,0.78), rgba(4,0,1,0.90)), url("${ROMAN_BG}")`,
-  backgroundSize: "cover",
-  backgroundPosition: "center 30%",
-  backgroundAttachment: "fixed",
-};
 
 export default function TeamSetupPage() {
   const navigate = useNavigate();
@@ -35,8 +29,19 @@ export default function TeamSetupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={DARK_BG}>
-      <div className="w-full max-w-lg animate-scale-in">
+    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden" style={{ background: "#060001" }}>
+      {/* Roman background image */}
+      <div style={{
+        position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none",
+        backgroundImage: `url("${ROMAN_BG}")`,
+        backgroundSize: "cover", backgroundPosition: "center 30%",
+        opacity: 0.38, filter: "brightness(0.55) saturate(0.75)",
+      }}/>
+      {/* Dark overlay */}
+      <div style={{ position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none",
+        background: "linear-gradient(rgba(6,0,1,0.55) 0%, rgba(4,0,1,0.78) 100%)" }}/>
+
+      <div className="relative z-10 w-full max-w-lg animate-scale-in">
         {/* Back */}
         <button
           data-testid="back-btn"
