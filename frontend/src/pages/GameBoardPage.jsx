@@ -539,6 +539,9 @@ export default function GameBoardPage() {
         @keyframes hj-fadein { from{opacity:0;transform:translateY(18px) scale(.96);}to{opacity:1;transform:none;} }
         @keyframes hj-pulse  { 0%,100%{opacity:1}50%{opacity:.22} }
         @keyframes hj-winner { from{opacity:0;transform:scale(.84)}to{opacity:1;transform:none;} }
+        @keyframes hj-glow   { 0%,100%{text-shadow:0 0 30px rgba(201,168,76,.55),0 2px 8px rgba(0,0,0,.6)} 50%{text-shadow:0 0 70px rgba(201,168,76,.95),0 0 120px rgba(201,168,76,.35),0 2px 8px rgba(0,0,0,.6)} }
+        @keyframes hj-float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+        @keyframes hj-border { 0%,100%{box-shadow:0 0 0 1px rgba(201,168,76,.35),0 0 40px rgba(201,168,76,.15),0 20px 60px rgba(0,0,0,.7)} 50%{box-shadow:0 0 0 1px rgba(201,168,76,.60),0 0 70px rgba(201,168,76,.30),0 20px 60px rgba(0,0,0,.7)} }
         @keyframes hj-spin   { to{transform:rotate(360deg)} }
         @keyframes hj-card   { from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:none;} }
         * { box-sizing:border-box; margin:0; padding:0; }
@@ -769,55 +772,78 @@ export default function GameBoardPage() {
             display:"flex", flexDirection:"column",
             alignItems:"center", justifyContent:"center",
             padding:28, textAlign:"center",
-            background:"rgba(4,2,8,0.88)",
-            backdropFilter:"blur(18px)",
-            animation:"hj-winner .5s cubic-bezier(.22,1,.36,1) both",
+            background:"rgba(2,1,6,0.92)",
+            backdropFilter:"blur(6px)",
+            animation:"hj-winner .6s cubic-bezier(.22,1,.36,1) both",
             fontFamily:"Cairo,sans-serif",
           }}>
-            {/* Roman bg — dark cinematic */}
+            {/* School of Athens — scholars & philosophers */}
             <div style={{
               position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
-              backgroundImage:"url('/roman-bg.jpg')",
-              backgroundSize:"cover", backgroundPosition:"center",
-              opacity:.28, filter:"sepia(20%) brightness(.7) contrast(1.1)",
+              backgroundImage:"url('https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920')",
+              backgroundSize:"cover", backgroundPosition:"center 20%",
+              opacity:.35, filter:"brightness(.55) contrast(1.15) saturate(.8)",
             }}/>
-            {/* gold vignette glow */}
+            {/* dark gradient bottom fade */}
             <div style={{
               position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
-              background:"radial-gradient(ellipse at center, rgba(201,168,76,0.10) 0%, transparent 65%)",
+              background:"linear-gradient(180deg, rgba(2,1,6,0.20) 0%, rgba(2,1,6,0.60) 60%, rgba(2,1,6,0.90) 100%)",
             }}/>
-            <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center" }}>
-              <div style={{ fontSize:"clamp(3rem,7vw,5rem)", marginBottom:8, filter:"drop-shadow(0 0 24px rgba(201,168,76,0.60))" }}>🏆</div>
+            {/* radial gold center glow */}
+            <div style={{
+              position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
+              background:"radial-gradient(ellipse 70% 60% at center, rgba(201,168,76,0.13) 0%, transparent 70%)",
+            }}/>
+
+            <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:0 }}>
+
+              {/* floating trophy */}
               <div style={{
-                fontSize:".8rem", fontWeight:700,
-                color:"rgba(201,168,76,0.60)",
-                marginBottom:4, letterSpacing:".20em",
-                textTransform:"uppercase",
-              }}>الفريق الفائز</div>
+                fontSize:"clamp(3.5rem,8vw,6rem)",
+                marginBottom:12,
+                animation:"hj-float 3s ease-in-out infinite",
+                filter:"drop-shadow(0 0 30px rgba(201,168,76,0.80)) drop-shadow(0 0 60px rgba(201,168,76,0.40))",
+              }}>🏆</div>
+
+              {/* decorative divider */}
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                <div style={{ width:40, height:1, background:"linear-gradient(90deg,transparent,rgba(201,168,76,0.6))" }}/>
+                <span style={{ color:"rgba(201,168,76,0.55)", fontSize:".65rem", letterSpacing:".22em", fontWeight:700 }}>الفريق الفائز</span>
+                <div style={{ width:40, height:1, background:"linear-gradient(270deg,transparent,rgba(201,168,76,0.6))" }}/>
+              </div>
+
+              {/* winner name */}
               <div style={{
-                fontWeight:900, fontSize:"clamp(2.2rem,5vw,4.4rem)",
+                fontWeight:900,
+                fontSize:"clamp(2.6rem,6vw,5rem)",
                 color:"#f5e090",
-                textShadow:"0 0 36px rgba(201,168,76,0.55), 0 2px 8px rgba(0,0,0,0.60)",
-                marginBottom:32, lineHeight:1.15,
+                lineHeight:1.1,
+                marginBottom:36,
+                animation:"hj-glow 2.8s ease-in-out infinite",
+                letterSpacing:"-.01em",
               }}>
                 {winner==="تعادل"?"🤝 تعادل!":winner}
               </div>
-              <div style={{ display:"flex", gap:20, marginBottom:36 }}>
-                {[{name:team1Name,score:teamScores.team1,c:"#f5a0a0"},{name:team2Name,score:teamScores.team2,c:"#90b8f0"}]
+
+              {/* score cards */}
+              <div style={{ display:"flex", gap:16, marginBottom:40 }}>
+                {[{name:team1Name,score:teamScores.team1,c:"#fca5a5"},{name:team2Name,score:teamScores.team2,c:"#93c5fd"}]
                   .map(({name,score,c})=>(
                     <div key={name} style={{
-                      textAlign:"center", borderRadius:18,
-                      padding:"18px 32px",
-                      background:"rgba(255,255,255,0.06)",
-                      border:"1.5px solid rgba(201,168,76,0.35)",
-                      boxShadow:"0 0 0 1px rgba(139,106,16,0.25), 0 12px 40px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.08)",
-                      backdropFilter:"blur(10px)",
+                      textAlign:"center", borderRadius:20,
+                      padding:"20px 36px",
+                      background:"rgba(255,255,255,0.05)",
+                      backdropFilter:"blur(20px)",
+                      animation:"hj-border 3s ease-in-out infinite",
                     }}>
-                      <div style={{ fontSize:".74rem", fontWeight:700, color:c, marginBottom:8, letterSpacing:".06em" }}>{name}</div>
-                      <div style={{ fontSize:"2.3rem", fontWeight:900, color:"#f5e090", textShadow:"0 0 18px rgba(201,168,76,0.40)" }}>{score}</div>
+                      <div style={{ fontSize:".72rem", fontWeight:700, color:c, marginBottom:10, letterSpacing:".08em" }}>{name}</div>
+                      <div style={{ fontSize:"2.6rem", fontWeight:900, color:"#f5e090", lineHeight:1, textShadow:"0 0 20px rgba(201,168,76,0.50)" }}>{score}</div>
+                      <div style={{ fontSize:".6rem", color:"rgba(201,168,76,0.40)", marginTop:4, letterSpacing:".1em" }}>نقطة</div>
                     </div>
                   ))}
               </div>
+
+              {/* action button */}
               <button
                 onClick={()=>{
                   if(gameMode==="tournament"){
@@ -829,16 +855,17 @@ export default function GameBoardPage() {
                   }else{ resetGame(); navigate("/"); }
                 }}
                 style={{
-                  padding:"14px 50px", borderRadius:14,
-                  fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:"1rem",
-                  background:"linear-gradient(145deg,#c9a84c,#8b6a10)",
-                  color:"#1a0e04", border:"2px solid rgba(245,224,144,0.40)",
-                  boxShadow:"0 0 0 1px rgba(139,106,16,0.40), 0 8px 28px rgba(201,168,76,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
+                  padding:"15px 56px", borderRadius:50,
+                  fontFamily:"Cairo,sans-serif", fontWeight:900, fontSize:"1.05rem",
+                  background:"linear-gradient(135deg,#c9a84c,#f5e090,#c9a84c)",
+                  backgroundSize:"200% auto",
+                  color:"#1a0e04", border:"none",
+                  boxShadow:"0 0 0 1px rgba(201,168,76,0.50), 0 10px 36px rgba(201,168,76,0.35)",
                   cursor:"pointer",
-                  transition:"filter .2s",
+                  transition:"filter .2s, transform .2s",
                 }}
-                onMouseEnter={e=>{ e.currentTarget.style.filter="brightness(1.15)"; }}
-                onMouseLeave={e=>{ e.currentTarget.style.filter=""; }}
+                onMouseEnter={e=>{ e.currentTarget.style.filter="brightness(1.12)"; e.currentTarget.style.transform="scale(1.04)"; }}
+                onMouseLeave={e=>{ e.currentTarget.style.filter=""; e.currentTarget.style.transform=""; }}
               >
                 {gameMode==="tournament"?"🏆 العودة للبطولة":"🎮 لعبة جديدة"}
               </button>

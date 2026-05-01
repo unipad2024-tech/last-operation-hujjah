@@ -200,28 +200,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Guest divider */}
-        <div className="flex items-center gap-3 my-4">
-          <div style={{ flex: 1, height: "1px", background: "rgba(241,225,148,0.12)" }} />
-          <span style={{ color: "rgba(241,225,148,0.3)", fontSize: "0.75rem", fontFamily: "Cairo, sans-serif" }}>أو</span>
-          <div style={{ flex: 1, height: "1px", background: "rgba(241,225,148,0.12)" }} />
-        </div>
-
-        {/* Guest play — prominent CTA */}
-        <button
-          data-testid="guest-play-btn"
-          onClick={() => navigate("/mode")}
-          className="w-full font-bold py-3 rounded-full transition-all duration-200 hover:scale-[1.02] active:scale-95"
-          style={{
-            background: "rgba(241,225,148,0.06)",
-            border: "1.5px solid rgba(241,225,148,0.25)",
-            color: "rgba(241,225,148,0.7)",
-            fontSize: "0.95rem",
-            fontFamily: "Cairo, sans-serif",
-          }}
-        >
-          🎮 العب بدون حساب
-        </button>
       </div>
     </div>
   );

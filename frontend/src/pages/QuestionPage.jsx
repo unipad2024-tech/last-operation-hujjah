@@ -154,8 +154,8 @@ export default function QuestionPage() {
           border: 1px solid rgba(255,255,255,0.07);
           transition: all 0.3s;
         }
-        .team-pill.t1-active { background: rgba(239,68,68,0.20); border-color: rgba(239,68,68,0.65); box-shadow: 0 0 22px rgba(239,68,68,0.30), 0 0 0 1px rgba(239,68,68,0.14); }
-        .team-pill.t2-active { background: rgba(59,130,246,0.20); border-color: rgba(59,130,246,0.65); box-shadow: 0 0 22px rgba(59,130,246,0.30), 0 0 0 1px rgba(59,130,246,0.14); }
+        .team-pill.t1-active { background: rgba(239,68,68,0.32); border-color: rgba(239,68,68,0.90); box-shadow: 0 0 28px rgba(239,68,68,0.50), 0 0 0 2px rgba(239,68,68,0.22); }
+        .team-pill.t2-active { background: rgba(59,130,246,0.32); border-color: rgba(59,130,246,0.90); box-shadow: 0 0 28px rgba(59,130,246,0.50), 0 0 0 2px rgba(59,130,246,0.22); }
         .team-pill .team-name { font-weight: 800; font-size: clamp(0.75rem,1.2vw,0.98rem); line-height: 1.15; display: flex; align-items: center; gap: 5px; }
         .team-pill .team-score { margin-top: 5px; font-size: clamp(1.5rem,2.8vw,2.2rem); font-weight: 900; color: var(--accent-2); line-height: 1; letter-spacing: -0.02em; }
         .team-pill .team-turn  { font-size: 0.62rem; font-weight: 700; opacity: 0.75; letter-spacing: 0.04em; margin-top: 2px; }
@@ -215,7 +215,7 @@ export default function QuestionPage() {
         }
 
         /* image */
-        .question-image-wrap { display: flex; justify-content: center; align-items: center; flex-shrink: 0; }
+        .question-image-wrap { display: flex; justify-content: center; align-items: center; flex-shrink: 0; width: 100%; direction: ltr; }
         .question-image {
           width: min(100%,380px); aspect-ratio: 16/10; object-fit: cover; border-radius: 18px;
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,180,80,0.16);
