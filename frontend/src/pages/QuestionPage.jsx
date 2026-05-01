@@ -154,8 +154,7 @@ export default function QuestionPage() {
           border: 1px solid rgba(255,255,255,0.07);
           transition: all 0.3s;
         }
-        .team-pill.t1-active { background: rgba(239,68,68,0.32); border-color: rgba(239,68,68,0.90); box-shadow: 0 0 28px rgba(239,68,68,0.50), 0 0 0 2px rgba(239,68,68,0.22); }
-        .team-pill.t2-active { background: rgba(59,130,246,0.32); border-color: rgba(59,130,246,0.90); box-shadow: 0 0 28px rgba(59,130,246,0.50), 0 0 0 2px rgba(59,130,246,0.22); }
+        .team-pill.t1-active, .team-pill.t2-active { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.28); box-shadow: 0 0 18px rgba(255,255,255,0.08), 0 0 0 1px rgba(255,255,255,0.06); }
         .team-pill .team-name { font-weight: 800; font-size: clamp(0.75rem,1.2vw,0.98rem); line-height: 1.15; display: flex; align-items: center; gap: 5px; }
         .team-pill .team-score { margin-top: 5px; font-size: clamp(1.5rem,2.8vw,2.2rem); font-weight: 900; color: var(--accent-2); line-height: 1; letter-spacing: -0.02em; }
         .team-pill .team-turn  { font-size: 0.62rem; font-weight: 700; opacity: 0.75; letter-spacing: 0.04em; margin-top: 2px; }
@@ -215,7 +214,7 @@ export default function QuestionPage() {
         }
 
         /* image */
-        .question-image-wrap { display: flex; justify-content: center; align-items: center; flex-shrink: 0; width: 100%; direction: ltr; }
+        .question-image-wrap { display: block; width: 100%; text-align: center; flex-shrink: 0; }
         .question-image {
           width: min(100%,380px); aspect-ratio: 16/10; object-fit: cover; border-radius: 18px;
           background: rgba(255,255,255,0.04); border: 1px solid rgba(255,180,80,0.16);
@@ -441,13 +440,12 @@ export default function QuestionPage() {
         <div className="top-bar">
           {/* Team 1 */}
           <div className={`team-pill${isTeam1 ? " t1-active" : ""}`}>
-            <div className="team-name" style={{ color: isTeam1 ? "#fca5a5" : "rgba(247,241,232,0.68)" }}>
-              🔴
+            <div className="team-name" style={{ color:"rgba(247,241,232,0.88)" }}>
+              <span style={{ width:"9px", height:"9px", borderRadius:"50%", background:"#ef4444", flexShrink:0, boxShadow: isTeam1?"0 0 8px #ef4444":"none" }} />
               <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"110px" }}>{session?.team1_name || "الفريق الأول"}</span>
-              {isTeam1 && <span style={{ width:"7px", height:"7px", borderRadius:"50%", background:"#ef4444", flexShrink:0, animation:"revealPulse 1.2s ease-in-out infinite" }} />}
             </div>
             <div className="team-score">{teamScores.team1}</div>
-            {isTeam1 && <div className="team-turn" style={{ color:"#fca5a5" }}>دوره الآن</div>}
+            {isTeam1 && <div className="team-turn" style={{ color:"rgba(247,241,232,0.60)" }}>دوره الآن</div>}
           </div>
 
           {/* Timer center */}
@@ -485,13 +483,12 @@ export default function QuestionPage() {
 
           {/* Team 2 */}
           <div className={`team-pill${!isTeam1 ? " t2-active" : ""}`} style={{ textAlign:"right" }}>
-            <div className="team-name" style={{ color:!isTeam1?"#93c5fd":"rgba(247,241,232,0.68)", justifyContent:"flex-end" }}>
-              {!isTeam1 && <span style={{ width:"7px", height:"7px", borderRadius:"50%", background:"#3b82f6", flexShrink:0, animation:"revealPulse 1.2s ease-in-out infinite" }} />}
+            <div className="team-name" style={{ color:"rgba(247,241,232,0.88)", justifyContent:"flex-end" }}>
               <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"110px" }}>{session?.team2_name || "الفريق الثاني"}</span>
-              🔵
+              <span style={{ width:"9px", height:"9px", borderRadius:"50%", background:"#3b82f6", flexShrink:0, boxShadow:!isTeam1?"0 0 8px #3b82f6":"none" }} />
             </div>
             <div className="team-score" style={{ textAlign:"right" }}>{teamScores.team2}</div>
-            {!isTeam1 && <div className="team-turn" style={{ color:"#93c5fd", textAlign:"right" }}>دوره الآن</div>}
+            {!isTeam1 && <div className="team-turn" style={{ color:"rgba(247,241,232,0.60)", textAlign:"right" }}>دوره الآن</div>}
           </div>
         </div>
 
@@ -552,7 +549,7 @@ export default function QuestionPage() {
                           <span style={{ color:"rgba(247,241,232,0.22)", fontSize:"0.85rem" }}>تحميل الصورة...</span>
                         </div>
                       )}
-                      <div style={{ position:"relative", display:imgLoaded?"block":"none", margin:"0 auto", width:"fit-content" }}>
+                      <div style={{ position:"relative", display:imgLoaded?"inline-block":"none" }}>
                         <img src={question.image_url} alt="question" data-testid="question-image" className="question-image"
                           onLoad={() => setImgLoaded(true)} onError={e => { e.target.style.display="none"; setImgLoaded(true); }}
                           onClick={() => setZoomedImage(question.image_url)} />

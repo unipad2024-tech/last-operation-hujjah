@@ -378,10 +378,7 @@ export default function GameModeSelectPage() {
                 فريق ضد فريق
               </div>
 
-              {/* Description */}
-              <div className="text-secondary/32 text-sm leading-relaxed mb-6" style={{ fontSize: "clamp(0.75rem,1.2vw,0.88rem)" }}>
-                لوحة أسئلة كلاسيكية — 6 فئات × 3 مستويات صعوبة
-              </div>
+              <div className="mb-6" />
 
               {/* CTA row */}
               {loadingMode === "standard" ? (
@@ -449,7 +446,7 @@ export default function GameModeSelectPage() {
                 حتى 8 فرق
               </div>
 
-              <div className="text-secondary/32 text-sm leading-relaxed mb-6" style={{ fontSize: "clamp(0.75rem,1.2vw,0.88rem)" }}>
+              <div className="text-sm leading-relaxed mb-6" style={{ fontSize: "clamp(0.75rem,1.2vw,0.88rem)", color:"rgba(241,225,148,0.65)" }}>
                 ربع نهائي ← نصف نهائي ← النهائي — بطل واحد فقط
               </div>
 
@@ -473,7 +470,7 @@ export default function GameModeSelectPage() {
 
       {/* ── Footer note ── */}
       <div className="relative z-10 pb-6 text-center">
-        <p className="text-secondary/18 text-xs">
+        <p className="text-xs" style={{ color:"rgba(241,225,148,0.50)" }}>
           مناسب للجلسات العائلية · حفلات الأصدقاء · الأمسيات الترفيهية
         </p>
       </div>
