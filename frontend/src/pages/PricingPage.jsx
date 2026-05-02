@@ -73,6 +73,7 @@ export default function PricingPage() {
       window.location.href = data.payment_url;
     } catch (err) {
       const msg = err?.response?.data?.detail || "خطأ في بدء عملية الدفع";
+      console.error("[Paylink] initiate failed:", err?.response?.data || err?.message || err);
       toast.error(msg);
     } finally {
       setLoading(null);
@@ -100,11 +101,10 @@ export default function PricingPage() {
         </div>
 
         {/* Tier comparison */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10 animate-fade-in-up">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 animate-fade-in-up">
           {[
-            { label: "ضيف",   features: ["اللعب بدون حساب", "6 فئات ثابتة", "الأسئلة قد تتكرر", "بدون حفظ تقدم"], isFree: true },
-            { label: "مجاني", features: ["حساب مجاني", "6 فئات ثابتة", "الأسئلة قد تتكرر", "تتبع عدد المباريات"], isFree: true },
-            { label: "مميز",  features: ["جميع الفئات (10 فئات)", "أسئلة لا تتكرر أبداً", "تتبع كامل للتقدم", "دعم أولوي"], isFree: false },
+            { label: "مجاني", features: ["حساب مجاني للتجربة", "فئات محدودة وثابتة", "الأسئلة قد تتكرر", "هذه الخطة فقط لتجربة اللعبة"], isFree: true },
+            { label: "مميز",  features: ["وصول كامل لجميع الفئات", "تحديث مستمر للأسئلة", "أسئلة لا تتكرر", "حرية كاملة في اللعب", "وصول لكل مميزات اللعبة"], isFree: false },
           ].map((tier) => (
             <div key={tier.label} className={`rounded-2xl p-5 border ${!tier.isFree ? "border-secondary/60 bg-primary/80" : "border-secondary/15 bg-primary/30"}`}
               style={!tier.isFree ? { boxShadow: "0 0 30px rgba(241,225,148,0.15)" } : {}}>
