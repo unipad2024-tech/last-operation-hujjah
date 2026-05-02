@@ -482,11 +482,11 @@ async def get_suspicious_logs(limit: int = 100, admin: dict = Depends(get_admin)
 async def revoke_session(session_id: str, admin: dict = Depends(get_admin)):
     now = datetime.now(timezone.utc)
     r = await db.auth_sessions.update_one(
-        {"session_id": session_id},
+        {"session_id": session_id, "is_active": True},
         {"$set": {"is_active": False, "ended_at": now.isoformat(), "ended_reason": "admin_revoke"}}
     )
     if r.matched_count == 0:
-        raise HTTPException(404, "الجلسة غير موجودة")
+        raise HTTPException(404, "الجلسة غير موجودة أو مُلغاة مسبقاً")
     return {"message": "تم إلغاء الجلسة"}
 
 @api_router.delete("/admin/security/devices/{device_id}")
@@ -503,7 +503,9 @@ async def remove_device(device_id: str, admin: dict = Depends(get_admin)):
 
 @api_router.post("/admin/security/lock/{user_id}")
 async def lock_user(user_id: str, admin: dict = Depends(get_super_admin)):
-    await db.users.update_one({"id": user_id}, {"$set": {"is_locked": True}})
+    r = await db.users.update_one({"id": user_id}, {"$set": {"is_locked": True}})
+    if r.matched_count == 0:
+        raise HTTPException(404, "المستخدم غير موجود")
     await db.auth_sessions.update_many(
         {"user_id": user_id},
         {"$set": {"is_active": False, "ended_reason": "account_locked"}}
@@ -512,7 +514,9 @@ async def lock_user(user_id: str, admin: dict = Depends(get_super_admin)):
 
 @api_router.post("/admin/security/unlock/{user_id}")
 async def unlock_user(user_id: str, admin: dict = Depends(get_super_admin)):
-    await db.users.update_one({"id": user_id}, {"$set": {"is_locked": False}})
+    r = await db.users.update_one({"id": user_id}, {"$set": {"is_locked": False}})
+    if r.matched_count == 0:
+        raise HTTPException(404, "المستخدم غير موجود")
     return {"message": "تم فتح الحساب"}
 
 @api_router.delete("/admin/security/logs/{user_id}")
