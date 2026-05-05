@@ -10,6 +10,10 @@ const S = {
   page: {
     minHeight: "100vh",
     background: "radial-gradient(circle at top, #281525 0%, #120d14 60%, #09070b 100%)",
+    backgroundImage: `url('https://i.pinimg.com/1200x/13/e0/e8/13e0e8fb92e5ab693aee15803c70cac0.jpg')`,
+    backgroundSize: "cover",
+    backgroundPosition: "center top",
+    backgroundAttachment: "fixed",
     color: "#f8f2e7",
     padding: "24px 16px 60px",
     fontFamily: "Cairo, sans-serif",
@@ -286,11 +290,15 @@ export default function CommunityPage() {
         overflow: "hidden",
         minHeight: 160,
       }}>
-        {/* white/parchment bg image */}
-        <img src="https://i.pinimg.com/1200x/13/e0/e8/13e0e8fb92e5ab693aee15803c70cac0.jpg"
+        {/* decorative images */}
+        <img src="https://i.pinimg.com/736x/21/e4/7b/21e47bbf1c1ba178e0a16e50f3565e99.jpg"
           alt="" aria-hidden="true"
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", opacity: 0.13, borderRadius: 22, pointerEvents: "none", userSelect: "none" }} />
-        <div style={{ position: "absolute", inset: 0, background: "rgba(10,5,12,0.6)", borderRadius: 22, pointerEvents: "none" }} />
+          style={{ position: "absolute", left: 0, top: 0, height: "100%", width: "42%", objectFit: "cover", objectPosition: "center", opacity: 0.22, borderRadius: "22px 0 0 22px", pointerEvents: "none", userSelect: "none" }} />
+        <img src="https://i.pinimg.com/736x/a0/be/c2/a0bec239e77e424ecca7f30bfd8a29d1.jpg"
+          alt="" aria-hidden="true"
+          style={{ position: "absolute", right: 0, top: 0, height: "100%", width: "42%", objectFit: "cover", objectPosition: "center", opacity: 0.22, borderRadius: "0 22px 22px 0", pointerEvents: "none", userSelect: "none" }} />
+        {/* gradient overlay to fade images into center */}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to left, transparent 0%, rgba(10,5,12,0.85) 38%, rgba(10,5,12,0.85) 62%, transparent 100%)", borderRadius: 22, pointerEvents: "none" }} />
 
         {/* content */}
         <div style={{ position: "relative", zIndex: 1 }}>
@@ -670,14 +678,8 @@ export default function CommunityPage() {
 
   return (
     <div style={S.page}>
-      {/* Page background — images 1 & 2 fixed behind everything */}
-      <img src="https://i.pinimg.com/736x/21/e4/7b/21e47bbf1c1ba178e0a16e50f3565e99.jpg"
-        alt="" aria-hidden="true"
-        style={{ position: "fixed", inset: 0, width: "50%", height: "100%", objectFit: "cover", objectPosition: "center", opacity: 0.18, pointerEvents: "none", zIndex: 0 }} />
-      <img src="https://i.pinimg.com/736x/a0/be/c2/a0bec239e77e424ecca7f30bfd8a29d1.jpg"
-        alt="" aria-hidden="true"
-        style={{ position: "fixed", top: 0, right: 0, width: "50%", height: "100%", objectFit: "cover", objectPosition: "center", opacity: 0.18, pointerEvents: "none", zIndex: 0 }} />
-      <div style={{ position: "fixed", inset: 0, background: "rgba(9,7,11,0.78)", pointerEvents: "none", zIndex: 0 }} />
+      {/* dark overlay over bg image */}
+      <div style={{ position: "fixed", inset: 0, background: "rgba(9,7,11,0.72)", pointerEvents: "none", zIndex: 0 }} />
 
       {/* Header */}
       <div style={{ maxWidth: 720, margin: "0 auto", position: "relative", zIndex: 1 }}>
