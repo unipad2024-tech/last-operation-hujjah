@@ -867,6 +867,16 @@ export default function AdminDashboard() {
   const [logsTotal, setLogsTotal] = useState(0);
   const [logsLoading, setLogsLoading] = useState(false);
 
+  // Community state
+  const [communityAnalytics, setCommunityAnalytics] = useState(null);
+  const [communityPending, setCommunityPending] = useState([]);
+  const [communityPayouts, setCommunityPayouts] = useState([]);
+  const [communityLoading, setCommunityLoading] = useState(false);
+  const [processingEarnings, setProcessingEarnings] = useState(false);
+  const [earningsResult, setEarningsResult] = useState(null);
+  const [rejectingCat, setRejectingCat] = useState(null); // cat id being rejected
+  const [rejectReason, setRejectReason] = useState("");
+
   // Staff management state
   const [staffList, setStaffList] = useState([]);
   const [showStaffForm, setShowStaffForm] = useState(false);
@@ -983,6 +993,21 @@ export default function AdminDashboard() {
       const { data } = await axios.get(`${API}/admin/staff`, { headers });
       setStaffList(data);
     } catch { toast.error("خطأ في تحميل قائمة الموظفين"); }
+  }, []);
+
+  const loadCommunity = useCallback(async () => {
+    setCommunityLoading(true);
+    try {
+      const [ana, pend, pays] = await Promise.all([
+        axios.get(`${API}/admin/community/analytics`, { headers }),
+        axios.get(`${API}/admin/community/pending`, { headers }),
+        axios.get(`${API}/admin/community/payouts`, { headers }),
+      ]);
+      setCommunityAnalytics(ana.data);
+      setCommunityPending(pend.data);
+      setCommunityPayouts(pays.data);
+    } catch { toast.error("خطأ في تحميل بيانات المجتمع"); }
+    finally { setCommunityLoading(false); }
   }, []);
 
   const loadPendingQuestions = useCallback(async () => {
@@ -1127,6 +1152,7 @@ export default function AdminDashboard() {
     if (activeTab === "logs") loadLogs();
     if (activeTab === "staff") loadStaff();
     if (activeTab === "pending") loadPendingQuestions();
+    if (activeTab === "community") loadCommunity();
   }, [activeTab]);
 
   // ── Auto-save state ──
@@ -1522,6 +1548,7 @@ export default function AdminDashboard() {
             { key: "experimental", label: "وضع التجربة", forAll: true },
             { key: "logs", label: "سجل النشاط", superOnly: true },
             { key: "staff", label: "الموظفون", superOnly: true },
+            { key: "community", label: "🏘 المجتمع", superOnly: true },
           ]
             .filter(t => t.forAll || (t.superOnly && isSuperAdmin))
             .map((tab) => (
@@ -2950,6 +2977,185 @@ export default function AdminDashboard() {
       )}
 
       {/* ── EXPERIMENTAL MODE TAB ── */}
+      {activeTab === "community" && (
+        <div style={{ padding: "24px 0", fontFamily: "Cairo, sans-serif", direction: "rtl" }}>
+
+          {/* Analytics row */}
+          {communityAnalytics && (
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+              {[
+                { v: communityAnalytics.approved_categories,       l: "فئات معتمدة",       c: "#73f0a8" },
+                { v: communityAnalytics.pending_categories,        l: "قيد المراجعة",       c: "#ffd86b" },
+                { v: communityAnalytics.pending_payout_requests,   l: "طلبات سحب معلقة",   c: "#ff8b95" },
+                { v: communityAnalytics.monthly_unprocessed_plays, l: `ألعاب ${communityAnalytics.current_month}`, c: "#93c5fd" },
+                { v: `${communityAnalytics.total_paid_sar?.toFixed(0)} ر`, l: "إجمالي المسحوب", c: "#f2b85b" },
+              ].map(({ v, l, c }) => (
+                <div key={l} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: "14px 18px", flex: "1 1 140px" }}>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: c, lineHeight: 1 }}>{v}</div>
+                  <div style={{ fontSize: 12, color: "#d8cdb8", marginTop: 5 }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Process monthly earnings */}
+          <div style={{ background: "rgba(242,184,91,0.06)", border: "1px solid rgba(242,184,91,0.25)", borderRadius: 18, padding: 20, marginBottom: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#f2b85b", marginBottom: 6 }}>معالجة الأرباح الشهرية</div>
+            <div style={{ fontSize: 13, color: "#d8cdb8", marginBottom: 16 }}>
+              يحسب عدد اللاععين الفريدين لكل منشئ هذا الشهر ويضيف الرصيد لمحافظهم.
+              اضغط مرة واحدة فقط آخر كل شهر.
+            </div>
+            {earningsResult && (
+              <div style={{ background: "rgba(115,240,168,0.08)", border: "1px solid rgba(115,240,168,0.2)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#73f0a8" }}>
+                ✅ {earningsResult.message} — {earningsResult.creators_paid} منشئ، {earningsResult.total_sar_awarded} ريال
+              </div>
+            )}
+            <button
+              onClick={async () => {
+                if (!window.confirm("تأكيد معالجة أرباح الشهر الحالي؟")) return;
+                setProcessingEarnings(true); setEarningsResult(null);
+                try {
+                  const { data } = await axios.post(`${API}/admin/community/process-monthly-earnings`, {}, { headers });
+                  setEarningsResult(data);
+                  toast.success(data.message);
+                  loadCommunity();
+                } catch (e) { toast.error(e?.response?.data?.detail || "خطأ في المعالجة"); }
+                finally { setProcessingEarnings(false); }
+              }}
+              disabled={processingEarnings}
+              style={{ background: "linear-gradient(90deg,#f2b85b,#ff8f3d)", color: "#1a0f10", border: "none", borderRadius: 12, padding: "12px 24px", fontWeight: 800, cursor: "pointer", fontSize: 14, fontFamily: "Cairo, sans-serif", opacity: processingEarnings ? 0.6 : 1 }}
+            >
+              {processingEarnings ? "⏳ جاري المعالجة..." : "💰 معالجة أرباح هذا الشهر"}
+            </button>
+          </div>
+
+          {/* Pending categories */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, color: "#f8f2e7" }}>
+              فئات قيد المراجعة ({communityPending.length})
+            </div>
+            {communityLoading ? (
+              <div style={{ color: "#d8cdb8", padding: 20 }}>جاري التحميل...</div>
+            ) : communityPending.length === 0 ? (
+              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: 24, color: "#d8cdb8", textAlign: "center" }}>لا توجد فئات تنتظر المراجعة</div>
+            ) : communityPending.map(cat => (
+              <div key={cat.id} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 16, marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: "#f8f2e7", marginBottom: 4 }}>{cat.name}</div>
+                    {cat.description && <div style={{ fontSize: 12, color: "#d8cdb8", marginBottom: 6 }}>{cat.description}</div>}
+                    <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#d8cdb8", flexWrap: "wrap" }}>
+                      <span>👤 {cat.creator_username}</span>
+                      <span>📝 {cat.questions_count} سؤال</span>
+                      <span>📅 {cat.submitted_at ? new Date(cat.submitted_at).toLocaleDateString("ar-SA") : "—"}</span>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await axios.post(`${API}/admin/community/${cat.id}/approve`, {}, { headers });
+                          toast.success("تمت الموافقة");
+                          setCommunityPending(p => p.filter(c => c.id !== cat.id));
+                          loadCommunity();
+                        } catch (e) { toast.error(e?.response?.data?.detail || "خطأ"); }
+                      }}
+                      style={{ background: "rgba(64,212,140,0.15)", color: "#73f0a8", border: "1px solid rgba(64,212,140,0.3)", borderRadius: 10, padding: "8px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}
+                    >✓ موافقة</button>
+                    <button
+                      onClick={() => { setRejectingCat(cat.id); setRejectReason(""); }}
+                      style={{ background: "rgba(255,95,109,0.12)", color: "#ff8b95", border: "1px solid rgba(255,95,109,0.25)", borderRadius: 10, padding: "8px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}
+                    >✕ رفض</button>
+                  </div>
+                </div>
+                {rejectingCat === cat.id && (
+                  <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <input
+                      value={rejectReason}
+                      onChange={e => setRejectReason(e.target.value)}
+                      placeholder="سبب الرفض (اختياري)"
+                      style={{ flex: 1, minWidth: 200, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 14px", color: "#f8f2e7", fontSize: 13, fontFamily: "Cairo, sans-serif", outline: "none" }}
+                    />
+                    <button
+                      onClick={async () => {
+                        try {
+                          await axios.post(`${API}/admin/community/${cat.id}/reject`, { reason: rejectReason }, { headers });
+                          toast.success("تم الرفض");
+                          setCommunityPending(p => p.filter(c => c.id !== cat.id));
+                          setRejectingCat(null);
+                          loadCommunity();
+                        } catch (e) { toast.error(e?.response?.data?.detail || "خطأ"); }
+                      }}
+                      style={{ background: "#ff5f6d", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 800, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}
+                    >تأكيد الرفض</button>
+                    <button
+                      onClick={() => setRejectingCat(null)}
+                      style={{ background: "rgba(255,255,255,0.08)", color: "#d8cdb8", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}
+                    >إلغاء</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Payout requests */}
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, color: "#f8f2e7" }}>
+              طلبات السحب ({communityPayouts.length})
+            </div>
+            {communityPayouts.length === 0 ? (
+              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: 24, color: "#d8cdb8", textAlign: "center" }}>لا توجد طلبات سحب</div>
+            ) : communityPayouts.map(p => (
+              <div key={p.id} style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${p.status === "pending" ? "rgba(255,204,102,0.25)" : "rgba(255,255,255,0.1)"}`, borderRadius: 16, padding: 16, marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 20, fontWeight: 900, color: "#f2b85b" }}>{p.amount} ريال</div>
+                    <div style={{ fontSize: 12, color: "#d8cdb8", marginTop: 4 }}>
+                      👤 {p.username} · {p.account_name} · {p.iban}
+                    </div>
+                    <div style={{ fontSize: 11, color: "#d8cdb8", marginTop: 2 }}>{new Date(p.created_at).toLocaleDateString("ar-SA")}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{
+                      background: { pending: "rgba(255,204,102,0.15)", approved: "rgba(64,212,140,0.15)", paid: "rgba(64,212,140,0.2)", rejected: "rgba(255,95,109,0.15)" }[p.status],
+                      color: { pending: "#ffd86b", approved: "#73f0a8", paid: "#40d48c", rejected: "#ff8b95" }[p.status],
+                      padding: "5px 12px", borderRadius: 999, fontWeight: 700, fontSize: 12
+                    }}>{{ pending: "معلق", approved: "موافق عليه", paid: "تم التحويل", rejected: "مرفوض" }[p.status]}</span>
+                    {p.status === "pending" && (
+                      <>
+                        <button onClick={async () => {
+                          try {
+                            await axios.patch(`${API}/admin/community/payouts/${p.id}`, { status: "approved" }, { headers });
+                            toast.success("تمت الموافقة");
+                            setCommunityPayouts(prev => prev.map(x => x.id === p.id ? { ...x, status: "approved" } : x));
+                          } catch { toast.error("خطأ"); }
+                        }} style={{ background: "rgba(64,212,140,0.15)", color: "#73f0a8", border: "1px solid rgba(64,212,140,0.3)", borderRadius: 10, padding: "7px 12px", fontWeight: 700, cursor: "pointer", fontSize: 12, fontFamily: "Cairo, sans-serif" }}>موافقة</button>
+                        <button onClick={async () => {
+                          try {
+                            await axios.patch(`${API}/admin/community/payouts/${p.id}`, { status: "rejected" }, { headers });
+                            toast.success("تم الرفض والإعادة للرصيد");
+                            setCommunityPayouts(prev => prev.map(x => x.id === p.id ? { ...x, status: "rejected" } : x));
+                          } catch { toast.error("خطأ"); }
+                        }} style={{ background: "rgba(255,95,109,0.12)", color: "#ff8b95", border: "1px solid rgba(255,95,109,0.25)", borderRadius: 10, padding: "7px 12px", fontWeight: 700, cursor: "pointer", fontSize: 12, fontFamily: "Cairo, sans-serif" }}>رفض</button>
+                      </>
+                    )}
+                    {p.status === "approved" && (
+                      <button onClick={async () => {
+                        try {
+                          await axios.patch(`${API}/admin/community/payouts/${p.id}`, { status: "paid" }, { headers });
+                          toast.success("تم التأشير كمحوّل");
+                          setCommunityPayouts(prev => prev.map(x => x.id === p.id ? { ...x, status: "paid" } : x));
+                        } catch { toast.error("خطأ"); }
+                      }} style={{ background: "rgba(242,184,91,0.15)", color: "#f2b85b", border: "1px solid rgba(242,184,91,0.3)", borderRadius: 10, padding: "7px 12px", fontWeight: 700, cursor: "pointer", fontSize: 12, fontFamily: "Cairo, sans-serif" }}>✓ تم التحويل</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {activeTab === "experimental" && (
         <div className="flex h-full" style={{ minHeight: "calc(100vh - 140px)" }}>
 
