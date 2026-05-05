@@ -10,6 +10,10 @@ const S = {
   page: {
     minHeight: "100vh",
     background: "radial-gradient(circle at top, #281525 0%, #120d14 60%, #09070b 100%)",
+    backgroundImage: `url('https://i.pinimg.com/1200x/13/e0/e8/13e0e8fb92e5ab693aee15803c70cac0.jpg')`,
+    backgroundSize: "cover",
+    backgroundPosition: "center top",
+    backgroundAttachment: "fixed",
     color: "#f8f2e7",
     padding: "24px 16px 60px",
     fontFamily: "Cairo, sans-serif",
@@ -277,27 +281,48 @@ export default function CommunityPage() {
       </div>
 
       {/* Wallet Card */}
-      <div style={{ ...S.card, marginBottom: 20, background: "rgba(242,184,91,0.06)", borderColor: "rgba(242,184,91,0.25)" }}>
-        <div style={{ fontSize: 13, color: "#d8cdb8", marginBottom: 6, fontWeight: 700 }}>الرصيد المتاح</div>
-        <div style={{ fontSize: 44, fontWeight: 900, color: "#f2b85b", lineHeight: 1 }}>
-          {wallet ? wallet.balance?.toFixed(2) : "—"} <span style={{ fontSize: 20, fontWeight: 700 }}>ريال</span>
-        </div>
-        <div style={{ display: "flex", gap: 24, marginTop: 14, flexWrap: "wrap" }}>
-          <div>
-            <div style={{ fontSize: 12, color: "#d8cdb8" }}>إجمالي الأرباح</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: "#f2b85b" }}>{wallet?.total_earned?.toFixed(2) || "0.00"} ر</div>
+      <div style={{
+        ...S.card,
+        marginBottom: 20,
+        background: "rgba(10,5,12,0.55)",
+        borderColor: "rgba(242,184,91,0.35)",
+        position: "relative",
+        overflow: "hidden",
+        minHeight: 160,
+      }}>
+        {/* decorative images */}
+        <img src="https://i.pinimg.com/736x/21/e4/7b/21e47bbf1c1ba178e0a16e50f3565e99.jpg"
+          alt="" aria-hidden="true"
+          style={{ position: "absolute", left: 0, top: 0, height: "100%", width: "42%", objectFit: "cover", objectPosition: "center", opacity: 0.22, borderRadius: "22px 0 0 22px", pointerEvents: "none", userSelect: "none" }} />
+        <img src="https://i.pinimg.com/736x/a0/be/c2/a0bec239e77e424ecca7f30bfd8a29d1.jpg"
+          alt="" aria-hidden="true"
+          style={{ position: "absolute", right: 0, top: 0, height: "100%", width: "42%", objectFit: "cover", objectPosition: "center", opacity: 0.22, borderRadius: "0 22px 22px 0", pointerEvents: "none", userSelect: "none" }} />
+        {/* gradient overlay to fade images into center */}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to left, transparent 0%, rgba(10,5,12,0.85) 38%, rgba(10,5,12,0.85) 62%, transparent 100%)", borderRadius: 22, pointerEvents: "none" }} />
+
+        {/* content */}
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <div style={{ fontSize: 13, color: "#d8cdb8", marginBottom: 6, fontWeight: 700 }}>الرصيد المتاح</div>
+          <div style={{ fontSize: 44, fontWeight: 900, color: "#f2b85b", lineHeight: 1 }}>
+            {wallet ? wallet.balance?.toFixed(2) : "—"} <span style={{ fontSize: 20, fontWeight: 700 }}>ريال</span>
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: "#d8cdb8" }}>تم سحبه</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: "#73f0a8" }}>{wallet?.total_withdrawn?.toFixed(2) || "0.00"} ر</div>
+          <div style={{ display: "flex", gap: 24, marginTop: 14, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 12, color: "#d8cdb8" }}>إجمالي الأرباح</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#f2b85b" }}>{wallet?.total_earned?.toFixed(2) || "0.00"} ر</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#d8cdb8" }}>تم سحبه</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#73f0a8" }}>{wallet?.total_withdrawn?.toFixed(2) || "0.00"} ر</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#d8cdb8" }}>النقاط</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#f2b85b" }}>{wallet?.points || 0}</div>
+            </div>
           </div>
-          <div>
-            <div style={{ fontSize: 12, color: "#d8cdb8" }}>النقاط</div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: "#f2b85b" }}>{wallet?.points || 0}</div>
+          <div style={{ marginTop: 16 }}>
+            <button style={S.btnPrimary} onClick={() => setTab(2)}>طلب سحب</button>
           </div>
-        </div>
-        <div style={{ marginTop: 16 }}>
-          <button style={S.btnPrimary} onClick={() => setTab(2)}>طلب سحب</button>
         </div>
       </div>
 
@@ -653,8 +678,11 @@ export default function CommunityPage() {
 
   return (
     <div style={S.page}>
+      {/* dark overlay over bg image */}
+      <div style={{ position: "fixed", inset: 0, background: "rgba(9,7,11,0.72)", pointerEvents: "none", zIndex: 0 }} />
+
       {/* Header */}
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto", position: "relative", zIndex: 1 }}>
         <button onClick={() => navigate("/")} style={{ color: "rgba(242,184,91,0.5)", background: "none", border: "none", cursor: "pointer", marginBottom: 20, fontSize: 14, fontFamily: "Cairo, sans-serif" }}>
           ← رجوع
         </button>
