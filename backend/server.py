@@ -56,7 +56,7 @@ PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID', '')
 PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '')
 EMAIL_USER      = os.environ.get('EMAIL_USER', '')
 EMAIL_PASS      = os.environ.get('EMAIL_PASS', '')
-UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', '')
+UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', 'pjNvy5VEAWhUzBigrJW0-qz9zNT_9IVmPYN0Sytl0HU')
 ALGORITHM       = "HS256"
 
 # ─── MongoDB-backed rate limiter (works across all uvicorn workers) ─────────
@@ -1357,7 +1357,7 @@ async def approve_pending_question(q_id: str, body: dict = {}, admin: dict = Dep
                         img_data = r.json()
                         q["image_url"] = img_data.get("urls", {}).get("regular", "")
         except Exception as ue:
-            logger.warning(f"Unsplash fetch on approve failed: {ue}")
+            logger.error(f"[Unsplash] fetch on approve failed: {ue}")
 
     q.pop("status", None)
     q["approved_by"] = admin.get("admin_name", "admin")
