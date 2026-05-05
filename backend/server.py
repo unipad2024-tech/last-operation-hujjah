@@ -3765,8 +3765,6 @@ async def health():
     except Exception:
         return {"ok": True, "db": "error"}
 
-app.include_router(api_router)
-
 async def _subscription_daily_loop():
     """Run subscription expiry check every 24 hours."""
     await asyncio.sleep(30)  # Wait 30s after startup before first run
@@ -4197,6 +4195,8 @@ async def admin_process_monthly_earnings(body: dict = {}, admin: dict = Depends(
         "total_points_awarded": total_points_awarded,
         "total_sar_awarded": round(total_points_awarded / COMMUNITY_POINTS_TO_SAR, 2),
     }
+
+app.include_router(api_router)
 
 # ══════════════════════════════════════════════════════════════════════════════
 
