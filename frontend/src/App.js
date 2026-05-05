@@ -3,6 +3,7 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { GameProvider } from "@/context/GameContext";
 import { Toaster } from "sonner";
+import CommunityPage from "@/pages/CommunityPage";
 
 const BASE  = process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app";
 const API   = `${BASE}/api`;
@@ -57,6 +58,7 @@ function App() {
             <Route path="/game" element={<GameBoardPage />} />
             <Route path="/question" element={<QuestionPage />} />
             <Route path="/secret/:questionId" element={<SecretWordPage />} />
+            <Route path="/community" element={<CommunityPage />} />
             <Route path="/admin" element={<AdminLoginPage />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
           </Routes>

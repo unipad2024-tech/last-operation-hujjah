@@ -218,6 +218,13 @@ export default function HomePage() {
             </button>
           )}
           <button
+            onClick={() => navigate("/community")}
+            className="text-secondary/70 text-sm font-bold px-4 py-2 rounded-full transition-all hover:text-secondary/90 hover:bg-secondary/8"
+            style={{ border: "1px solid rgba(241,225,148,0.18)" }}
+          >
+            المجتمع
+          </button>
+          <button
             data-testid="admin-link"
             onClick={() => navigate("/admin")}
             className="text-secondary/55 text-sm font-bold px-4 py-2 rounded-full transition-all hover:text-secondary/90 hover:bg-secondary/8"

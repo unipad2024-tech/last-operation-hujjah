@@ -3765,6 +3765,343 @@ async def _keepalive_loop():
             pass
         await asyncio.sleep(240)  # 4 minutes
 
+# ══════════════════════════════════════════════════════════════════════════════
+# COMMUNITY CREATOR ECONOMY
+# ══════════════════════════════════════════════════════════════════════════════
+
+COMMUNITY_POINTS_PER_QUESTION = 5      # points per approved question
+COMMUNITY_POINTS_PER_PLAY     = 10     # points per play of creator's category
+COMMUNITY_POINTS_TO_SAR       = 100    # 100 points = 1 SAR
+COMMUNITY_MIN_PAYOUT_SAR      = 50     # minimum payout amount
+COMMUNITY_MIN_QUESTIONS       = 24     # minimum questions before review
+
+def _require_premium(user: dict):
+    if user.get("subscription_type") != "premium":
+        raise HTTPException(403, "هذه الميزة متاحة للمشتركين المميزين فقط")
+
+async def _notify(user_id: str, type_: str, message: str):
+    await db.community_notifications.insert_one({
+        "id": str(uuid.uuid4()), "user_id": user_id,
+        "type": type_, "message": message,
+        "is_read": False, "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+async def _get_wallet(user_id: str) -> dict:
+    w = await db.community_wallets.find_one({"user_id": user_id}, {"_id": 0})
+    if not w:
+        w = {"user_id": user_id, "balance": 0.0, "total_earned": 0.0,
+             "total_withdrawn": 0.0, "points": 0}
+    return w
+
+async def _add_points(user_id: str, points: int):
+    sar = round(points / COMMUNITY_POINTS_TO_SAR, 4)
+    await db.community_wallets.update_one(
+        {"user_id": user_id},
+        {"$inc": {"points": points, "balance": sar, "total_earned": sar}},
+        upsert=True,
+    )
+
+# ── Creator: Category CRUD ─────────────────────────────────────────────────
+
+class CommunityCategoryCreate(BaseModel):
+    name: str
+    description: str = ""
+
+@api_router.post("/community/categories")
+async def community_create_category(body: CommunityCategoryCreate, user: dict = Depends(require_user)):
+    _require_premium(user)
+    if not body.name.strip():
+        raise HTTPException(400, "اسم الفئة مطلوب")
+    cat = {
+        "id": str(uuid.uuid4()),
+        "creator_id": user["id"],
+        "creator_username": user.get("username", ""),
+        "name": body.name.strip(),
+        "description": body.description.strip(),
+        "status": "draft",
+        "rejection_reason": "",
+        "questions_count": 0,
+        "play_count": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "submitted_at": None,
+        "reviewed_at": None,
+    }
+    await db.community_categories.insert_one(cat)
+    cat.pop("_id", None)
+    return cat
+
+@api_router.get("/community/categories/mine")
+async def community_my_categories(user: dict = Depends(require_user)):
+    cats = await db.community_categories.find(
+        {"creator_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    return cats
+
+@api_router.get("/community/categories")
+async def community_browse_categories(skip: int = 0, limit: int = 20):
+    cats = await db.community_categories.find(
+        {"status": "approved"}, {"_id": 0}
+    ).sort("play_count", -1).skip(skip).limit(limit).to_list(limit)
+    return cats
+
+@api_router.delete("/community/categories/{cat_id}")
+async def community_delete_category(cat_id: str, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    if cat["status"] not in ("draft", "rejected"):
+        raise HTTPException(400, "لا يمكن حذف فئة قيد المراجعة أو معتمدة")
+    await db.community_categories.delete_one({"id": cat_id})
+    await db.community_questions.delete_many({"category_id": cat_id})
+    return {"message": "تم الحذف"}
+
+# ── Creator: Questions ─────────────────────────────────────────────────────
+
+class CommunityQuestionCreate(BaseModel):
+    text: str
+    answer: str
+    difficulty: str = "medium"
+
+@api_router.post("/community/categories/{cat_id}/questions")
+async def community_add_question(cat_id: str, body: CommunityQuestionCreate, user: dict = Depends(require_user)):
+    _require_premium(user)
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    if cat["status"] not in ("draft", "rejected"):
+        raise HTTPException(400, "لا يمكن إضافة أسئلة لفئة قيد المراجعة أو معتمدة")
+    if not body.text.strip() or not body.answer.strip():
+        raise HTTPException(400, "السؤال والجواب مطلوبان")
+    q = {
+        "id": str(uuid.uuid4()),
+        "category_id": cat_id,
+        "creator_id": user["id"],
+        "text": body.text.strip(),
+        "answer": body.answer.strip(),
+        "difficulty": body.difficulty,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.community_questions.insert_one(q)
+    await db.community_categories.update_one({"id": cat_id}, {"$inc": {"questions_count": 1}})
+    q.pop("_id", None)
+    return q
+
+@api_router.get("/community/categories/{cat_id}/questions")
+async def community_get_questions(cat_id: str, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    qs = await db.community_questions.find({"category_id": cat_id}, {"_id": 0}).to_list(500)
+    return qs
+
+@api_router.delete("/community/categories/{cat_id}/questions/{q_id}")
+async def community_delete_question(cat_id: str, q_id: str, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    if cat["status"] not in ("draft", "rejected"):
+        raise HTTPException(400, "لا يمكن حذف الأسئلة الآن")
+    res = await db.community_questions.delete_one({"id": q_id, "category_id": cat_id})
+    if res.deleted_count == 0:
+        raise HTTPException(404, "السؤال غير موجود")
+    await db.community_categories.update_one({"id": cat_id}, {"$inc": {"questions_count": -1}})
+    return {"message": "تم الحذف"}
+
+@api_router.post("/community/categories/{cat_id}/submit")
+async def community_submit_category(cat_id: str, user: dict = Depends(require_user)):
+    _require_premium(user)
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    if cat["status"] not in ("draft", "rejected"):
+        raise HTTPException(400, "الفئة مرسلة للمراجعة مسبقاً")
+    count = await db.community_questions.count_documents({"category_id": cat_id})
+    if count < COMMUNITY_MIN_QUESTIONS:
+        raise HTTPException(400, f"يجب إضافة {COMMUNITY_MIN_QUESTIONS} سؤالاً على الأقل قبل الإرسال (لديك {count})")
+    await db.community_categories.update_one(
+        {"id": cat_id},
+        {"$set": {"status": "pending_review", "submitted_at": datetime.now(timezone.utc).isoformat(), "rejection_reason": ""}}
+    )
+    return {"message": "تم إرسال الفئة للمراجعة"}
+
+# ── Wallet & Payouts ───────────────────────────────────────────────────────
+
+@api_router.get("/community/wallet")
+async def community_get_wallet(user: dict = Depends(require_user)):
+    wallet = await _get_wallet(user["id"])
+    cats_approved = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
+    cats_pending  = await db.community_categories.count_documents({"creator_id": user["id"], "status": "pending_review"})
+    cats_draft    = await db.community_categories.count_documents({"creator_id": user["id"], "status": "draft"})
+    return {**wallet, "cats_approved": cats_approved, "cats_pending": cats_pending, "cats_draft": cats_draft}
+
+class PayoutRequest(BaseModel):
+    amount: float
+    iban: str
+    account_name: str
+
+@api_router.post("/community/payouts")
+async def community_request_payout(body: PayoutRequest, user: dict = Depends(require_user)):
+    wallet = await _get_wallet(user["id"])
+    if body.amount < COMMUNITY_MIN_PAYOUT_SAR:
+        raise HTTPException(400, f"الحد الأدنى للسحب {COMMUNITY_MIN_PAYOUT_SAR} ريال")
+    if body.amount > wallet.get("balance", 0):
+        raise HTTPException(400, "الرصيد غير كافٍ")
+    if not body.iban.strip() or not body.account_name.strip():
+        raise HTTPException(400, "الآيبان واسم الحساب مطلوبان")
+    pending = await db.community_payouts.find_one({"user_id": user["id"], "status": "pending"})
+    if pending:
+        raise HTTPException(400, "لديك طلب سحب معلق بالفعل")
+    payout = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "username": user.get("username", ""),
+        "amount": body.amount,
+        "iban": body.iban.strip(),
+        "account_name": body.account_name.strip(),
+        "status": "pending",
+        "admin_note": "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.community_payouts.insert_one(payout)
+    await db.community_wallets.update_one(
+        {"user_id": user["id"]},
+        {"$inc": {"balance": -body.amount}},
+    )
+    payout.pop("_id", None)
+    return payout
+
+@api_router.get("/community/payouts")
+async def community_my_payouts(user: dict = Depends(require_user)):
+    payouts = await db.community_payouts.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    return payouts
+
+# ── Notifications ──────────────────────────────────────────────────────────
+
+@api_router.get("/community/notifications")
+async def community_get_notifications(user: dict = Depends(require_user)):
+    notifs = await db.community_notifications.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).limit(50).to_list(50)
+    return notifs
+
+@api_router.patch("/community/notifications/read")
+async def community_mark_read(user: dict = Depends(require_user)):
+    await db.community_notifications.update_many(
+        {"user_id": user["id"], "is_read": False},
+        {"$set": {"is_read": True}},
+    )
+    return {"message": "تم"}
+
+# ── Admin: Moderation ──────────────────────────────────────────────────────
+
+@api_router.get("/admin/community/pending")
+async def admin_community_pending(admin: dict = Depends(get_admin)):
+    cats = await db.community_categories.find(
+        {"status": "pending_review"}, {"_id": 0}
+    ).sort("submitted_at", 1).to_list(100)
+    return cats
+
+@api_router.get("/admin/community/categories")
+async def admin_community_all(status: str = "", admin: dict = Depends(get_admin)):
+    filt = {} if not status else {"status": status}
+    cats = await db.community_categories.find(filt, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return cats
+
+@api_router.post("/admin/community/{cat_id}/approve")
+async def admin_community_approve(cat_id: str, admin: dict = Depends(get_admin)):
+    cat = await db.community_categories.find_one({"id": cat_id})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    await db.community_categories.update_one(
+        {"id": cat_id},
+        {"$set": {"status": "approved", "reviewed_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    qs_count = await db.community_questions.count_documents({"category_id": cat_id})
+    pts = qs_count * COMMUNITY_POINTS_PER_QUESTION
+    await _add_points(cat["creator_id"], pts)
+    await _notify(cat["creator_id"], "category_approved",
+                  f"🎉 تمت الموافقة على فئتك \"{cat['name']}\" وحصلت على {pts} نقطة!")
+    return {"message": "تمت الموافقة"}
+
+class AdminRejectBody(BaseModel):
+    reason: str = ""
+
+@api_router.post("/admin/community/{cat_id}/reject")
+async def admin_community_reject(cat_id: str, body: AdminRejectBody, admin: dict = Depends(get_admin)):
+    cat = await db.community_categories.find_one({"id": cat_id})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    await db.community_categories.update_one(
+        {"id": cat_id},
+        {"$set": {"status": "rejected", "rejection_reason": body.reason,
+                  "reviewed_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    reason_text = f" — السبب: {body.reason}" if body.reason else ""
+    await _notify(cat["creator_id"], "category_rejected",
+                  f"❌ لم تُقبل فئتك \"{cat['name']}\"{reason_text}")
+    return {"message": "تم الرفض"}
+
+@api_router.get("/admin/community/payouts")
+async def admin_community_payouts(status: str = "", admin: dict = Depends(get_admin)):
+    filt = {} if not status else {"status": status}
+    payouts = await db.community_payouts.find(filt, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return payouts
+
+class PayoutStatusUpdate(BaseModel):
+    status: str  # approved | paid | rejected
+    admin_note: str = ""
+
+@api_router.patch("/admin/community/payouts/{payout_id}")
+async def admin_update_payout(payout_id: str, body: PayoutStatusUpdate, admin: dict = Depends(get_admin)):
+    if body.status not in ("approved", "paid", "rejected"):
+        raise HTTPException(400, "حالة غير صالحة")
+    payout = await db.community_payouts.find_one({"id": payout_id})
+    if not payout:
+        raise HTTPException(404, "الطلب غير موجود")
+    await db.community_payouts.update_one(
+        {"id": payout_id},
+        {"$set": {"status": body.status, "admin_note": body.admin_note,
+                  "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if body.status == "rejected":
+        await db.community_wallets.update_one(
+            {"user_id": payout["user_id"]},
+            {"$inc": {"balance": payout["amount"]}},
+        )
+    msg_map = {
+        "approved": f"✅ طلب سحب {payout['amount']} ريال تمت الموافقة عليه",
+        "paid":     f"💰 تم تحويل {payout['amount']} ريال لحسابك",
+        "rejected": f"❌ تم رفض طلب سحب {payout['amount']} ريال",
+    }
+    await _notify(payout["user_id"], f"payout_{body.status}", msg_map[body.status])
+    return {"message": "تم التحديث"}
+
+@api_router.get("/admin/community/analytics")
+async def admin_community_analytics(admin: dict = Depends(get_admin)):
+    total_cats     = await db.community_categories.count_documents({})
+    approved_cats  = await db.community_categories.count_documents({"status": "approved"})
+    pending_cats   = await db.community_categories.count_documents({"status": "pending_review"})
+    total_payouts  = await db.community_payouts.count_documents({})
+    pending_payouts= await db.community_payouts.count_documents({"status": "pending"})
+    pipeline = [{"$group": {"_id": None, "total": {"$sum": "$amount"}}}]
+    paid_res = await db.community_payouts.aggregate([
+        {"$match": {"status": "paid"}}, *pipeline
+    ]).to_list(1)
+    total_paid = paid_res[0]["total"] if paid_res else 0
+    return {
+        "total_categories": total_cats,
+        "approved_categories": approved_cats,
+        "pending_categories": pending_cats,
+        "total_payout_requests": total_payouts,
+        "pending_payout_requests": pending_payouts,
+        "total_paid_sar": total_paid,
+    }
+
+# ══════════════════════════════════════════════════════════════════════════════
+
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(_subscription_daily_loop())
