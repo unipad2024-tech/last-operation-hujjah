@@ -301,6 +301,30 @@ export default function CommunityPage() {
         </div>
       </div>
 
+      {/* Monthly earnings card */}
+      <div style={{ ...S.card, marginBottom: 20, borderColor: "rgba(115,240,168,0.2)", background: "rgba(64,212,140,0.04)" }}>
+        <div style={{ fontSize: 13, color: "#d8cdb8", fontWeight: 700, marginBottom: 6 }}>
+          هذا الشهر ({wallet?.month || "—"})
+        </div>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <div>
+            <div style={{ fontSize: 36, fontWeight: 900, color: "#73f0a8", lineHeight: 1 }}>
+              {wallet?.monthly_unique_players ?? 0}
+            </div>
+            <div style={{ fontSize: 12, color: "#d8cdb8", marginTop: 4 }}>لاعب فريد هذا الشهر</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "#f2b85b" }}>
+              {wallet?.monthly_pending_sar?.toFixed(2) ?? "0.00"} ريال
+            </div>
+            <div style={{ fontSize: 12, color: "#d8cdb8", marginTop: 4 }}>تُضاف لرصيدك آخر الشهر</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: "#d8cdb8", marginTop: 12, padding: "8px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
+          كل لاعع فريد = نقطة واحدة هذا الشهر — يتجدد العداد أول كل شهر
+        </div>
+      </div>
+
       {/* Stats */}
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
         {[
@@ -323,7 +347,8 @@ export default function CommunityPage() {
             ["🎯", "أنشئ فئة أسئلة من 24 سؤالاً فأكثر"],
             ["📤", "أرسلها للمراجعة — تُقبل خلال 48 ساعة"],
             ["✅", "بعد القبول تحصل على 5 نقاط لكل سؤال"],
-            ["🎮", "كل مرة يلعب أحد فئتك = 10 نقاط"],
+            ["🎮", "كل لاعب فريد يلعب فئتك = نقطة واحدة لهذا الشهر"],
+            ["🔄", "عداد اللاعبين يتجدد أول كل شهر (لا تتراكم)"],
             ["💰", "100 نقطة = 1 ريال سعودي"],
             ["💳", "اطلب السحب عند 50 ريال فأكثر"],
           ].map(([ic, txt]) => (

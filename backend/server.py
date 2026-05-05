@@ -1575,6 +1575,31 @@ async def get_next_question(session_id: str, category_id: str, difficulty: int,
             {"$addToSet": {"answered_question_ids": question["id"]}}
         )
 
+    # Community category play tracking (monthly unique player = 1 point)
+    comm_cat = await db.community_categories.find_one(
+        {"id": category_id, "status": "approved"}, {"_id": 0, "creator_id": 1}
+    )
+    if comm_cat:
+        # Always increment total display counter
+        await db.community_categories.update_one(
+            {"id": category_id}, {"$inc": {"play_count": 1}}
+        )
+        # Log unique player per month (upsert — same player this month = ignored)
+        player_id = user["id"] if user else f"anon:{session_id}"
+        month_key = datetime.now(timezone.utc).strftime("%Y-%m")
+        await db.community_play_logs.update_one(
+            {"category_id": category_id, "player_id": player_id, "month": month_key},
+            {"$setOnInsert": {
+                "category_id": category_id,
+                "creator_id": comm_cat["creator_id"],
+                "player_id": player_id,
+                "month": month_key,
+                "processed": False,
+                "logged_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+
     return question
 
 @api_router.post("/game/session/{session_id}/score")
@@ -3770,9 +3795,10 @@ async def _keepalive_loop():
 # ══════════════════════════════════════════════════════════════════════════════
 
 COMMUNITY_POINTS_PER_QUESTION = 5      # points per approved question
-COMMUNITY_POINTS_PER_PLAY     = 10     # points per play of creator's category
 COMMUNITY_POINTS_TO_SAR       = 100    # 100 points = 1 SAR
 COMMUNITY_MIN_PAYOUT_SAR      = 50     # minimum payout amount
+# Play earning: 1 point per UNIQUE player per month — resets each month
+# Total play_count (display) never resets
 COMMUNITY_MIN_QUESTIONS       = 24     # minimum questions before review
 
 def _require_premium(user: dict):
@@ -3932,7 +3958,26 @@ async def community_get_wallet(user: dict = Depends(require_user)):
     cats_approved = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
     cats_pending  = await db.community_categories.count_documents({"creator_id": user["id"], "status": "pending_review"})
     cats_draft    = await db.community_categories.count_documents({"creator_id": user["id"], "status": "draft"})
-    return {**wallet, "cats_approved": cats_approved, "cats_pending": cats_pending, "cats_draft": cats_draft}
+    # Monthly unique players (current month, unprocessed)
+    month_key = datetime.now(timezone.utc).strftime("%Y-%m")
+    monthly_pipeline = [
+        {"$match": {"creator_id": user["id"], "month": month_key, "processed": False}},
+        {"$group": {"_id": "$category_id", "unique_players": {"$sum": 1}}},
+        {"$group": {"_id": None, "total_players": {"$sum": "$unique_players"},
+                    "categories": {"$push": {"cat": "$_id", "players": "$unique_players"}}}},
+    ]
+    monthly_res = await db.community_play_logs.aggregate(monthly_pipeline).to_list(1)
+    monthly_players = monthly_res[0]["total_players"] if monthly_res else 0
+    monthly_sar     = round(monthly_players / COMMUNITY_POINTS_TO_SAR, 4)
+    return {
+        **wallet,
+        "cats_approved": cats_approved,
+        "cats_pending": cats_pending,
+        "cats_draft": cats_draft,
+        "month": month_key,
+        "monthly_unique_players": monthly_players,
+        "monthly_pending_sar": monthly_sar,
+    }
 
 class PayoutRequest(BaseModel):
     amount: float
@@ -4091,6 +4136,9 @@ async def admin_community_analytics(admin: dict = Depends(get_admin)):
         {"$match": {"status": "paid"}}, *pipeline
     ]).to_list(1)
     total_paid = paid_res[0]["total"] if paid_res else 0
+    # Monthly play stats
+    cur_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    monthly_plays = await db.community_play_logs.count_documents({"month": cur_month, "processed": False})
     return {
         "total_categories": total_cats,
         "approved_categories": approved_cats,
@@ -4098,6 +4146,56 @@ async def admin_community_analytics(admin: dict = Depends(get_admin)):
         "total_payout_requests": total_payouts,
         "pending_payout_requests": pending_payouts,
         "total_paid_sar": total_paid,
+        "current_month": cur_month,
+        "monthly_unprocessed_plays": monthly_plays,
+    }
+
+@api_router.post("/admin/community/process-monthly-earnings")
+async def admin_process_monthly_earnings(body: dict = {}, admin: dict = Depends(get_admin)):
+    """
+    Process monthly play earnings for all creators.
+    Counts unique unprocessed plays per creator, awards 1 point each,
+    then marks them as processed so they don't count again next run.
+    Call at end of each month (or any time — safe to run multiple times,
+    only unprocessed logs are counted).
+    """
+    month_to_process = body.get("month") or datetime.now(timezone.utc).strftime("%Y-%m")
+
+    pipeline = [
+        {"$match": {"month": month_to_process, "processed": False}},
+        {"$group": {"_id": "$creator_id", "unique_players": {"$sum": 1}}},
+    ]
+    results = await db.community_play_logs.aggregate(pipeline).to_list(10000)
+
+    if not results:
+        return {"message": "لا توجد ألعاب غير محسوبة لهذا الشهر", "month": month_to_process, "creators_paid": 0}
+
+    total_points_awarded = 0
+    for row in results:
+        creator_id = row["_id"]
+        points     = row["unique_players"]   # 1 point per unique player
+        sar        = round(points / COMMUNITY_POINTS_TO_SAR, 4)
+        await db.community_wallets.update_one(
+            {"user_id": creator_id},
+            {"$inc": {"points": points, "balance": sar, "total_earned": sar}},
+            upsert=True,
+        )
+        await _notify(creator_id, "monthly_earnings",
+                      f"💰 أرباح {month_to_process}: {points} لاعع فريد → {sar:.2f} ريال أُضيف لرصيدك")
+        total_points_awarded += points
+
+    # Mark all as processed
+    await db.community_play_logs.update_many(
+        {"month": month_to_process, "processed": False},
+        {"$set": {"processed": True}},
+    )
+
+    return {
+        "message": "تمت معالجة الأرباح الشهرية",
+        "month": month_to_process,
+        "creators_paid": len(results),
+        "total_points_awarded": total_points_awarded,
+        "total_sar_awarded": round(total_points_awarded / COMMUNITY_POINTS_TO_SAR, 2),
     }
 
 # ══════════════════════════════════════════════════════════════════════════════
