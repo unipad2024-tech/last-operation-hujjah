@@ -52,8 +52,8 @@ app.mount("/api/static", StaticFiles(directory=str(ROOT_DIR / "static")), name="
 SECRET_KEY      = os.environ['JWT_SECRET_KEY']          # No fallback — must be set
 ADMIN_PASSWORD  = os.environ['ADMIN_PASSWORD']          # No fallback — must be set
 STRIPE_API_KEY  = os.environ.get('STRIPE_API_KEY', '')
-PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID', '')
-PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '')
+PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID',  'APP_ID_1774162201273')
+PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '3c3c6b0e-ccac-352d-acc9-de094ab2117c')
 EMAIL_USER      = os.environ.get('EMAIL_USER', '')
 EMAIL_PASS      = os.environ.get('EMAIL_PASS', '')
 UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', 'p0r_782hncvFkWs7zw7gxNjnJ-H3rmSuqymDCZ1DUho')
@@ -1847,7 +1847,9 @@ class PaylinkInitiate(BaseModel):
 @api_router.post("/paylink/initiate")
 async def paylink_initiate(body: PaylinkInitiate, user: dict = Depends(require_user)):
     """Create a Paylink invoice and return the payment URL."""
-    if not PAYMENT_API_ID or not PAYMENT_API_KEY:
+    _pay_id  = os.environ.get("PAYMENT_API_ID",  PAYMENT_API_ID)
+    _pay_key = os.environ.get("PAYMENT_API_KEY", PAYMENT_API_KEY)
+    if not _pay_id or not _pay_key:
         raise HTTPException(503, "بوابة الدفع غير مفعّلة — تواصل مع الإدارة")
 
     plan = SUBSCRIPTION_PLANS.get(body.plan_id)
