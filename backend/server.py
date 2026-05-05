@@ -56,7 +56,7 @@ PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID', '')
 PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '')
 EMAIL_USER      = os.environ.get('EMAIL_USER', '')
 EMAIL_PASS      = os.environ.get('EMAIL_PASS', '')
-UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', 'pjNvy5VEAWhUzBigrJW0-qz9zNT_9IVmPYN0Sytl0HU')
+UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', 'p0r_782hncvFkWs7zw7gxNjnJ-H3rmSuqymDCZ1DUho')
 ALGORITHM       = "HS256"
 
 # ─── MongoDB-backed rate limiter (works across all uvicorn workers) ─────────
