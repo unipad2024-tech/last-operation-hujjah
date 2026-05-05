@@ -293,12 +293,12 @@ export default function CommunityPage() {
         {/* decorative images */}
         <img src="https://i.pinimg.com/736x/21/e4/7b/21e47bbf1c1ba178e0a16e50f3565e99.jpg"
           alt="" aria-hidden="true"
-          style={{ position: "absolute", left: 0, top: 0, height: "100%", width: "42%", objectFit: "cover", objectPosition: "center", opacity: 0.22, borderRadius: "22px 0 0 22px", pointerEvents: "none", userSelect: "none" }} />
+          style={{ position: "absolute", left: 0, top: 0, height: "100%", width: "42%", objectFit: "cover", objectPosition: "center", opacity: 0.45, borderRadius: "22px 0 0 22px", pointerEvents: "none", userSelect: "none" }} />
         <img src="https://i.pinimg.com/736x/a0/be/c2/a0bec239e77e424ecca7f30bfd8a29d1.jpg"
           alt="" aria-hidden="true"
-          style={{ position: "absolute", right: 0, top: 0, height: "100%", width: "42%", objectFit: "cover", objectPosition: "center", opacity: 0.22, borderRadius: "0 22px 22px 0", pointerEvents: "none", userSelect: "none" }} />
+          style={{ position: "absolute", right: 0, top: 0, height: "100%", width: "42%", objectFit: "cover", objectPosition: "center", opacity: 0.45, borderRadius: "0 22px 22px 0", pointerEvents: "none", userSelect: "none" }} />
         {/* gradient overlay to fade images into center */}
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to left, transparent 0%, rgba(10,5,12,0.85) 38%, rgba(10,5,12,0.85) 62%, transparent 100%)", borderRadius: 22, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to left, transparent 0%, rgba(10,5,12,0.80) 35%, rgba(10,5,12,0.80) 65%, transparent 100%)", borderRadius: 22, pointerEvents: "none" }} />
 
         {/* content */}
         <div style={{ position: "relative", zIndex: 1 }}>
