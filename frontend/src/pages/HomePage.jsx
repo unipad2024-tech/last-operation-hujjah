@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 
@@ -144,6 +144,108 @@ function ArtCollageBackground() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
+/* ── User Avatar Dropdown ─────────────────────────────────────────────────── */
+function UserMenu({ currentUser, isPremium, navigate, logoutUser }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const avatarLetter = (currentUser.username || "؟")[0].toUpperCase();
+  const avatarUrl    = currentUser.avatar_url;
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      {/* Avatar button */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: "flex", alignItems: "center", gap: 10,
+          background: "rgba(241,225,148,0.08)",
+          border: `1.5px solid ${open ? "rgba(241,225,148,0.5)" : "rgba(241,225,148,0.22)"}`,
+          borderRadius: 999, padding: "6px 14px 6px 6px",
+          cursor: "pointer", transition: "all 0.2s",
+        }}
+      >
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} onError={e => { e.target.style.display="none"; }} />
+        ) : (
+          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(241,225,148,0.18)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#F1E194", flexShrink: 0 }}>
+            {avatarLetter}
+          </div>
+        )}
+        <div style={{ lineHeight: 1.3, textAlign: "right" }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#F1E194" }}>{currentUser.username}</div>
+          <div style={{ fontSize: 10, color: isPremium ? "#FCD34D" : "rgba(241,225,148,0.45)", fontWeight: 700 }}>
+            {isPremium ? "✦ عضو مميز" : "مجاني"}
+          </div>
+        </div>
+        <span style={{ color: "rgba(241,225,148,0.5)", fontSize: 10, marginRight: 2 }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 8px)", right: 0,
+          background: "rgba(10,5,8,0.97)", border: "1px solid rgba(241,225,148,0.2)",
+          borderRadius: 16, padding: 8, minWidth: 200,
+          boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
+          backdropFilter: "blur(20px)", zIndex: 100,
+          animation: "fadeIn 0.15s ease",
+        }}>
+          {/* Header */}
+          <div style={{ padding: "10px 14px 12px", borderBottom: "1px solid rgba(241,225,148,0.1)", marginBottom: 6 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#F1E194" }}>{currentUser.username}</div>
+            <div style={{ fontSize: 11, color: "rgba(241,225,148,0.4)", marginTop: 2 }}>{currentUser.email || ""}</div>
+          </div>
+
+          {/* Items */}
+          {[
+            { icon: "👤", label: "بروفايلي", action: () => { navigate(`/profile/${currentUser.username}`); setOpen(false); } },
+            { icon: "⚙️", label: "إعدادات الحساب", action: () => { navigate("/settings"); setOpen(false); } },
+            { icon: "🏘️", label: "المجتمع", action: () => { navigate("/community"); setOpen(false); } },
+            ...(!isPremium ? [{ icon: "✦", label: "ترقية إلى Premium", action: () => { navigate("/pricing"); setOpen(false); }, gold: true }] : []),
+          ].map(({ icon, label, action, gold }) => (
+            <button key={label} onClick={action}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, width: "100%",
+                padding: "10px 14px", borderRadius: 10, border: "none",
+                background: "transparent", color: gold ? "#FCD34D" : "rgba(241,225,148,0.8)",
+                cursor: "pointer", fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 13,
+                textAlign: "right", transition: "background 0.15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(241,225,148,0.08)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+            >
+              <span>{icon}</span><span>{label}</span>
+            </button>
+          ))}
+
+          {/* Divider + logout */}
+          <div style={{ height: 1, background: "rgba(241,225,148,0.08)", margin: "6px 0" }} />
+          <button onClick={() => { logoutUser(); setOpen(false); }}
+            style={{
+              display: "flex", alignItems: "center", gap: 10, width: "100%",
+              padding: "10px 14px", borderRadius: 10, border: "none",
+              background: "transparent", color: "rgba(255,100,100,0.7)",
+              cursor: "pointer", fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 13,
+              textAlign: "right", transition: "background 0.15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,80,80,0.08)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+          >
+            <span>🚪</span><span>تسجيل خروج</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function HomePage() {
   const navigate  = useNavigate();
   const { currentUser, logoutUser } = useGame();
@@ -162,21 +264,7 @@ export default function HomePage() {
       >
         {/* LEFT: auth */}
         {currentUser ? (
-          <div className="flex items-center gap-3">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-secondary text-sm font-black shrink-0"
-              style={{ background: "rgba(241,225,148,0.13)", border: "1.5px solid rgba(241,225,148,0.32)" }}
-            >
-              {(currentUser.username || "؟")[0].toUpperCase()}
-            </div>
-            <div className="leading-tight">
-              <span className="text-secondary/85 text-sm font-bold block">{currentUser.username}</span>
-              {isPremium
-                ? <span className="text-[10px] text-amber-400/70 font-bold">✦ عضو مميز</span>
-                : <button data-testid="upgrade-banner-btn" onClick={() => navigate("/pricing")} className="text-[10px] text-amber-400 font-black hover:text-amber-300 transition-colors">ترقية ↗</button>
-              }
-            </div>
-          </div>
+          <UserMenu currentUser={currentUser} isPremium={isPremium} navigate={navigate} logoutUser={logoutUser} />
         ) : (
           <div className="flex items-center gap-2">
             <button
@@ -232,15 +320,6 @@ export default function HomePage() {
           >
             الإدارة
           </button>
-          {currentUser && (
-            <button
-              data-testid="logout-btn"
-              onClick={logoutUser}
-              className="text-secondary/35 text-xs font-bold px-3 py-2 rounded-full hover:text-secondary/65 transition-all"
-            >
-              خروج
-            </button>
-          )}
         </div>
       </nav>
 
