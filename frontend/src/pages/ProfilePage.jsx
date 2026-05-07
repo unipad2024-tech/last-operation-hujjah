@@ -9,18 +9,19 @@ const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-
 /* ── Prestige System (mirrors backend: 11 prestiges × 55 levels) ────────────── */
 const XP_PER_PRESTIGE = 10_000;
 
+// Colors match CoD Black Ops 2 prestige emblems (top-left → right → next row)
 const PRESTIGE_META = [
-  { name: "مُجنَّد",        color: "#4ade80", glow: "#4ade8044" },  // P1  Green
-  { name: "مقاتل",          color: "#fb923c", glow: "#fb923c44" },  // P2  Orange
-  { name: "محارب",          color: "#facc15", glow: "#facc1544" },  // P3  Yellow
-  { name: "فارس",           color: "#f87171", glow: "#f8717144" },  // P4  Red
-  { name: "حامٍ",           color: "#c084fc", glow: "#c084fc44" },  // P5  Purple
-  { name: "بطل",            color: "#60a5fa", glow: "#60a5fa44" },  // P6  Blue
-  { name: "أسطورة",         color: "#22d3ee", glow: "#22d3ee44" },  // P7  Cyan
-  { name: "نخبة",           color: "#f472b6", glow: "#f472b644" },  // P8  Pink
-  { name: "أسطورة النخبة",  color: "#94a3b8", glow: "#94a3b844" },  // P9  Silver
-  { name: "بطل الأبطال",    color: "#f59e0b", glow: "#f59e0b55" },  // P10 Gold
-  { name: "ماستر",          color: "#f2b85b", glow: "#f2b85b77" },  // P11 Master
+  { name: "المُجنَّد",        color: "#4ade80", glow: "#4ade8055" },  // P1  Eagle Shield (green)
+  { name: "المقاتل",          color: "#f97316", glow: "#f9731655" },  // P2  Lightning Fist (orange)
+  { name: "المحارب",          color: "#94a3b8", glow: "#94a3b844" },  // P3  Scorpion (dark grey)
+  { name: "الفارس",           color: "#a16207", glow: "#a1620755" },  // P4  Demon Wolf (dark gold)
+  { name: "الحامي",           color: "#a855f7", glow: "#a855f755" },  // P5  Snake Diamond (purple)
+  { name: "البطل",            color: "#60a5fa", glow: "#60a5fa55" },  // P6  Trident Shield (blue)
+  { name: "الأسطورة",         color: "#cbd5e1", glow: "#cbd5e155" },  // P7  Viking Axes (silver)
+  { name: "النخبة",           color: "#fb923c", glow: "#fb923c55" },  // P8  Skull Diamond+Stars (orange-red)
+  { name: "نخبة الأساطير",    color: "#92400e", glow: "#92400e55" },  // P9  Military Skull (dark brown)
+  { name: "قائد الأبطال",     color: "#dc2626", glow: "#dc262655" },  // P10 Flame Demon (red)
+  { name: "ماستر",            color: "#f2b85b", glow: "#f2b85b77" },  // P11 Master (gold)
 ];
 
 function getPrestigeMeta(prestige) {
@@ -50,93 +51,239 @@ function PrestigeBadge({ prestige, size = 40 }) {
   );
 
   const shapes = {
-    1: <>  {/* Shield */}
+    /* P1 — Eagle Shield (green holographic) */
+    1: <>
       <defs>{glowFilter}</defs>
-      <path d="M20 3 L34 8 L34 24 C34 32 28 38 20 41 C12 38 6 32 6 24 L6 8 Z" fill={c} filter={`url(#${id})`} opacity="0.95"/>
-      <path d="M20 8 L28 12 L28 24 C28 29 25 33 20 35 C15 33 12 29 12 24 L12 12 Z" fill="rgba(255,255,255,0.13)"/>
-      {numLabel(20, 27)}
+      {/* Shield body */}
+      <path d="M20 3 L34 8 L34 24 C34 33 28 39 20 42 C12 39 6 33 6 24 L6 8 Z"
+        fill={`${c}22`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
+      {/* Eagle wings */}
+      <path d="M20 19 L9 13 L11 18 L7 22 L13 20 L20 24 Z" fill={c} opacity="0.9"/>
+      <path d="M20 19 L31 13 L29 18 L33 22 L27 20 L20 24 Z" fill={c} opacity="0.9"/>
+      {/* Eagle head + beak */}
+      <ellipse cx="20" cy="14" rx="4" ry="3.5" fill={c} filter={`url(#${id})`}/>
+      <path d="M24 14 L26 16 L24 16" fill={c} opacity="0.7"/>
+      {/* Chain links hint */}
+      <circle cx="7" cy="12" r="1.5" fill="none" stroke={c} strokeWidth="1" opacity="0.4"/>
+      <circle cx="33" cy="12" r="1.5" fill="none" stroke={c} strokeWidth="1" opacity="0.4"/>
     </>,
-    2: <>  {/* Diamond */}
+
+    /* P2 — Lightning Fist Shield (orange) */
+    2: <>
       <defs>{glowFilter}</defs>
-      <polygon points="20,3 37,20 20,37 3,20" fill={c} filter={`url(#${id})`} opacity="0.95"/>
-      <polygon points="20,9 31,20 20,31 9,20" fill="rgba(255,255,255,0.13)"/>
-      {numLabel(20, 24)}
+      {/* Shield */}
+      <path d="M20 4 L33 9 L33 26 C33 33 27 39 20 41 C13 39 7 33 7 26 L7 9 Z"
+        fill={`${c}20`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
+      {/* Crossed swords at top */}
+      <line x1="11" y1="5"  x2="23" y2="14" stroke={c} strokeWidth="2"   opacity="0.65" strokeLinecap="round"/>
+      <line x1="29" y1="5"  x2="17" y2="14" stroke={c} strokeWidth="2"   opacity="0.65" strokeLinecap="round"/>
+      {/* Fist suggestion (circle) */}
+      <circle cx="20" cy="20" r="5" fill={c} opacity="0.7" filter={`url(#${id})`}/>
+      {/* Lightning bolt */}
+      <path d="M23 15 L17 22 L21 22 L17 30 L27 20 L23 20 Z"
+        fill={c} filter={`url(#${id})`}/>
     </>,
-    3: <>  {/* 5-Pointed Star */}
+
+    /* P3 — Scorpion Hex (dark grey) */
+    3: <>
       <defs>{glowFilter}</defs>
-      <polygon points="20,2 23.5,13 35,13 26,20.5 29.5,32 20,25.5 10.5,32 14,20.5 5,13 16.5,13" fill={c} filter={`url(#${id})`} opacity="0.95"/>
-      {numLabel(20, 25, 10)}
+      {/* Hexagon frame */}
+      <polygon points="20,2 35,11 35,29 20,38 5,29 5,11"
+        fill={`${c}18`} stroke={c} strokeWidth="1.5"/>
+      {/* Claws */}
+      <path d="M14 23 L7 18 M14 23 L7 26" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.85"/>
+      <path d="M26 23 L33 18 M26 23 L33 26" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.85"/>
+      {/* Body */}
+      <ellipse cx="20" cy="24" rx="5" ry="6" fill={c} opacity="0.9" filter={`url(#${id})`}/>
+      {/* Tail curving up */}
+      <path d="M20 18 C21 13 25 10 24 6" stroke={c} strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+      {/* Stinger */}
+      <circle cx="24" cy="5" r="2" fill={c} filter={`url(#${id})`}/>
     </>,
-    4: <>  {/* Kite / Arrow */}
+
+    /* P4 — Demon Wolf Head (dark gold/brown, red eyes) */
+    4: <>
       <defs>{glowFilter}</defs>
-      <path d="M20 2 L38 15 L20 38 L2 15 Z" fill={c} filter={`url(#${id})`} opacity="0.95"/>
-      <path d="M20 8 L31 17 L20 32 L9 17 Z" fill="rgba(255,255,255,0.13)"/>
-      {numLabel(20, 24)}
+      {/* Head */}
+      <path d="M10 36 Q8 28 10 22 Q12 14 20 12 Q28 14 30 22 Q32 28 30 36 Q26 38 20 39 Q14 38 10 36 Z"
+        fill={`${c}25`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
+      {/* Horns */}
+      <path d="M13 18 L9 7 L15 16" fill={c} opacity="0.9"/>
+      <path d="M27 18 L31 7 L25 16" fill={c} opacity="0.9"/>
+      {/* Red eyes */}
+      <ellipse cx="16" cy="22" rx="3" ry="2.5" fill="#ef4444" filter={`url(#${id})`}/>
+      <ellipse cx="24" cy="22" rx="3" ry="2.5" fill="#ef4444" filter={`url(#${id})`}/>
+      <ellipse cx="16" cy="22" rx="1.5" ry="1.5" fill="#fff" opacity="0.4"/>
+      <ellipse cx="24" cy="22" rx="1.5" ry="1.5" fill="#fff" opacity="0.4"/>
+      {/* Snout */}
+      <path d="M15 29 C17 32 23 32 25 29" stroke={c} strokeWidth="2" fill="none" strokeLinecap="round"/>
     </>,
-    5: <>  {/* Hexagon */}
+
+    /* P5 — Snake + Daggers Diamond (purple) */
+    5: <>
       <defs>{glowFilter}</defs>
-      <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" fill={c} filter={`url(#${id})`} opacity="0.95"/>
-      <polygon points="20,7 31,13.5 31,26.5 20,33 9,26.5 9,13.5" fill="rgba(255,255,255,0.13)"/>
-      {numLabel(20, 24)}
+      {/* Diamond frame */}
+      <polygon points="20,3 37,20 20,37 3,20"
+        fill={`${c}18`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
+      {/* Crossed daggers */}
+      <line x1="11" y1="11" x2="29" y2="29" stroke={c} strokeWidth="2" opacity="0.5" strokeLinecap="round"/>
+      <line x1="29" y1="11" x2="11" y2="29" stroke={c} strokeWidth="2" opacity="0.5" strokeLinecap="round"/>
+      {/* Snake body (S-curve) */}
+      <path d="M13 22 Q17 14 20 20 Q23 26 27 18" stroke={c} strokeWidth="3.5"
+        fill="none" strokeLinecap="round" filter={`url(#${id})`}/>
+      {/* Snake head */}
+      <ellipse cx="28" cy="17" rx="3.5" ry="2.5" fill={c} transform="rotate(-30,28,17)"/>
+      {/* Tongue */}
+      <path d="M30 16 L33 14 M30 16 L33 18" stroke={c} strokeWidth="1" strokeLinecap="round" opacity="0.8"/>
     </>,
-    6: <>  {/* Sunburst Circle */}
+
+    /* P6 — Trident Shield (blue + gold trident) */
+    6: <>
       <defs>{glowFilter}</defs>
-      {[0,45,90,135,180,225,270,315].map(deg => {
-        const r = deg * Math.PI / 180;
-        return <line key={deg} x1={20+15*Math.cos(r)} y1={20+15*Math.sin(r)} x2={20+20*Math.cos(r)} y2={20+20*Math.sin(r)} stroke={c} strokeWidth="2.5" opacity="0.75"/>;
-      })}
-      <circle cx="20" cy="20" r="13" fill={c} filter={`url(#${id})`} opacity="0.95"/>
-      {numLabel(20, 24)}
+      {/* Shield */}
+      <path d="M20 3 L34 9 L34 26 C34 34 28 40 20 43 C12 40 6 34 6 26 L6 9 Z"
+        fill={`${c}1a`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
+      {/* Tentacle hints */}
+      <path d="M11 28 Q9 21 13 17" stroke={c} strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.6"/>
+      <path d="M29 28 Q31 21 27 17" stroke={c} strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.6"/>
+      {/* Trident shaft */}
+      <line x1="20" y1="10" x2="20" y2="34" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round"/>
+      {/* Trident prongs */}
+      <line x1="14" y1="10" x2="14" y2="16" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/>
+      <line x1="26" y1="10" x2="26" y2="16" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/>
+      <line x1="14" y1="16" x2="17" y2="16" stroke="#f59e0b" strokeWidth="1.5"/>
+      <line x1="23" y1="16" x2="26" y2="16" stroke="#f59e0b" strokeWidth="1.5"/>
     </>,
-    7: <>  {/* Octagon Gem */}
+
+    /* P7 — Viking Helmet + Crossed Axes (silver) */
+    7: <>
       <defs>{glowFilter}</defs>
-      <polygon points="13,2 27,2 38,13 38,27 27,38 13,38 2,27 2,13" fill={c} filter={`url(#${id})`} opacity="0.95"/>
-      <polygon points="14,6 26,6 34,14 34,26 26,34 14,34 6,26 6,14" fill="rgba(255,255,255,0.13)"/>
-      {numLabel(20, 24)}
+      {/* Circle border */}
+      <circle cx="20" cy="20" r="17" fill={`${c}14`} stroke={c} strokeWidth="1.5"/>
+      {/* Crossed axes (diagonal) */}
+      <line x1="8"  y1="32" x2="32" y2="8"  stroke={c} strokeWidth="2.5" opacity="0.55" strokeLinecap="round"/>
+      <line x1="32" y1="32" x2="8"  y2="8"  stroke={c} strokeWidth="2.5" opacity="0.55" strokeLinecap="round"/>
+      {/* Axe heads */}
+      <path d="M6 10 L12 7 L10 13 Z" fill={c} opacity="0.85"/>
+      <path d="M34 10 L28 7 L30 13 Z" fill={c} opacity="0.85"/>
+      <path d="M6 30 L12 33 L10 27 Z" fill={c} opacity="0.85"/>
+      <path d="M34 30 L28 33 L30 27 Z" fill={c} opacity="0.85"/>
+      {/* Helmet dome */}
+      <path d="M13 24 Q13 15 20 13 Q27 15 27 24 L25 26 L20 28 L15 26 Z"
+        fill={c} filter={`url(#${id})`}/>
+      {/* Horns */}
+      <line x1="13" y1="20" x2="7" y2="13" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.8"/>
+      <line x1="13" y1="20" x2="8" y2="18" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.6"/>
+      <line x1="27" y1="20" x2="33" y2="13" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.8"/>
+      <line x1="27" y1="20" x2="32" y2="18" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.6"/>
     </>,
-    8: <>  {/* Crown */}
+
+    /* P8 — Skull Diamond + 5 Stars (orange-red) */
+    8: <>
       <defs>{glowFilter}</defs>
-      <path d="M4 34 L4 19 L11 28 L20 12 L29 28 L36 19 L36 34 Z" fill={c} filter={`url(#${id})`} opacity="0.95"/>
-      <circle cx="20" cy="12" r="2.5" fill="rgba(255,255,255,0.9)"/>
-      <circle cx="4"  cy="19" r="2"   fill="rgba(255,255,255,0.7)"/>
-      <circle cx="36" cy="19" r="2"   fill="rgba(255,255,255,0.7)"/>
-      {numLabel(20, 31)}
+      {/* 5 stars around */}
+      {[[20,3],[35,14],[29,34],[11,34],[5,14]].map(([sx,sy],i) => (
+        <polygon key={i} points={`${sx},${sy-3} ${sx+1.8},${sy} ${sx+3.5},${sy-1} ${sx+2.2},${sy+2} ${sx+3.5},${sy+4} ${sx},${sy+2.5} ${sx-3.5},${sy+4} ${sx-2.2},${sy+2} ${sx-3.5},${sy-1} ${sx-1.8},${sy}`}
+          fill={c} opacity="0.75" filter={`url(#${id})`}/>
+      ))}
+      {/* Diamond */}
+      <polygon points="20,7 32,20 20,33 8,20" fill={`${c}22`} stroke={c} strokeWidth="1.5"/>
+      {/* Skull head */}
+      <ellipse cx="20" cy="19" rx="7" ry="6.5" fill={c} opacity="0.95" filter={`url(#${id})`}/>
+      {/* Jaw */}
+      <rect x="16" y="24" width="8" height="4.5" rx="1.5" fill={c} opacity="0.9"/>
+      {/* Eye sockets */}
+      <ellipse cx="17" cy="19" rx="2.5" ry="2.5" fill="rgba(0,0,0,0.6)"/>
+      <ellipse cx="23" cy="19" rx="2.5" ry="2.5" fill="rgba(0,0,0,0.6)"/>
+      {/* Teeth */}
+      <line x1="17.5" y1="24.5" x2="17.5" y2="28" stroke="rgba(0,0,0,0.5)" strokeWidth="1.5"/>
+      <line x1="20"   y1="24.5" x2="20"   y2="28" stroke="rgba(0,0,0,0.5)" strokeWidth="1.5"/>
+      <line x1="22.5" y1="24.5" x2="22.5" y2="28" stroke="rgba(0,0,0,0.5)" strokeWidth="1.5"/>
     </>,
-    9: <>  {/* Wings */}
+
+    /* P9 — Military Skull + Beret + Crossbones (dark brown) */
+    9: <>
       <defs>{glowFilter}</defs>
-      <path d="M20 21 C18 13 6 9 2 16 C7 19 14 17 17 21 Z" fill={c} opacity="0.9" filter={`url(#${id})`}/>
-      <path d="M20 21 C22 13 34 9 38 16 C33 19 26 17 23 21 Z" fill={c} opacity="0.9"/>
-      <path d="M20 21 C16 25 3 24 2 31 C8 31 15 26 17 23 Z" fill={c} opacity="0.65"/>
-      <path d="M20 21 C24 25 37 24 38 31 C32 31 25 26 23 23 Z" fill={c} opacity="0.65"/>
-      <circle cx="20" cy="22" r="4.5" fill={c} filter={`url(#${id})`}/>
-      {numLabel(20, 25.5, 7)}
+      {/* Circle border */}
+      <circle cx="20" cy="20" r="17" fill={`${c}18`} stroke={c} strokeWidth="1.5"/>
+      {/* Skull */}
+      <ellipse cx="20" cy="18" rx="8.5" ry="8" fill={c} filter={`url(#${id})`}/>
+      {/* Beret (flat top) */}
+      <path d="M11 15 Q11 9 20 8 Q29 9 29 15" fill={c} opacity="0.75"/>
+      {/* Eye sockets */}
+      <ellipse cx="16.5" cy="18" rx="3" ry="2.5" fill="rgba(0,0,0,0.6)"/>
+      <ellipse cx="23.5" cy="18" rx="3" ry="2.5" fill="rgba(0,0,0,0.6)"/>
+      {/* Jaw */}
+      <rect x="15" y="24" width="10" height="5" rx="2" fill={c}/>
+      {/* Teeth */}
+      <line x1="17" y1="24" x2="17" y2="29" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5"/>
+      <line x1="20" y1="24" x2="20" y2="29" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5"/>
+      <line x1="23" y1="24" x2="23" y2="29" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5"/>
+      {/* Crossbones */}
+      <line x1="7"  y1="35" x2="33" y2="29" stroke={c} strokeWidth="3.5" strokeLinecap="round" opacity="0.85"/>
+      <line x1="7"  y1="29" x2="33" y2="35" stroke={c} strokeWidth="3.5" strokeLinecap="round" opacity="0.85"/>
     </>,
-    10: <>  {/* 8-Pointed Ornate Star */}
+
+    /* P10 — Flaming Demon Face (red-dark) */
+    10: <>
+      <defs>
+        {glowFilter}
+        <radialGradient id={`rg${p}`} cx="50%" cy="40%" r="55%">
+          <stop offset="0%" stopColor={c} stopOpacity="0.9"/>
+          <stop offset="100%" stopColor="#1a0000" stopOpacity="1"/>
+        </radialGradient>
+      </defs>
+      {/* Flames */}
+      <path d="M11 38 Q9 29 13 22 Q9 20 11 12 Q16 18 15 22 Q19 13 21 8 Q24 16 22 22 Q26 14 28 10 Q30 18 27 23 Q31 29 29 38 Z"
+        fill={`url(#rg${p})`} filter={`url(#${id})`}/>
+      {/* Face oval */}
+      <ellipse cx="20" cy="27" rx="9" ry="9" fill={`${c}30`} stroke={c} strokeWidth="1"/>
+      {/* Glowing eyes */}
+      <ellipse cx="16.5" cy="26" rx="3" ry="2.5" fill="#fff" opacity="0.85" filter={`url(#${id})`}/>
+      <ellipse cx="23.5" cy="26" rx="3" ry="2.5" fill="#fff" opacity="0.85" filter={`url(#${id})`}/>
+      <ellipse cx="16.5" cy="26" rx="1.8" ry="1.8" fill={c}/>
+      <ellipse cx="23.5" cy="26" rx="1.8" ry="1.8" fill={c}/>
+      {/* Grin */}
+      <path d="M14 31 Q17 34 20 34 Q23 34 26 31" stroke={c} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+    </>,
+
+    /* P11 — Master: Zombie Face + Daggers + Fire (gold) */
+    11: <>
       <defs>
         {glowFilter}
         <linearGradient id={lg} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#fff" stopOpacity="0.35"/>
-          <stop offset="100%" stopColor={c}/>
+          <stop offset="0%" stopColor="#fff" stopOpacity="0.45"/>
+          <stop offset="100%" stopColor={c} stopOpacity="1"/>
         </linearGradient>
+        <radialGradient id={`rg${p}`} cx="50%" cy="70%" r="50%">
+          <stop offset="0%" stopColor={`${c}55`}/>
+          <stop offset="100%" stopColor="transparent"/>
+        </radialGradient>
       </defs>
-      <polygon points="20,2 22.7,12.5 33,9 26,19 37,20 26,21 33,31 22.7,27.5 20,38 17.3,27.5 7,31 14,21 3,20 14,19 7,9 17.3,12.5" fill={`url(#${lg})`} filter={`url(#${id})`}/>
-      {numLabel(20, 24, 10)}
-    </>,
-    11: <>  {/* Master Crown + Ring */}
-      <defs>
-        {glowFilter}
-        <linearGradient id={lg} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#fff" stopOpacity="0.5"/>
-          <stop offset="100%" stopColor={c}/>
-        </linearGradient>
-      </defs>
-      <circle cx="20" cy="20" r="18" fill="none" stroke={c} strokeWidth="1.5" opacity="0.45"/>
-      <circle cx="20" cy="20" r="15" fill="none" stroke={c} strokeWidth="0.5" opacity="0.25"/>
-      <path d="M6 33 L6 18 L12.5 27 L20 10 L27.5 27 L34 18 L34 33 Z" fill={`url(#${lg})`} filter={`url(#${id})`}/>
-      <circle cx="20"   cy="10" r="2.5" fill="#fff" opacity="0.95"/>
-      <circle cx="6"    cy="18" r="2"   fill="#fff" opacity="0.8"/>
-      <circle cx="34"   cy="18" r="2"   fill="#fff" opacity="0.8"/>
-      {numLabel(20, 31, 9)}
+      {/* Outer glow ring */}
+      <circle cx="20" cy="20" r="18.5" fill="none" stroke={c} strokeWidth="1" opacity="0.35"/>
+      {/* Bottom fire glow */}
+      <ellipse cx="20" cy="34" rx="14" ry="7" fill={`url(#rg${p})`}/>
+      {/* Crossed daggers behind face */}
+      <line x1="11" y1="9"  x2="30" y2="32" stroke={c} strokeWidth="2.5" opacity="0.5" strokeLinecap="round"/>
+      <line x1="29" y1="9"  x2="10" y2="32" stroke={c} strokeWidth="2.5" opacity="0.5" strokeLinecap="round"/>
+      {/* Dagger handles */}
+      <line x1="9"  y1="7"  x2="13" y2="11" stroke={c} strokeWidth="3" strokeLinecap="round" opacity="0.7"/>
+      <line x1="31" y1="7"  x2="27" y2="11" stroke={c} strokeWidth="3" strokeLinecap="round" opacity="0.7"/>
+      {/* Face */}
+      <path d="M13 29 Q11 22 14 17 Q17 12 20 12 Q23 12 26 17 Q29 22 27 29 Q24 35 20 36 Q16 35 13 29 Z"
+        fill={`url(#${lg})`} filter={`url(#${id})`}/>
+      {/* Eye sockets */}
+      <ellipse cx="16.5" cy="22" rx="3" ry="2.5" fill="rgba(0,0,0,0.65)"/>
+      <ellipse cx="23.5" cy="22" rx="3" ry="2.5" fill="rgba(0,0,0,0.65)"/>
+      {/* Eye glow */}
+      <ellipse cx="16.5" cy="22" rx="1.5" ry="1.5" fill={c} opacity="0.8"/>
+      <ellipse cx="23.5" cy="22" rx="1.5" ry="1.5" fill={c} opacity="0.8"/>
+      {/* Skull teeth */}
+      <rect x="16" y="27" width="8" height="4" rx="1" fill="rgba(0,0,0,0.5)"/>
+      <line x1="18" y1="27" x2="18" y2="31" stroke={c} strokeWidth="1.2" opacity="0.6"/>
+      <line x1="20" y1="27" x2="20" y2="31" stroke={c} strokeWidth="1.2" opacity="0.6"/>
+      <line x1="22" y1="27" x2="22" y2="31" stroke={c} strokeWidth="1.2" opacity="0.6"/>
     </>,
   };
 
