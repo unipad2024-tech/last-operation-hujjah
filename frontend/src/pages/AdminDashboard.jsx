@@ -2978,7 +2978,7 @@ export default function AdminDashboard() {
 
       {/* ── EXPERIMENTAL MODE TAB ── */}
       {activeTab === "community" && (
-        <div style={{ padding: "24px 0", fontFamily: "Cairo, sans-serif", direction: "rtl" }}>
+        <div style={{ padding: "24px 0", fontFamily: "Cairo, sans-serif", direction: "rtl", background: "#111827", borderRadius: 20, padding: 24, marginTop: 8, color: "#f8f2e7" }}>
 
           {/* Analytics row */}
           {communityAnalytics && (

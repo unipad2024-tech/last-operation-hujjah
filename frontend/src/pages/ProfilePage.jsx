@@ -6,85 +6,176 @@ import { useGame } from "@/context/GameContext";
 
 const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
 
-const LEVEL_TITLES = [
-  { min: 1,  max: 4,  title: "مبتدئ",     color: "#9ca3af" },
-  { min: 5,  max: 9,  title: "متحمس",     color: "#60a5fa" },
-  { min: 10, max: 19, title: "متمرس",     color: "#34d399" },
-  { min: 20, max: 34, title: "خبير",      color: "#f59e0b" },
-  { min: 35, max: 49, title: "بطل",       color: "#f97316" },
-  { min: 50, max: 99, title: "أسطورة",   color: "#a855f7" },
-  { min: 100, max: Infinity, title: "نخبة", color: "#f2b85b" },
+/* ── XP / Level config (mirrors backend) ───────────────────────────────────── */
+const XP_THRESHOLDS = [0, 150, 350, 700, 1200, 2000, 3200, 5000, 7500, 11000, 16000, 23000, 32000, 45000, 60000];
+
+const LEVEL_META = [
+  { title: "مبتدئ",   color: "#9ca3af", icon: "🌱" },
+  { title: "مبتدئ",   color: "#9ca3af", icon: "🌱" },
+  { title: "متحمس",   color: "#60a5fa", icon: "⚡" },
+  { title: "متحمس",   color: "#60a5fa", icon: "⚡" },
+  { title: "متمرس",   color: "#34d399", icon: "🎯" },
+  { title: "متمرس",   color: "#34d399", icon: "🎯" },
+  { title: "خبير",    color: "#f59e0b", icon: "🔥" },
+  { title: "خبير",    color: "#f59e0b", icon: "🔥" },
+  { title: "متقدم",   color: "#f97316", icon: "💎" },
+  { title: "متقدم",   color: "#f97316", icon: "💎" },
+  { title: "بطل",     color: "#a855f7", icon: "👑" },
+  { title: "بطل",     color: "#a855f7", icon: "👑" },
+  { title: "أسطورة",  color: "#ec4899", icon: "🌟" },
+  { title: "أسطورة",  color: "#ec4899", icon: "🌟" },
+  { title: "نخبة",    color: "#f2b85b", icon: "⭐" },
 ];
 
-function getLevelInfo(level) {
-  return LEVEL_TITLES.find(l => level >= l.min && level <= l.max) || LEVEL_TITLES[0];
+function getLevelMeta(level) {
+  return LEVEL_META[Math.min(level - 1, LEVEL_META.length - 1)] || LEVEL_META[0];
 }
 
-function Avatar({ url, username, size = 80 }) {
+/* ── Banner presets ─────────────────────────────────────────────────────────── */
+const BANNERS = [
+  { id: "burgundy", label: "أحمر",    gradient: "linear-gradient(135deg, #5B0E14 0%, #1a0505 60%, #2d0a0a 100%)" },
+  { id: "purple",   label: "بنفسجي",  gradient: "linear-gradient(135deg, #1a0f28 0%, #2d1a4a 50%, #3b1d6e 100%)" },
+  { id: "midnight", label: "ليلي",    gradient: "linear-gradient(135deg, #0a0710 0%, #0d0d1a 50%, #1a1035 100%)" },
+  { id: "forest",   label: "غابة",    gradient: "linear-gradient(135deg, #0a1f0f 0%, #0d2718 50%, #1a3d20 100%)" },
+  { id: "ocean",    label: "بحري",    gradient: "linear-gradient(135deg, #0a1428 0%, #0a1e3d 50%, #0d2d50 100%)" },
+  { id: "fire",     label: "ناري",    gradient: "linear-gradient(135deg, #1a0800 0%, #3d1200 50%, #5c1a00 100%)" },
+  { id: "gold",     label: "ذهبي",    gradient: "linear-gradient(135deg, #1a1200 0%, #2e1f00 50%, #3d2c00 100%)" },
+  { id: "cosmic",   label: "كوني",    gradient: "linear-gradient(135deg, #0a0014 0%, #14001e 50%, #1a0a28 100%)" },
+];
+
+/* ── Accent colors ──────────────────────────────────────────────────────────── */
+const ACCENTS = [
+  { color: "#f2b85b", label: "ذهبي" },
+  { color: "#73f0a8", label: "أخضر" },
+  { color: "#60a5fa", label: "أزرق" },
+  { color: "#f87171", label: "أحمر" },
+  { color: "#a78bfa", label: "بنفسجي" },
+  { color: "#fb923c", label: "برتقالي" },
+  { color: "#f472b6", label: "وردي" },
+  { color: "#34d399", label: "زمرد" },
+];
+
+/* ── Helpers ────────────────────────────────────────────────────────────────── */
+function fmtNumber(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n ?? 0);
+}
+
+function Avatar({ url, username, size = 80, accent = "#f2b85b", pulse = false }) {
   const colors = ["#5B0E14","#7c3aed","#0369a1","#065f46","#92400e","#1e40af","#be185d"];
-  const color  = colors[(username?.charCodeAt(0) || 0) % colors.length];
+  const bg     = colors[(username?.charCodeAt(0) || 0) % colors.length];
+  const style  = {
+    width: size, height: size, borderRadius: "50%", flexShrink: 0,
+    border: `3px solid ${accent}`,
+    boxShadow: `0 0 ${pulse ? 20 : 10}px ${accent}55`,
+    transition: "box-shadow 0.3s",
+    cursor: "default",
+  };
   if (url) {
-    return (
-      <img src={url} alt={username}
-        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "3px solid rgba(242,184,91,0.5)" }}
-        onError={e => { e.target.style.display = "none"; }}
-      />
-    );
+    return <img src={url} alt={username} style={{ ...style, objectFit: "cover" }} onError={e => { e.target.style.display="none"; }} />;
   }
   return (
-    <div style={{
-      width: size, height: size, borderRadius: "50%",
-      background: `linear-gradient(135deg, ${color}, ${color}99)`,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: size * 0.42, fontWeight: 900, color: "#fff",
-      border: "3px solid rgba(242,184,91,0.4)", flexShrink: 0,
-      fontFamily: "Cairo, sans-serif",
-    }}>
+    <div style={{ ...style, background: `linear-gradient(135deg, ${bg}, ${bg}99)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.42, fontWeight: 900, color: "#fff", fontFamily: "Cairo, sans-serif" }}>
       {username?.[0]?.toUpperCase() || "?"}
     </div>
   );
 }
 
-const S = {
-  page: {
-    minHeight: "100vh",
-    background: "radial-gradient(circle at top, #281525 0%, #120d14 60%, #09070b 100%)",
-    color: "#f8f2e7",
-    padding: "24px 16px 60px",
-    fontFamily: "Cairo, sans-serif",
-    direction: "rtl",
-  },
-  card: {
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.10)",
-    borderRadius: 20,
-    padding: 18,
-    backdropFilter: "blur(16px)",
-  },
-  btnPrimary: {
-    background: "linear-gradient(90deg,#f2b85b,#ff8f3d)",
-    color: "#1a0f10", border: "none", borderRadius: 12,
-    padding: "10px 20px", fontWeight: 800, cursor: "pointer",
-    fontSize: 14, fontFamily: "Cairo, sans-serif", transition: "transform 0.15s",
-  },
-  btnSecondary: {
-    background: "rgba(255,255,255,0.08)",
-    color: "#f8f2e7", border: "1px solid rgba(255,255,255,0.14)",
-    borderRadius: 12, padding: "10px 20px",
-    fontWeight: 700, cursor: "pointer", fontSize: 14,
-    fontFamily: "Cairo, sans-serif",
-  },
-  input: {
-    width: "100%", background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10,
-    padding: "11px 14px", color: "#f8f2e7", fontSize: 14,
-    fontFamily: "Cairo, sans-serif", outline: "none", boxSizing: "border-box",
-  },
-  label: { fontSize: 12, color: "#d8cdb8", marginBottom: 5, display: "block", fontWeight: 700 },
-};
+function XPBar({ progress, accent, level }) {
+  const { percent, current_xp, needed_xp } = progress || {};
+  const pct = Math.min(100, percent || 0);
+  return (
+    <div style={{ padding: "0 20px 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)" }}>
+          Lv.{level} → Lv.{level + 1}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: accent }}>
+          {needed_xp > 0 ? `${current_xp} / ${needed_xp} XP` : "MAX"}
+        </span>
+      </div>
+      <div style={{ height: 6, background: "rgba(255,255,255,0.1)", borderRadius: 999, overflow: "hidden" }}>
+        <div style={{
+          height: "100%", borderRadius: 999,
+          background: `linear-gradient(90deg, ${accent}88, ${accent})`,
+          width: `${pct}%`,
+          transition: "width 1s cubic-bezier(0.4,0,0.2,1)",
+          boxShadow: `0 0 8px ${accent}88`,
+        }} />
+      </div>
+    </div>
+  );
+}
 
-const TABS = ["الملف", "الفئات", "المتابعون", "المتابَعون"];
+function StatCard({ icon, value, label, accent, onClick }) {
+  return (
+    <div onClick={onClick}
+      style={{
+        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 16, padding: "14px 12px", textAlign: "center", flex: "1 1 80px",
+        cursor: onClick ? "pointer" : "default", transition: "background 0.2s",
+        minWidth: 80,
+      }}
+      onMouseEnter={e => { if (onClick) e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+    >
+      <div style={{ fontSize: 18, marginBottom: 4 }}>{icon}</div>
+      <div style={{ fontSize: 20, fontWeight: 900, color: accent, lineHeight: 1 }}>{fmtNumber(value)}</div>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginTop: 4, fontWeight: 600 }}>{label}</div>
+    </div>
+  );
+}
 
+/* ── Image uploader ─────────────────────────────────────────────────────────── */
+function ImageUploader({ label, value, onChange, token, circle = false, placeholder = "" }) {
+  const inputRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const upload = async (file) => {
+    if (!file) return;
+    if (!["image/jpeg","image/png","image/webp"].includes(file.type)) { toast.error("JPG / PNG / WEBP فقط"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("الحجم الأقصى 5 ميغابايت"); return; }
+    setBusy(true);
+    try {
+      const form = new FormData(); form.append("file", file);
+      const { data } = await axios.post(`${API}/community/upload`, form, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+      });
+      onChange(data.url); toast.success("✓ تم رفع الصورة");
+    } catch (e) { toast.error(e?.response?.data?.detail || "فشل الرفع"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div>
+      {label && <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 6, fontWeight: 700 }}>{label}</label>}
+      {value && (
+        <div style={{ marginBottom: 8, position: "relative", display: "inline-block" }}>
+          <img src={value} alt="" style={{ height: circle ? 60 : 56, width: circle ? 60 : 120, objectFit: "cover", borderRadius: circle ? "50%" : 10, border: "1px solid rgba(255,255,255,0.15)" }} />
+          <button onClick={() => onChange("")} style={{ position:"absolute",top:-5,right:-5,background:"#ff5f6d",border:"none",borderRadius:"50%",width:18,height:18,color:"#fff",cursor:"pointer",fontSize:10,lineHeight:"18px",textAlign:"center" }}>✕</button>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <input style={{ flex:1, background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, padding:"8px 12px", color:"#f8f2e7", fontSize:12, fontFamily:"Cairo,sans-serif", outline:"none", direction:"ltr", minWidth:0 }}
+          value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder || "رابط أو ارفع صورة..."} />
+        <button onClick={()=>inputRef.current?.click()} disabled={busy}
+          style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, padding:"8px 12px", color:"#f8f2e7", cursor:"pointer", fontSize:12, fontFamily:"Cairo,sans-serif", flexShrink:0, opacity:busy?0.6:1 }}>
+          {busy ? "⏳" : "📁"}
+        </button>
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{display:"none"}} onChange={e=>upload(e.target.files?.[0])} />
+      </div>
+    </div>
+  );
+}
+
+const TABS_CONFIG = [
+  { key: "about",     label: "الملف الشخصي" },
+  { key: "cats",      label: "الفئات" },
+  { key: "followers", label: "المتابعون" },
+  { key: "following", label: "المتابَعون" },
+];
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+══════════════════════════════════════════════════════════════════════════════ */
 export default function ProfilePage() {
   const { username: paramUsername } = useParams();
   const navigate  = useNavigate();
@@ -92,46 +183,53 @@ export default function ProfilePage() {
 
   const viewingUsername = paramUsername || currentUser?.username;
 
-  const [profile,       setProfile]       = useState(null);
-  const [loading,       setLoading]       = useState(true);
-  const [tab,           setTab]           = useState(0);
+  const [profile,        setProfile]        = useState(null);
+  const [loading,        setLoading]        = useState(true);
+  const [activeTab,      setActiveTab]      = useState("about");
+
+  /* Edit state */
   const [editing,        setEditing]        = useState(false);
-  const [editBio,        setEditBio]        = useState("");
-  const [editAvatar,     setEditAvatar]     = useState("");
-  const [editUsername,   setEditUsername]   = useState("");
+  const [eBio,           setEBio]           = useState("");
+  const [eAvatar,        setEAvatar]        = useState("");
+  const [eBanner,        setEBanner]        = useState("");
+  const [eAccent,        setEAccent]        = useState("#f2b85b");
+  const [eUsername,      setEUsername]      = useState("");
+  const [eInterests,     setEInterests]     = useState("");
   const [saving,         setSaving]         = useState(false);
-  const [following,      setFollowing]      = useState(false);
-  const [uploadingAvatar,setUploadingAvatar]= useState(false);
-  const avatarInputRef = useRef(null);
 
-  // Cats
-  const [cats,          setCats]          = useState([]);
-  const [catsPage,      setCatsPage]      = useState(0);
-  const [catsHasMore,   setCatsHasMore]   = useState(true);
-  const [catsLoading,   setCatsLoading]   = useState(false);
+  /* Follow */
+  const [followBusy,     setFollowBusy]     = useState(false);
 
-  // Followers / Following
-  const [followers,     setFollowers]     = useState([]);
-  const [followingList, setFollowingList] = useState([]);
-  const [socialLoaded,  setSocialLoaded]  = useState(false);
+  /* Categories tab */
+  const [cats,           setCats]           = useState([]);
+  const [catsPage,       setCatsPage]       = useState(0);
+  const [catsMore,       setCatsMore]       = useState(true);
+  const [catsLoading,    setCatsLoading]    = useState(false);
+
+  /* Social tabs */
+  const [followers,      setFollowers]      = useState([]);
+  const [followingList,  setFollowingList]  = useState([]);
+  const [socialLoaded,   setSocialLoaded]   = useState(false);
 
   const h = userToken ? { headers: { Authorization: `Bearer ${userToken}` } } : {};
 
+  /* ── Loaders ──────────────────────────────────────────────────────────────── */
   const loadProfile = useCallback(async () => {
     if (!viewingUsername) { navigate("/login"); return; }
     setLoading(true);
     try {
       const { data } = await axios.get(`${API}/profile/${viewingUsername}`, h);
       setProfile(data);
-      setEditBio(data.bio || "");
-      setEditAvatar(data.avatar_url || "");
-      setEditUsername(data.username || "");
+      setEBio(data.bio || "");
+      setEAvatar(data.avatar_url || "");
+      setEBanner(data.banner_url || "");
+      setEAccent(data.accent_color || "#f2b85b");
+      setEUsername(data.username || "");
+      setEInterests((data.interests || []).join("، "));
     } catch (e) {
       if (e?.response?.status === 404) toast.error("المستخدم غير موجود");
-      else toast.error("خطأ في تحميل الملف");
-    } finally {
-      setLoading(false);
-    }
+      else toast.error("خطأ في التحميل");
+    } finally { setLoading(false); }
   }, [viewingUsername, userToken]); // eslint-disable-line
 
   const loadCats = useCallback(async (page) => {
@@ -141,10 +239,10 @@ export default function ProfilePage() {
       const { data } = await axios.get(`${API}/profile/${viewingUsername}/categories`, {
         params: { skip: page * 12, limit: 12 },
       });
-      if (data.length < 12) setCatsHasMore(false);
+      if (data.length < 12) setCatsMore(false);
       setCats(prev => page === 0 ? data : [...prev, ...data]);
       setCatsPage(page + 1);
-    } catch { /* silent */ }
+    } catch { /**/ }
     finally { setCatsLoading(false); }
   }, [viewingUsername, catsLoading]); // eslint-disable-line
 
@@ -155,25 +253,20 @@ export default function ProfilePage() {
         axios.get(`${API}/profile/${viewingUsername}/followers`),
         axios.get(`${API}/profile/${viewingUsername}/following`),
       ]);
-      setFollowers(frs.data);
-      setFollowingList(fng.data);
-      setSocialLoaded(true);
-    } catch { /* silent */ }
+      setFollowers(frs.data); setFollowingList(fng.data); setSocialLoaded(true);
+    } catch { /**/ }
   }, [viewingUsername, socialLoaded]); // eslint-disable-line
 
+  useEffect(() => { loadProfile(); }, [viewingUsername]); // eslint-disable-line
   useEffect(() => {
-    loadProfile();
-  }, [viewingUsername]); // eslint-disable-line
+    if (activeTab === "cats"      && cats.length === 0)      loadCats(0);
+    if ((activeTab === "followers" || activeTab === "following") && !socialLoaded) loadSocial();
+  }, [activeTab]); // eslint-disable-line
 
-  useEffect(() => {
-    if (tab === 1 && cats.length === 0) loadCats(0);
-    if ((tab === 2 || tab === 3) && !socialLoaded) loadSocial();
-  }, [tab]); // eslint-disable-line
-
-  // ── Actions ───────────────────────────────────────────────────────────────
+  /* ── Actions ──────────────────────────────────────────────────────────────── */
   const handleFollow = async () => {
     if (!userToken) { navigate("/login"); return; }
-    setFollowing(true);
+    setFollowBusy(true);
     try {
       if (profile.is_following) {
         await axios.delete(`${API}/profile/${profile.username}/follow`, h);
@@ -182,355 +275,449 @@ export default function ProfilePage() {
       } else {
         await axios.post(`${API}/profile/${profile.username}/follow`, {}, h);
         setProfile(p => ({ ...p, is_following: true, followers_count: p.followers_count + 1 }));
-        toast.success("تمت المتابعة");
+        toast.success("تمت المتابعة ✓");
       }
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "خطأ");
-    } finally {
-      setFollowing(false);
-    }
+    } catch (e) { toast.error(e?.response?.data?.detail || "خطأ"); }
+    finally { setFollowBusy(false); }
   };
 
-  const handleAvatarUpload = async (file) => {
-    if (!file) return;
-    const allowed = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowed.includes(file.type)) { toast.error("يُسمح فقط بـ JPG / PNG / WEBP"); return; }
-    if (file.size > 5 * 1024 * 1024) { toast.error("الحجم الأقصى 5 ميغابايت"); return; }
-    setUploadingAvatar(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const { data } = await axios.post(`${API}/community/upload`, form, {
-        headers: { Authorization: `Bearer ${userToken}`, "Content-Type": "multipart/form-data" },
-      });
-      setEditAvatar(data.url);
-      toast.success("تم رفع الصورة");
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل رفع الصورة");
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
-
-  const handleSaveProfile = async () => {
+  const handleSave = async () => {
     setSaving(true);
     try {
+      const interestArr = eInterests.split(/[،,]/).map(s => s.trim()).filter(Boolean);
       await axios.put(`${API}/auth/me`, {
-        bio: editBio,
-        avatar_url: editAvatar,
-        username: editUsername !== profile.username ? editUsername : undefined,
+        bio:          eBio,
+        avatar_url:   eAvatar,
+        banner_url:   eBanner,
+        accent_color: eAccent,
+        interests:    interestArr,
+        username:     eUsername !== profile.username ? eUsername : undefined,
       }, h);
       await refreshUser();
       await loadProfile();
       setEditing(false);
-      toast.success("تم حفظ التغييرات");
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "خطأ في الحفظ");
-    } finally {
-      setSaving(false);
-    }
+      toast.success("تم حفظ التغييرات ✓");
+    } catch (e) { toast.error(e?.response?.data?.detail || "خطأ في الحفظ"); }
+    finally { setSaving(false); }
   };
 
-  const shareCategory = (cat) => {
+  const shareProfile = () => {
+    const url = `${window.location.origin}/profile/${profile.username}`;
+    if (navigator.share) { navigator.share({ title: profile.username, url }).catch(()=>{}); }
+    else { navigator.clipboard.writeText(url); toast.success("تم نسخ رابط البروفايل"); }
+  };
+
+  const shareCat = (cat) => {
     const url = `${window.location.origin}/categories?community=${cat.id}`;
-    if (navigator.share) {
-      navigator.share({ title: cat.name, url }).catch(() => {});
-    } else {
-      navigator.clipboard.writeText(url);
-      toast.success("تم نسخ الرابط!");
-    }
+    if (navigator.share) { navigator.share({ title: cat.name, url }).catch(()=>{}); }
+    else { navigator.clipboard.writeText(url); toast.success("تم نسخ رابط الفئة"); }
   };
 
-  // ── Render helpers ────────────────────────────────────────────────────────
+  /* ── Loading / Error states ───────────────────────────────────────────────── */
   if (loading) {
     return (
-      <div style={{ ...S.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "#d8cdb8", fontSize: 16 }}>جاري التحميل...</div>
+      <div style={{ minHeight: "100vh", background: "#09070b", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Cairo, sans-serif", color: "rgba(255,255,255,0.4)", fontSize: 16 }}>
+        جاري التحميل...
       </div>
     );
   }
-
   if (!profile) {
     return (
-      <div style={{ ...S.page, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <div style={{ fontSize: 48 }}>🔍</div>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>المستخدم غير موجود</div>
-        <button style={S.btnSecondary} onClick={() => navigate("/")}>رجوع للرئيسية</button>
+      <div style={{ minHeight: "100vh", background: "#09070b", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, fontFamily: "Cairo, sans-serif" }}>
+        <span style={{ fontSize: 48 }}>🔍</span>
+        <span style={{ color: "#f8f2e7", fontSize: 18, fontWeight: 800 }}>المستخدم غير موجود</span>
+        <button onClick={() => navigate(-1)} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 12, padding: "10px 20px", color: "#f8f2e7", cursor: "pointer", fontFamily: "Cairo, sans-serif", fontWeight: 700 }}>رجوع</button>
       </div>
     );
   }
 
-  const levelInfo = getLevelInfo(profile.level);
+  const accent    = profile.accent_color || "#f2b85b";
+  const levelMeta = getLevelMeta(profile.level);
 
-  const renderProfileTab = () => (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Edit form */}
-      {editing && profile.is_own && (
-        <div style={{ ...S.card, borderColor: "rgba(242,184,91,0.3)", display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#f2b85b", marginBottom: 4 }}>تعديل الملف الشخصي</div>
-          <div>
-            <label style={S.label}>اسم المستخدم</label>
-            <input style={S.input} value={editUsername} onChange={e => setEditUsername(e.target.value)} />
-          </div>
-          <div>
-            <label style={S.label}>نبذة عنك (Bio)</label>
-            <textarea
-              style={{ ...S.input, resize: "vertical", minHeight: 80 }}
-              value={editBio}
-              onChange={e => setEditBio(e.target.value)}
-              maxLength={300}
-              placeholder="اكتب شيئاً عن نفسك..."
-            />
-            <div style={{ fontSize: 11, color: "#d8cdb8", textAlign: "left" }}>{editBio.length}/300</div>
-          </div>
-          {/* Avatar upload */}
-          <div>
-            <label style={S.label}>صورة الملف الشخصي</label>
-            {editAvatar && (
-              <div style={{ marginBottom: 8, position: "relative", display: "inline-block" }}>
-                <img src={editAvatar} alt="avatar"
-                  style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(242,184,91,0.4)" }} />
-                <button onClick={() => setEditAvatar("")}
-                  style={{ position: "absolute", top: -4, right: -4, background: "#ff5f6d", border: "none", borderRadius: "50%", width: 20, height: 20, color: "#fff", cursor: "pointer", fontSize: 11, lineHeight: "20px", textAlign: "center" }}>✕</button>
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input style={{ ...S.input, flex: 1, minWidth: 140, fontSize: 12, padding: "9px 12px", direction: "ltr" }}
-                value={editAvatar} onChange={e => setEditAvatar(e.target.value)} placeholder="https://..." />
-              <button
-                style={{ ...S.btnSecondary, padding: "9px 14px", fontSize: 12, flexShrink: 0, opacity: uploadingAvatar ? 0.6 : 1 }}
-                onClick={() => avatarInputRef.current?.click()}
-                disabled={uploadingAvatar}>
-                {uploadingAvatar ? "⏳" : "📁 رفع"}
-              </button>
-              <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp"
-                style={{ display: "none" }}
-                onChange={e => handleAvatarUpload(e.target.files?.[0])} />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <button style={S.btnPrimary} onClick={handleSaveProfile} disabled={saving}>
-              {saving ? "جاري الحفظ..." : "حفظ"}
-            </button>
-            <button style={S.btnSecondary} onClick={() => setEditing(false)}>إلغاء</button>
-          </div>
-        </div>
-      )}
+  /* resolve banner */
+  const bannerStyle = profile.banner_url
+    ? { backgroundImage: `url(${profile.banner_url})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : { background: BANNERS.find(b => b.id === "burgundy")?.gradient || BANNERS[0].gradient };
 
-      {/* Stats */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        {[
-          { v: profile.approved_categories, l: "فئة", icon: "📚" },
-          { v: profile.total_plays,         l: "لعبة", icon: "🎮" },
-          { v: profile.total_likes,         l: "إعجاب", icon: "❤️" },
-          { v: profile.game_count,          l: "كويز", icon: "🎯" },
-        ].map(({ v, l, icon }) => (
-          <div key={l} style={{ ...S.card, flex: "1 1 100px", textAlign: "center", padding: "14px 10px" }}>
-            <div style={{ fontSize: 22, marginBottom: 4 }}>{icon}</div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: "#f2b85b", lineHeight: 1 }}>{v ?? 0}</div>
-            <div style={{ fontSize: 12, color: "#d8cdb8", marginTop: 3 }}>{l}</div>
-          </div>
-        ))}
+  /* ── Render: HERO ─────────────────────────────────────────────────────────── */
+  const renderHero = () => (
+    <>
+      {/* Banner */}
+      <div style={{ height: 160, ...bannerStyle, position: "relative", flexShrink: 0 }}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 50%, rgba(9,7,11,0.95) 100%)" }} />
+        {/* Back button */}
+        <button onClick={() => navigate(-1)}
+          style={{ position: "absolute", top: 14, right: 14, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 999, padding: "6px 14px", color: "rgba(255,255,255,0.8)", cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif", fontWeight: 700 }}>
+          ← رجوع
+        </button>
+        {/* Share */}
+        <button onClick={shareProfile}
+          style={{ position: "absolute", top: 14, left: 14, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 999, padding: "6px 14px", color: "rgba(255,255,255,0.8)", cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif", fontWeight: 700 }}>
+          🔗 مشاركة
+        </button>
       </div>
 
-      {/* Earnings (own only) */}
-      {profile.is_own && profile.wallet && (
-        <div style={{ ...S.card, borderColor: "rgba(64,212,140,0.2)", background: "rgba(64,212,140,0.03)" }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: "#73f0a8", marginBottom: 12 }}>💰 أرباحك</div>
-          <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-            <div>
-              <div style={{ fontSize: 32, fontWeight: 900, color: "#f2b85b", lineHeight: 1 }}>
-                {profile.wallet.balance?.toFixed(2) ?? "0.00"}
-                <span style={{ fontSize: 14, fontWeight: 700 }}> ريال</span>
-              </div>
-              <div style={{ fontSize: 11, color: "#d8cdb8", marginTop: 3 }}>الرصيد المتاح</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "#73f0a8" }}>
-                {profile.wallet.monthly_pending_sar?.toFixed(2) ?? "0.00"} ريال
-              </div>
-              <div style={{ fontSize: 11, color: "#d8cdb8", marginTop: 3 }}>هذا الشهر</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "#f2b85b" }}>
-                {profile.wallet.total_earned?.toFixed(2) ?? "0.00"} ريال
-              </div>
-              <div style={{ fontSize: 11, color: "#d8cdb8", marginTop: 3 }}>إجمالي الأرباح</div>
-            </div>
+      {/* Avatar row */}
+      <div style={{ padding: "0 20px", marginTop: -48, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ position: "relative" }}>
+          <Avatar url={profile.avatar_url} username={profile.username} size={96} accent={accent} pulse={profile.is_own} />
+          {/* Level ring */}
+          <div style={{
+            position: "absolute", bottom: -6, right: -6,
+            background: `linear-gradient(135deg, ${accent}, ${accent}88)`,
+            borderRadius: 999, padding: "3px 8px",
+            fontSize: 11, fontWeight: 900, color: "#0a0710",
+            boxShadow: `0 2px 8px ${accent}66`,
+          }}>
+            {levelMeta.icon} {profile.level}
           </div>
-          <button style={{ ...S.btnPrimary, marginTop: 14, fontSize: 13 }}
-            onClick={() => navigate("/community")}>
-            إدارة الأرباح والسحب
-          </button>
         </div>
-      )}
+
+        {/* Action buttons */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingBottom: 8 }}>
+          {profile.is_own ? (
+            <button onClick={() => setEditing(e => !e)}
+              style={{ background: editing ? `${accent}22` : "rgba(255,255,255,0.08)", border: `1px solid ${editing ? accent : "rgba(255,255,255,0.15)"}`, borderRadius: 12, padding: "10px 18px", color: editing ? accent : "#f8f2e7", cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif", fontWeight: 800, transition: "all 0.2s" }}>
+              {editing ? "✕ إغلاق" : "✏️ تعديل البروفايل"}
+            </button>
+          ) : (
+            <button onClick={handleFollow} disabled={followBusy}
+              style={{
+                background: profile.is_following ? "rgba(255,255,255,0.08)" : `linear-gradient(135deg, ${accent}, ${accent}cc)`,
+                border: `1px solid ${profile.is_following ? "rgba(255,255,255,0.2)" : "transparent"}`,
+                borderRadius: 12, padding: "10px 22px",
+                color: profile.is_following ? "#f8f2e7" : "#0a0710",
+                cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif", fontWeight: 800,
+                opacity: followBusy ? 0.6 : 1, transition: "all 0.2s",
+              }}>
+              {followBusy ? "..." : profile.is_following ? "✓ تتابعه" : "+ متابعة"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Name + info */}
+      <div style={{ padding: "12px 20px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 22, fontWeight: 900, color: "#f8f2e7" }}>{profile.username}</span>
+          {profile.subscription_type === "premium" && (
+            <span style={{ fontSize: 11, background: "rgba(234,179,8,0.15)", color: "#f59e0b", padding: "3px 9px", borderRadius: 999, fontWeight: 800, border: "1px solid rgba(234,179,8,0.3)" }}>⭐ Premium</span>
+          )}
+        </div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>@{profile.username}</div>
+
+        {/* Level badge */}
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: `${levelMeta.color}14`, border: `1px solid ${levelMeta.color}33`, borderRadius: 999, padding: "4px 12px" }}>
+          <span style={{ fontSize: 14 }}>{levelMeta.icon}</span>
+          <span style={{ fontSize: 12, fontWeight: 900, color: levelMeta.color }}>Lv.{profile.level}</span>
+          <span style={{ fontSize: 12, color: levelMeta.color, fontWeight: 700 }}>{levelMeta.title}</span>
+        </div>
+
+        {/* Bio */}
+        {profile.bio && (
+          <p style={{ fontSize: 14, color: "rgba(255,255,255,0.65)", marginTop: 10, lineHeight: 1.65, maxWidth: 480 }}>
+            {profile.bio}
+          </p>
+        )}
+
+        {/* Interests */}
+        {profile.interests?.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {profile.interests.map(tag => (
+              <span key={tag} style={{ fontSize: 11, background: `${accent}14`, color: accent, padding: "3px 10px", borderRadius: 999, fontWeight: 700, border: `1px solid ${accent}30` }}>
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Social counts */}
+        <div style={{ display: "flex", gap: 20, marginTop: 10, fontSize: 13 }}>
+          <span onClick={() => setActiveTab("followers")} style={{ color: "rgba(255,255,255,0.7)", cursor: "pointer" }}>
+            <span style={{ color: accent, fontWeight: 900 }}>{fmtNumber(profile.followers_count)}</span> متابع
+          </span>
+          <span onClick={() => setActiveTab("following")} style={{ color: "rgba(255,255,255,0.7)", cursor: "pointer" }}>
+            <span style={{ color: accent, fontWeight: 900 }}>{fmtNumber(profile.following_count)}</span> يتابع
+          </span>
+        </div>
+      </div>
+
+      {/* XP Bar */}
+      <div style={{ marginTop: 14 }}>
+        <XPBar progress={profile.xp_progress} accent={accent} level={profile.level} />
+      </div>
+    </>
+  );
+
+  /* ── Render: STATS ROW ────────────────────────────────────────────────────── */
+  const renderStats = () => (
+    <div style={{ padding: "0 12px 16px", overflowX: "auto" }}>
+      <div style={{ display: "flex", gap: 8, minWidth: "max-content" }}>
+        <StatCard icon="🎮" value={profile.game_count}          label="لعبة"     accent={accent} />
+        <StatCard icon="📚" value={profile.approved_categories}  label="فئة"     accent={accent} onClick={() => setActiveTab("cats")} />
+        <StatCard icon="❤️" value={profile.total_likes}          label="إعجاب"   accent={accent} />
+        <StatCard icon="🎯" value={profile.total_plays}          label="تشغيل"   accent={accent} />
+        <StatCard icon="👥" value={profile.followers_count}      label="متابع"   accent={accent} onClick={() => setActiveTab("followers")} />
+        <StatCard icon="✨" value={profile.total_xp}             label="XP"      accent={accent} />
+      </div>
     </div>
   );
 
-  const renderCatsTab = () => (
-    <div>
-      {cats.length === 0 && !catsLoading && (
-        <div style={{ ...S.card, textAlign: "center", padding: 40 }}>
-          <div style={{ fontSize: 40, marginBottom: 10 }}>📂</div>
-          <div style={{ color: "#d8cdb8" }}>لا توجد فئات معتمدة بعد</div>
+  /* ── Render: EDIT PANEL ───────────────────────────────────────────────────── */
+  const renderEdit = () => (
+    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 20, marginBottom: 16, display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: accent }}>✏️ تعديل البروفايل</div>
+
+      {/* Username */}
+      <div>
+        <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 6, fontWeight: 700 }}>اسم المستخدم</label>
+        <input style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 14px", color: "#f8f2e7", fontSize: 14, fontFamily: "Cairo, sans-serif", outline: "none", boxSizing: "border-box" }}
+          value={eUsername} onChange={e => setEUsername(e.target.value)} />
+      </div>
+
+      {/* Bio */}
+      <div>
+        <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 6, fontWeight: 700 }}>Bio — وصف مختصر</label>
+        <textarea style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 14px", color: "#f8f2e7", fontSize: 14, fontFamily: "Cairo, sans-serif", outline: "none", boxSizing: "border-box", resize: "vertical", minHeight: 80 }}
+          value={eBio} onChange={e => setEBio(e.target.value)} maxLength={300} placeholder="اكتب شيئاً عن نفسك..." />
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", textAlign: "left" }}>{eBio.length}/300</div>
+      </div>
+
+      {/* Interests */}
+      <div>
+        <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 6, fontWeight: 700 }}>الاهتمامات (مفصولة بفاصلة)</label>
+        <input style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 14px", color: "#f8f2e7", fontSize: 14, fontFamily: "Cairo, sans-serif", outline: "none", boxSizing: "border-box" }}
+          value={eInterests} onChange={e => setEInterests(e.target.value)} placeholder="مثال: أفلام، رياضة، علوم" />
+      </div>
+
+      {/* Avatar */}
+      <ImageUploader label="صورة الملف الشخصي" value={eAvatar} onChange={setEAvatar} token={userToken} circle placeholder="رابط الصورة..." />
+
+      {/* Banner */}
+      <div>
+        <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 8, fontWeight: 700 }}>خلفية البروفايل (Banner)</label>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {BANNERS.map(b => (
+            <div key={b.id}
+              onClick={() => setEBanner("")}
+              style={{ width: 48, height: 32, borderRadius: 8, background: b.gradient, cursor: "pointer", border: `2px solid ${!eBanner && eBanner === "" ? accent : "transparent"}`, transition: "border 0.2s", flexShrink: 0 }}
+              title={b.label}
+            />
+          ))}
+        </div>
+        <ImageUploader value={eBanner} onChange={setEBanner} token={userToken} placeholder="أو رابط صورة مخصصة..." />
+      </div>
+
+      {/* Accent color */}
+      <div>
+        <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 8, fontWeight: 700 }}>لون البروفايل</label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {ACCENTS.map(a => (
+            <div key={a.color} onClick={() => setEAccent(a.color)}
+              style={{ width: 32, height: 32, borderRadius: "50%", background: a.color, cursor: "pointer", border: `3px solid ${eAccent === a.color ? "#fff" : "transparent"}`, boxShadow: eAccent === a.color ? `0 0 10px ${a.color}` : "none", transition: "all 0.2s", flexShrink: 0 }}
+              title={a.label}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 10 }}>
+        <button onClick={handleSave} disabled={saving}
+          style={{ background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#0a0710", border: "none", borderRadius: 12, padding: "11px 22px", fontWeight: 800, cursor: "pointer", fontSize: 14, fontFamily: "Cairo, sans-serif", opacity: saving ? 0.6 : 1 }}>
+          {saving ? "جاري الحفظ..." : "حفظ التغييرات"}
+        </button>
+        <button onClick={() => setEditing(false)}
+          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: "11px 18px", color: "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 14, fontFamily: "Cairo, sans-serif", fontWeight: 700 }}>
+          إلغاء
+        </button>
+      </div>
+    </div>
+  );
+
+  /* ── Render: ABOUT TAB ────────────────────────────────────────────────────── */
+  const renderAbout = () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {profile.is_own && editing && renderEdit()}
+
+      {/* Earnings (own only) */}
+      {profile.is_own && profile.wallet && (
+        <div style={{ background: "rgba(64,212,140,0.05)", border: "1px solid rgba(64,212,140,0.2)", borderRadius: 18, padding: 18 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#73f0a8", marginBottom: 14 }}>💰 أرباحك</div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+            {[
+              { v: `${profile.wallet.balance?.toFixed(2)} ر`, l: "الرصيد المتاح", c: accent },
+              { v: `${profile.wallet.monthly_pending_sar?.toFixed(2)} ر`, l: "هذا الشهر", c: "#73f0a8" },
+              { v: `${profile.wallet.total_earned?.toFixed(2)} ر`, l: "إجمالي الأرباح", c: "rgba(255,255,255,0.6)" },
+            ].map(({ v, l, c }) => (
+              <div key={l} style={{ flex: "1 1 100px" }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: c, lineHeight: 1 }}>{v}</div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => navigate("/community")}
+            style={{ marginTop: 14, background: `linear-gradient(135deg, ${accent}, ${accent}cc)`, color: "#0a0710", border: "none", borderRadius: 10, padding: "9px 18px", fontWeight: 800, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}>
+            إدارة الأرباح
+          </button>
         </div>
       )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {cats.map(cat => (
-          <div key={cat.id} style={S.card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>
-                  {cat.icon && <span style={{ marginLeft: 6 }}>{cat.icon}</span>}
-                  {cat.name}
-                </div>
-                {cat.description && (
-                  <div style={{ fontSize: 12, color: "#d8cdb8", marginBottom: 8 }}>{cat.description}</div>
-                )}
-                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, color: "#d8cdb8" }}>🎮 {cat.play_count || 0} لعبة</span>
-                  <span style={{ fontSize: 12, color: "#d8cdb8" }}>❤️ {cat.likes_count || 0} إعجاب</span>
-                  <span style={{ fontSize: 12, color: "#d8cdb8" }}>📝 {cat.questions_count} سؤال</span>
-                </div>
+
+      {/* Best category */}
+      {profile.best_category && (
+        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 18, padding: 18 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,0.5)", marginBottom: 12 }}>🏆 أفضل فئة</div>
+          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+            {profile.best_category.image_url && (
+              <img src={profile.best_category.image_url} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+            )}
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "#f8f2e7" }}>{profile.best_category.name}</div>
+              <div style={{ display: "flex", gap: 14, marginTop: 6, fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+                <span>🎮 {profile.best_category.play_count || 0}</span>
+                <span>❤️ {profile.best_category.likes_count || 0}</span>
               </div>
-              <button
-                style={{ ...S.btnSecondary, padding: "8px 14px", fontSize: 12, flexShrink: 0 }}
-                onClick={() => shareCategory(cat)}
-              >
-                مشاركة 🔗
-              </button>
             </div>
           </div>
-        ))}
-      </div>
-      {catsLoading && (
-        <div style={{ textAlign: "center", padding: 20, color: "#d8cdb8" }}>جاري التحميل...</div>
+        </div>
       )}
-      {catsHasMore && !catsLoading && cats.length > 0 && (
-        <button style={{ ...S.btnSecondary, width: "100%", marginTop: 12, textAlign: "center" }}
-          onClick={() => loadCats(catsPage)}>
+
+      {/* XP breakdown */}
+      <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: 18 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,0.5)", marginBottom: 14 }}>⚡ مصادر الـ XP</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {[
+            { label: "الألعاب المُلعَبة",   value: profile.game_count,          mult: 10, icon: "🎮" },
+            { label: "فئات معتمدة",         value: profile.approved_categories,  mult: 50, icon: "📚" },
+            { label: "تشغيلات الفئات",      value: profile.total_plays,          mult: 2,  icon: "🎯" },
+            { label: "الإعجابات المستلمة",  value: profile.total_likes,          mult: 5,  icon: "❤️" },
+          ].map(({ label, value, mult, icon }) => (
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>{icon} {label}</span>
+              <div style={{ textAlign: "left" }}>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginLeft: 8 }}>{value} × {mult}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>{(value * mult)} XP</span>
+              </div>
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 800, color: "#f8f2e7" }}>الإجمالي</span>
+            <span style={{ fontSize: 15, fontWeight: 900, color: accent }}>{profile.total_xp} XP</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ── Render: CATEGORIES TAB ───────────────────────────────────────────────── */
+  const renderCats = () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {!catsLoading && cats.length === 0 && (
+        <div style={{ textAlign: "center", padding: 40 }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>📂</div>
+          <div style={{ color: "rgba(255,255,255,0.4)" }}>لا توجد فئات معتمدة</div>
+        </div>
+      )}
+      {cats.map(cat => (
+        <div key={cat.id} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: 16 }}>
+          <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+            {cat.image_url && (
+              <img src={cat.image_url} alt={cat.name} style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 12, flexShrink: 0 }} />
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: "#f8f2e7", marginBottom: 6 }}>
+                {cat.icon && <span style={{ marginLeft: 6 }}>{cat.icon}</span>}{cat.name}
+              </div>
+              {cat.description && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cat.description}</div>}
+              <div style={{ display: "flex", gap: 16 }}>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>🎮 {cat.play_count || 0}</span>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>❤️ {cat.likes_count || 0}</span>
+                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>📝 {cat.questions_count}</span>
+                {profile.is_own && cat.play_count > 0 && (
+                  <span style={{ fontSize: 12, color: "#73f0a8" }}>+{Math.floor(cat.play_count * 2)} XP</span>
+                )}
+              </div>
+            </div>
+            <button onClick={() => shareCat(cat)}
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "7px 12px", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 12, fontFamily: "Cairo, sans-serif", fontWeight: 700, flexShrink: 0 }}>
+              🔗
+            </button>
+          </div>
+        </div>
+      ))}
+      {catsLoading && <div style={{ textAlign: "center", color: "rgba(255,255,255,0.3)", padding: 20 }}>جاري التحميل...</div>}
+      {catsMore && !catsLoading && cats.length > 0 && (
+        <button onClick={() => loadCats(catsPage)}
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "11px", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 13 }}>
           تحميل المزيد
         </button>
       )}
     </div>
   );
 
-  const renderUserList = (list, emptyMsg) => (
+  /* ── Render: USER LIST (followers/following) ──────────────────────────────── */
+  const renderUserList = (list, empty) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {list.length === 0 && (
-        <div style={{ ...S.card, textAlign: "center", padding: 40, color: "#d8cdb8" }}>{emptyMsg}</div>
+        <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,0.35)" }}>{empty}</div>
       )}
       {list.map(u => (
-        <div key={u.id} style={{ ...S.card, cursor: "pointer" }}
-          onClick={() => navigate(`/profile/${u.username}`)}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <Avatar url={u.avatar_url} username={u.username} size={46} />
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>
-                {u.username}
-                {u.subscription_type === "premium" && (
-                  <span style={{ marginRight: 6, fontSize: 11, background: "rgba(234,179,8,0.2)", color: "#f59e0b", padding: "2px 7px", borderRadius: 999 }}>⭐ Premium</span>
-                )}
-              </div>
-              {u.bio && <div style={{ fontSize: 12, color: "#d8cdb8", marginTop: 2 }}>{u.bio}</div>}
+        <div key={u.id} onClick={() => navigate(`/profile/${u.username}`)}
+          style={{ display: "flex", alignItems: "center", gap: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, padding: 14, cursor: "pointer", transition: "background 0.2s" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+        >
+          <Avatar url={u.avatar_url} username={u.username} size={46} accent={accent} />
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 14, color: "#f8f2e7" }}>
+              {u.username}
+              {u.subscription_type === "premium" && <span style={{ marginRight: 6, fontSize: 11, background: "rgba(234,179,8,0.15)", color: "#f59e0b", padding: "2px 7px", borderRadius: 999 }}>⭐</span>}
             </div>
+            {u.bio && <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>{u.bio}</div>}
           </div>
         </div>
       ))}
     </div>
   );
 
+  /* ── FINAL RENDER ─────────────────────────────────────────────────────────── */
   return (
-    <div style={S.page}>
-      <div style={{ maxWidth: 700, margin: "0 auto" }}>
-        {/* Back */}
-        <button onClick={() => navigate(-1)}
-          style={{ color: "rgba(242,184,91,0.5)", background: "none", border: "none", cursor: "pointer", marginBottom: 20, fontSize: 14, fontFamily: "Cairo, sans-serif" }}>
-          ← رجوع
-        </button>
+    <div style={{ minHeight: "100vh", background: "#09070b", fontFamily: "Cairo, sans-serif", direction: "rtl", color: "#f8f2e7" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto" }}>
 
-        {/* Profile header */}
-        <div style={{ ...S.card, marginBottom: 20, borderColor: "rgba(242,184,91,0.2)" }}>
-          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <Avatar url={profile.avatar_url} username={profile.username} size={80} />
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-                <div style={{ fontSize: 22, fontWeight: 900 }}>{profile.username}</div>
-                {profile.subscription_type === "premium" && (
-                  <span style={{ fontSize: 11, background: "rgba(234,179,8,0.15)", color: "#f59e0b", padding: "3px 9px", borderRadius: 999, fontWeight: 700 }}>⭐ Premium</span>
-                )}
-              </div>
+        {/* Hero */}
+        {renderHero()}
 
-              {/* Level badge */}
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${levelInfo.color}18`, border: `1px solid ${levelInfo.color}40`, borderRadius: 999, padding: "4px 12px", marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 900, color: levelInfo.color }}>Lv.{profile.level}</span>
-                <span style={{ fontSize: 11, color: levelInfo.color, fontWeight: 700 }}>{levelInfo.title}</span>
-              </div>
+        {/* Stats row */}
+        {renderStats()}
 
-              {/* Bio */}
-              {profile.bio && (
-                <div style={{ fontSize: 13, color: "#d8cdb8", marginBottom: 8, lineHeight: 1.6 }}>{profile.bio}</div>
-              )}
-
-              {/* Social counts */}
-              <div style={{ display: "flex", gap: 18, fontSize: 13 }}>
-                <span style={{ color: "#f8f2e7", fontWeight: 700 }}>
-                  <span style={{ color: "#f2b85b", fontWeight: 900 }}>{profile.followers_count}</span> متابع
-                </span>
-                <span style={{ color: "#f8f2e7", fontWeight: 700 }}>
-                  <span style={{ color: "#f2b85b", fontWeight: 900 }}>{profile.following_count}</span> يتابع
-                </span>
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
-              {profile.is_own ? (
-                <button style={{ ...S.btnPrimary, fontSize: 13, padding: "8px 16px" }}
-                  onClick={() => setEditing(e => !e)}>
-                  {editing ? "✕ إغلاق" : "✏️ تعديل"}
-                </button>
-              ) : userToken ? (
-                <button
-                  style={{
-                    ...profile.is_following ? S.btnSecondary : S.btnPrimary,
-                    fontSize: 13, padding: "8px 16px",
-                    opacity: following ? 0.6 : 1,
-                  }}
-                  onClick={handleFollow} disabled={following}>
-                  {following ? "..." : profile.is_following ? "إلغاء المتابعة" : "+ متابعة"}
-                </button>
-              ) : (
-                <button style={{ ...S.btnPrimary, fontSize: 13, padding: "8px 16px" }}
-                  onClick={() => navigate("/login")}>
-                  + متابعة
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        {/* Divider */}
+        <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 12px 16px" }} />
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: 5 }}>
-          {TABS.map((t, i) => (
-            <button key={t} onClick={() => setTab(i)}
+        <div style={{ display: "flex", gap: 4, padding: "0 12px", marginBottom: 16, overflowX: "auto" }}>
+          {TABS_CONFIG.map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
               style={{
-                flex: "1 1 60px", padding: "9px 8px", borderRadius: 10, border: "none",
-                fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 12, cursor: "pointer",
+                padding: "9px 16px", borderRadius: 10, border: "none", whiteSpace: "nowrap",
+                fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 13, cursor: "pointer",
                 transition: "all 0.2s",
-                background: tab === i ? "linear-gradient(90deg,#f2b85b,#ff8f3d)" : "transparent",
-                color: tab === i ? "#1a0f10" : "#d8cdb8",
+                background: activeTab === t.key ? `${accent}22` : "transparent",
+                color:      activeTab === t.key ? accent : "rgba(255,255,255,0.45)",
+                borderBottom: activeTab === t.key ? `2px solid ${accent}` : "2px solid transparent",
               }}>
-              {t}
+              {t.label}
             </button>
           ))}
         </div>
 
         {/* Tab content */}
-        {tab === 0 && renderProfileTab()}
-        {tab === 1 && renderCatsTab()}
-        {tab === 2 && renderUserList(followers, "لا يوجد متابعون بعد")}
-        {tab === 3 && renderUserList(followingList, "لا يتابع أحداً بعد")}
+        <div style={{ padding: "0 12px 60px" }}>
+          {activeTab === "about"     && renderAbout()}
+          {activeTab === "cats"      && renderCats()}
+          {activeTab === "followers" && renderUserList(followers,     "لا يوجد متابعون بعد")}
+          {activeTab === "following" && renderUserList(followingList,  "لا يتابع أحداً بعد")}
+        </div>
       </div>
     </div>
   );

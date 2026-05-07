@@ -108,6 +108,9 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
+    banner_url: Optional[str] = None
+    accent_color: Optional[str] = None
+    interests: Optional[list] = None
 
 class AdminLogin(BaseModel):
     username: str = "admin"
@@ -609,6 +612,15 @@ async def update_me(body: UserUpdate, user: dict = Depends(require_user)):
         updates["bio"] = body.bio[:300]
     if body.avatar_url is not None:
         updates["avatar_url"] = body.avatar_url[:500]
+    if body.banner_url is not None:
+        updates["banner_url"] = body.banner_url[:500]
+    if body.accent_color is not None:
+        # only allow hex colors
+        ac = body.accent_color.strip()
+        if ac.startswith("#") and len(ac) in (4, 7):
+            updates["accent_color"] = ac
+    if body.interests is not None:
+        updates["interests"] = body.interests[:10]
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
@@ -4252,6 +4264,37 @@ async def admin_process_monthly_earnings(body: dict = {}, admin: dict = Depends(
     }
 
 # ══════════════════════════════════════════════════════════════════════════════
+# XP / LEVEL SYSTEM
+# ══════════════════════════════════════════════════════════════════════════════
+
+_XP_THRESHOLDS = [0, 150, 350, 700, 1200, 2000, 3200, 5000, 7500, 11000, 16000, 23000, 32000, 45000, 60000]
+
+def _calc_xp(game_count: int, approved_cats: int, total_plays: int, total_likes: int, is_premium: bool) -> int:
+    return (game_count * 10) + (approved_cats * 50) + (total_plays * 2) + (total_likes * 5) + (100 if is_premium else 0)
+
+def _xp_to_level(xp: int) -> int:
+    level = 1
+    for i, t in enumerate(_XP_THRESHOLDS):
+        if xp >= t:
+            level = i + 1
+        else:
+            break
+    return level
+
+def _xp_progress(xp: int) -> dict:
+    for i, threshold in enumerate(_XP_THRESHOLDS[:-1]):
+        next_t = _XP_THRESHOLDS[i + 1]
+        if xp < next_t:
+            return {
+                "current_xp":   xp - threshold,
+                "needed_xp":    next_t - threshold,
+                "percent":      round(((xp - threshold) / (next_t - threshold)) * 100, 1),
+                "total_xp":     xp,
+                "next_level_at": next_t,
+            }
+    return {"current_xp": xp, "needed_xp": 0, "percent": 100, "total_xp": xp, "next_level_at": xp}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # COMMUNITY LIKES
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -4282,10 +4325,6 @@ async def check_category_liked(cat_id: str, user: dict = Depends(require_user)):
 # USER PROFILES & FOLLOWS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _calc_level(game_count: int, approved_cats: int, total_plays: int, is_premium: bool) -> int:
-    score = (game_count // 10) + (approved_cats * 3) + (total_plays // 50) + (5 if is_premium else 0)
-    return max(1, 1 + score)
-
 @api_router.get("/profile/{username}")
 async def get_profile(username: str, current_user: Optional[dict] = Depends(get_current_user)):
     user = await db.users.find_one(
@@ -4297,19 +4336,24 @@ async def get_profile(username: str, current_user: Optional[dict] = Depends(get_
 
     game_count    = user.get("game_count", 0)
     is_premium    = user.get("subscription_type") == "premium"
-    approved_cats = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
 
-    plays_res = await db.community_categories.aggregate([
+    # Parallel aggregations
+    approved_cats  = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
+    plays_res      = await db.community_categories.aggregate([
         {"$match": {"creator_id": user["id"], "status": "approved"}},
         {"$group": {"_id": None, "total": {"$sum": "$play_count"}}},
     ]).to_list(1)
-    total_plays = plays_res[0]["total"] if plays_res else 0
-
-    likes_res = await db.community_categories.aggregate([
+    likes_res      = await db.community_categories.aggregate([
         {"$match": {"creator_id": user["id"], "status": "approved"}},
         {"$group": {"_id": None, "total": {"$sum": "$likes_count"}}},
     ]).to_list(1)
-    total_likes = likes_res[0]["total"] if likes_res else 0
+    best_cat_list  = await db.community_categories.find(
+        {"creator_id": user["id"], "status": "approved"}, {"_id": 0, "name": 1, "play_count": 1, "likes_count": 1, "image_url": 1}
+    ).sort("play_count", -1).limit(1).to_list(1)
+
+    total_plays  = plays_res[0]["total"]  if plays_res  else 0
+    total_likes  = likes_res[0]["total"]  if likes_res  else 0
+    best_cat     = best_cat_list[0]       if best_cat_list else None
 
     followers_count = await db.follows.count_documents({"following_id": user["id"]})
     following_count = await db.follows.count_documents({"follower_id": user["id"]})
@@ -4323,22 +4367,32 @@ async def get_profile(username: str, current_user: Optional[dict] = Depends(get_
                 {"follower_id": current_user["id"], "following_id": user["id"]}
             ))
 
+    total_xp = _calc_xp(game_count, approved_cats, total_plays, total_likes, is_premium)
+    level    = _xp_to_level(total_xp)
+    xp_prog  = _xp_progress(total_xp)
+
     profile = {
-        "id":                user["id"],
-        "username":          user["username"],
-        "bio":               user.get("bio", ""),
-        "avatar_url":        user.get("avatar_url", ""),
-        "subscription_type": user.get("subscription_type", "free"),
-        "level":             _calc_level(game_count, approved_cats, total_plays, is_premium),
-        "game_count":        game_count,
+        "id":                  user["id"],
+        "username":            user["username"],
+        "bio":                 user.get("bio", ""),
+        "avatar_url":          user.get("avatar_url", ""),
+        "banner_url":          user.get("banner_url", ""),
+        "accent_color":        user.get("accent_color", "#f2b85b"),
+        "interests":           user.get("interests", []),
+        "subscription_type":   user.get("subscription_type", "free"),
+        "level":               level,
+        "total_xp":            total_xp,
+        "xp_progress":         xp_prog,
+        "game_count":          game_count,
         "approved_categories": approved_cats,
-        "total_plays":       total_plays,
-        "total_likes":       total_likes,
-        "followers_count":   followers_count,
-        "following_count":   following_count,
-        "is_following":      is_following,
-        "is_own":            is_own,
-        "created_at":        user.get("created_at", ""),
+        "total_plays":         total_plays,
+        "total_likes":         total_likes,
+        "followers_count":     followers_count,
+        "following_count":     following_count,
+        "best_category":       best_cat,
+        "is_following":        is_following,
+        "is_own":              is_own,
+        "created_at":          user.get("created_at", ""),
     }
 
     if is_own:
