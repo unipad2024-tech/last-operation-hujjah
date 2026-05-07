@@ -438,6 +438,7 @@ function ImageUploader({ label, value, onChange, token, circle = false, placehol
 
 const TABS_CONFIG = [
   { key: "about",     label: "الملف الشخصي" },
+  { key: "prestige",  label: "⭐ البرستيج" },
   { key: "cats",      label: "الفئات" },
   { key: "followers", label: "المتابعون" },
   { key: "following", label: "المتابَعون" },
@@ -650,8 +651,12 @@ export default function ProfilePage() {
           <Avatar url={profile.avatar_url} username={profile.username} size={96} accent={prestigeColor} pulse={profile.is_own} />
           {/* Prestige badge OR level ring */}
           {prestige > 0 ? (
-            <div style={{ position: "absolute", bottom: -10, right: -10 }}>
-              <PrestigeBadge prestige={prestige} size={38} />
+            <div style={{
+              position: "absolute", bottom: -18, right: -18,
+              filter: `drop-shadow(0 0 12px ${prestigeColor}88)`,
+              animation: "badgePulse 3s ease-in-out infinite",
+            }}>
+              <PrestigeBadge prestige={prestige} size={56} />
             </div>
           ) : (
             <div style={{
@@ -851,6 +856,213 @@ export default function ProfilePage() {
     </div>
   );
 
+  /* ── Render: PRESTIGE TAB ───────────────────────────────────────────────────── */
+  const renderPrestige = () => {
+    const prog          = profile.xp_progress || {};
+    const prestigeXP    = prog.prestige_xp   ?? 0;      // XP within current prestige (0-10000)
+    const toNextLvlXP   = prog.needed_xp     ?? 0;      // XP remaining for next level
+    const inLevelXP     = prog.current_xp    ?? 0;      // XP earned within current level
+    const toPrestigeXP  = Math.max(0, 10000 - prestigeXP); // XP remaining to reach level 55
+    const pct           = Math.min(100, (prestigeXP / 10000) * 100);
+    const curMeta       = prestige > 0 ? getPrestigeMeta(prestige) : null;
+    const nextMeta      = prestige < 11 ? getPrestigeMeta(prestige + 1) : null;
+
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* ── Current Prestige Hero Card ── */}
+        <div style={{
+          background: curMeta
+            ? `radial-gradient(ellipse at top, ${curMeta.color}18 0%, rgba(0,0,0,0) 60%), rgba(255,255,255,0.03)`
+            : "rgba(255,255,255,0.03)",
+          border: `1px solid ${curMeta ? curMeta.color + "33" : "rgba(255,255,255,0.08)"}`,
+          borderRadius: 24, padding: "28px 20px", textAlign: "center",
+        }}>
+          {/* Big badge */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+            {prestige > 0 ? (
+              <div style={{ filter: `drop-shadow(0 0 20px ${curMeta.color}88)` }}>
+                <PrestigeBadge prestige={prestige} size={96} />
+              </div>
+            ) : (
+              <div style={{
+                width: 96, height: 96, borderRadius: "50%",
+                background: "rgba(255,255,255,0.06)",
+                border: "2px dashed rgba(255,255,255,0.2)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 36,
+              }}>🔒</div>
+            )}
+          </div>
+
+          {/* Name */}
+          <div style={{ fontSize: 22, fontWeight: 900, color: curMeta?.color || "rgba(255,255,255,0.4)", marginBottom: 4 }}>
+            {prestige > 0 ? curMeta.name : "بدون برستيج"}
+          </div>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginBottom: 20 }}>
+            {prestige > 0 ? `برستيج ${prestige} من 11` : "العب واجمع XP للوصول للبرستيج الأول"}
+          </div>
+
+          {/* Level progress */}
+          <div style={{
+            background: "rgba(0,0,0,0.3)", borderRadius: 16, padding: "16px 20px",
+            textAlign: "right", marginBottom: 0,
+          }}>
+            {/* Level fraction */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <span style={{ fontSize: 13, color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>
+                المستوى الحالي
+              </span>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                <span style={{ fontSize: 36, fontWeight: 900, color: curMeta?.color || accent, lineHeight: 1 }}>
+                  {profile.level}
+                </span>
+                <span style={{ fontSize: 16, color: "rgba(255,255,255,0.3)", fontWeight: 700 }}>/55</span>
+              </div>
+            </div>
+
+            {/* Bar for level within prestige */}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 5 }}>
+                <span>التقدم نحو البرستيج التالي</span>
+                <span>{prestigeXP.toLocaleString()} / 10,000 XP</span>
+              </div>
+              <div style={{ height: 10, background: "rgba(255,255,255,0.07)", borderRadius: 999, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", borderRadius: 999,
+                  background: prog.can_prestige
+                    ? `linear-gradient(90deg, ${curMeta?.color || accent}, #fff8, ${curMeta?.color || accent})`
+                    : `linear-gradient(90deg, ${curMeta?.color || accent}66, ${curMeta?.color || accent})`,
+                  width: `${pct}%`,
+                  transition: "width 1.2s cubic-bezier(0.4,0,0.2,1)",
+                  boxShadow: `0 0 12px ${curMeta?.color || accent}88`,
+                  animation: prog.can_prestige ? "shimmer 2s linear infinite" : "none",
+                  backgroundSize: prog.can_prestige ? "200% 100%" : "100%",
+                }}/>
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div style={{ display: "flex", gap: 12 }}>
+              {[
+                { label: "XP للمستوى التالي", value: prog.can_prestige ? "MAX ✓" : `${toNextLvlXP - inLevelXP} XP`, color: accent },
+                { label: "XP للبرستيج التالي", value: prog.can_prestige ? "جاهز!" : `${toPrestigeXP.toLocaleString()} XP`, color: curMeta?.color || accent },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{
+                  flex: 1, background: "rgba(255,255,255,0.04)", borderRadius: 12,
+                  padding: "10px 12px", textAlign: "center",
+                }}>
+                  <div style={{ fontSize: 15, fontWeight: 900, color }}>{value}</div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Prestige button */}
+            {canPrestige && prestige < 11 && profile.is_own && (
+              <button onClick={handlePrestige} disabled={prestigeBusy}
+                style={{
+                  marginTop: 14, width: "100%",
+                  background: `linear-gradient(135deg, ${nextMeta?.color || accent}, ${accent})`,
+                  border: "none", borderRadius: 14, padding: "14px",
+                  color: "#0a0710", cursor: "pointer", fontSize: 15,
+                  fontFamily: "Cairo, sans-serif", fontWeight: 900,
+                  opacity: prestigeBusy ? 0.6 : 1,
+                  boxShadow: `0 6px 20px ${nextMeta?.color || accent}55`,
+                  animation: "pulse 2s infinite",
+                }}>
+                {prestigeBusy ? "..." : `🎖️ ارتقِ إلى ${nextMeta?.name} (برستيج ${prestige + 1})`}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── All 11 Prestiges Grid ── */}
+        <div style={{
+          background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)",
+          borderRadius: 20, padding: "18px 14px",
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,0.4)", marginBottom: 14 }}>
+            جميع البرستيجات
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+            {PRESTIGE_META.map((meta, idx) => {
+              const pNum     = idx + 1;
+              const unlocked = pNum <= prestige;
+              const isCurrent = pNum === prestige;
+              const isNext    = pNum === prestige + 1;
+
+              return (
+                <div key={pNum} style={{
+                  display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                  padding: "12px 8px", borderRadius: 16,
+                  background: isCurrent
+                    ? `${meta.color}18`
+                    : isNext
+                    ? "rgba(255,255,255,0.04)"
+                    : "transparent",
+                  border: isCurrent
+                    ? `2px solid ${meta.color}55`
+                    : isNext
+                    ? "1px dashed rgba(255,255,255,0.15)"
+                    : "1px solid transparent",
+                  transition: "all 0.2s",
+                  opacity: unlocked || isCurrent || isNext ? 1 : 0.3,
+                  position: "relative",
+                }}>
+                  {/* Badge */}
+                  <div style={{
+                    filter: unlocked || isCurrent
+                      ? `drop-shadow(0 0 8px ${meta.color}66)`
+                      : "grayscale(1) brightness(0.5)",
+                    transform: isCurrent ? "scale(1.15)" : "scale(1)",
+                    transition: "transform 0.2s",
+                  }}>
+                    <PrestigeBadge prestige={pNum} size={isCurrent ? 52 : 40} />
+                  </div>
+
+                  {/* Name */}
+                  <div style={{
+                    fontSize: 10, fontWeight: 800, textAlign: "center",
+                    color: isCurrent ? meta.color : unlocked ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)",
+                    lineHeight: 1.3,
+                  }}>
+                    {meta.name}
+                  </div>
+
+                  {/* Status */}
+                  <div style={{
+                    fontSize: 9, fontWeight: 700,
+                    color: isCurrent
+                      ? meta.color
+                      : unlocked
+                      ? "#4ade80"
+                      : isNext
+                      ? "rgba(255,255,255,0.35)"
+                      : "rgba(255,255,255,0.2)",
+                  }}>
+                    {isCurrent ? "← أنت هنا" : unlocked ? "✓ مكتمل" : isNext ? "التالي" : `P${pNum}`}
+                  </div>
+
+                  {/* Current badge pulse ring */}
+                  {isCurrent && (
+                    <div style={{
+                      position: "absolute", inset: -3, borderRadius: 18,
+                      border: `2px solid ${meta.color}`,
+                      animation: "badgePulse 2s ease-in-out infinite",
+                      pointerEvents: "none",
+                    }}/>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      </div>
+    );
+  };
+
   /* ── Render: ABOUT TAB ────────────────────────────────────────────────────── */
   const renderAbout = () => (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1030,6 +1242,7 @@ export default function ProfilePage() {
         {/* Tab content */}
         <div style={{ padding: "0 12px 60px" }}>
           {activeTab === "about"     && renderAbout()}
+          {activeTab === "prestige"  && renderPrestige()}
           {activeTab === "cats"      && renderCats()}
           {activeTab === "followers" && renderUserList(followers,     "لا يوجد متابعون بعد")}
           {activeTab === "following" && renderUserList(followingList,  "لا يتابع أحداً بعد")}
