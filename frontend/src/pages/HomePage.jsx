@@ -265,7 +265,23 @@ export default function HomePage() {
       >
         {/* LEFT: auth */}
         {currentUser ? (
-          <UserMenu currentUser={currentUser} isPremium={isPremium} navigate={navigate} logoutUser={logoutUser} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              onClick={() => navigate("/search")}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                width: 44, height: 44, borderRadius: "50%",
+                background: "rgba(241,225,148,0.08)",
+                border: "1.5px solid rgba(241,225,148,0.22)",
+                color: "rgba(241,225,148,0.7)", fontSize: 18,
+                cursor: "pointer", transition: "all 0.2s", flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(241,225,148,0.15)"; e.currentTarget.style.borderColor = "rgba(241,225,148,0.5)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(241,225,148,0.08)"; e.currentTarget.style.borderColor = "rgba(241,225,148,0.22)"; }}
+              title="بحث عن مستخدم"
+            >🔍</button>
+            <UserMenu currentUser={currentUser} isPremium={isPremium} navigate={navigate} logoutUser={logoutUser} />
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             <button

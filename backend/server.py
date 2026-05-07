@@ -4487,6 +4487,18 @@ async def do_prestige(username: str, current_user: dict = Depends(require_user))
     await db.users.update_one({"username": username}, {"$set": {"prestige": new_prestige}})
     return {"ok": True, "new_prestige": new_prestige}
 
+@api_router.get("/users/search")
+async def search_users(q: str = "", limit: int = 10):
+    """Search users by username (case-insensitive partial match)."""
+    q = q.strip()
+    if not q:
+        return []
+    users = await db.users.find(
+        {"username": {"$regex": q, "$options": "i"}},
+        {"_id": 0, "id": 1, "username": 1, "avatar_url": 1, "subscription_type": 1, "bio": 1, "prestige": 1}
+    ).limit(min(limit, 20)).to_list(20)
+    return users
+
 @api_router.get("/profile/{username}/followers")
 async def get_followers(username: str, skip: int = 0, limit: int = 20):
     user = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})

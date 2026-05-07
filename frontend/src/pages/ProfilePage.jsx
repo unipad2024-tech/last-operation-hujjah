@@ -11,17 +11,17 @@ const XP_PER_PRESTIGE = 10_000;
 
 // Colors match CoD Black Ops 2 prestige emblems (top-left → right → next row)
 const PRESTIGE_META = [
-  { name: "المُجنَّد",        color: "#4ade80", glow: "#4ade8055" },  // P1  Eagle Shield (green)
-  { name: "المقاتل",          color: "#f97316", glow: "#f9731655" },  // P2  Lightning Fist (orange)
-  { name: "المحارب",          color: "#94a3b8", glow: "#94a3b844" },  // P3  Scorpion (dark grey)
-  { name: "الفارس",           color: "#a16207", glow: "#a1620755" },  // P4  Demon Wolf (dark gold)
-  { name: "الحامي",           color: "#a855f7", glow: "#a855f755" },  // P5  Snake Diamond (purple)
-  { name: "البطل",            color: "#60a5fa", glow: "#60a5fa55" },  // P6  Trident Shield (blue)
-  { name: "الأسطورة",         color: "#cbd5e1", glow: "#cbd5e155" },  // P7  Viking Axes (silver)
-  { name: "النخبة",           color: "#fb923c", glow: "#fb923c55" },  // P8  Skull Diamond+Stars (orange-red)
-  { name: "نخبة الأساطير",    color: "#92400e", glow: "#92400e55" },  // P9  Military Skull (dark brown)
-  { name: "قائد الأبطال",     color: "#dc2626", glow: "#dc262655" },  // P10 Flame Demon (red)
-  { name: "ماستر",            color: "#f2b85b", glow: "#f2b85b77" },  // P11 Master (gold)
+  { name: "المُجنَّد",        color: "#4ade80", glow: "#4ade8055" },  // P1  Green Eagle Shield
+  { name: "المقاتل",          color: "#f97316", glow: "#f9731655" },  // P2  Orange Lightning Fist
+  { name: "المحارب",          color: "#ca8a04", glow: "#ca8a0455" },  // P3  Gold Scorpion Circle
+  { name: "الفارس",           color: "#71717a", glow: "#71717a55" },  // P4  Gray Beast Head
+  { name: "الحامي",           color: "#7c3aed", glow: "#7c3aed55" },  // P5  Purple Snake Diamond
+  { name: "البطل",            color: "#3b82f6", glow: "#3b82f655" },  // P6  Blue Trident Shield
+  { name: "الأسطورة",         color: "#a8a29e", glow: "#a8a29e55" },  // P7  Silver Viking Axes
+  { name: "النخبة",           color: "#c2410c", glow: "#c2410c55" },  // P8  Bronze Skull Diamond Stars
+  { name: "نخبة الأساطير",    color: "#4b5563", glow: "#4b556355" },  // P9  Dark Military Skull
+  { name: "قائد الأبطال",     color: "#6b7280", glow: "#6b728055" },  // P10 Gray Split-Face Chevron
+  { name: "ماستر",            color: "#f2b85b", glow: "#f2b85b77" },  // P11 Gold Master Dual-Skull
 ];
 
 function getPrestigeMeta(prestige) {
@@ -51,239 +51,384 @@ function PrestigeBadge({ prestige, size = 40 }) {
   );
 
   const shapes = {
-    /* P1 — Eagle Shield (green holographic) */
+
+    /* P1 — Dark shield with chain links + double-headed eagle (green holographic) */
     1: <>
       <defs>{glowFilter}</defs>
-      {/* Shield body */}
-      <path d="M20 3 L34 8 L34 24 C34 33 28 39 20 42 C12 39 6 33 6 24 L6 8 Z"
-        fill={`${c}22`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
-      {/* Eagle wings */}
-      <path d="M20 19 L9 13 L11 18 L7 22 L13 20 L20 24 Z" fill={c} opacity="0.9"/>
-      <path d="M20 19 L31 13 L29 18 L33 22 L27 20 L20 24 Z" fill={c} opacity="0.9"/>
-      {/* Eagle head + beak */}
-      <ellipse cx="20" cy="14" rx="4" ry="3.5" fill={c} filter={`url(#${id})`}/>
-      <path d="M24 14 L26 16 L24 16" fill={c} opacity="0.7"/>
-      {/* Chain links hint */}
-      <circle cx="7" cy="12" r="1.5" fill="none" stroke={c} strokeWidth="1" opacity="0.4"/>
-      <circle cx="33" cy="12" r="1.5" fill="none" stroke={c} strokeWidth="1" opacity="0.4"/>
+      {/* Shield body — tall, pointed bottom */}
+      <path d="M20 2 L35 7 L35 23 C35 33 28 40 20 42 C12 40 5 33 5 23 L5 7 Z"
+        fill={`${c}1a`} stroke={c} strokeWidth="1.8" filter={`url(#${id})`}/>
+      {/* Chain links left side */}
+      <ellipse cx="6" cy="12" rx="1.8" ry="1.1" fill="none" stroke={c} strokeWidth="1" opacity="0.6" transform="rotate(-30,6,12)"/>
+      <ellipse cx="6" cy="16" rx="1.8" ry="1.1" fill="none" stroke={c} strokeWidth="1" opacity="0.6" transform="rotate(30,6,16)"/>
+      <ellipse cx="6" cy="20" rx="1.8" ry="1.1" fill="none" stroke={c} strokeWidth="1" opacity="0.6" transform="rotate(-30,6,20)"/>
+      {/* Chain links right side */}
+      <ellipse cx="34" cy="12" rx="1.8" ry="1.1" fill="none" stroke={c} strokeWidth="1" opacity="0.6" transform="rotate(30,34,12)"/>
+      <ellipse cx="34" cy="16" rx="1.8" ry="1.1" fill="none" stroke={c} strokeWidth="1" opacity="0.6" transform="rotate(-30,34,16)"/>
+      <ellipse cx="34" cy="20" rx="1.8" ry="1.1" fill="none" stroke={c} strokeWidth="1" opacity="0.6" transform="rotate(30,34,20)"/>
+      {/* Left eagle head facing left */}
+      <ellipse cx="14" cy="13" rx="3.2" ry="2.8" fill={c} filter={`url(#${id})`}/>
+      <path d="M11 13 L8 15 L11 14.5" fill={c}/>
+      {/* Left wing spreading up-left */}
+      <path d="M14 16 L7 22 L10 20 L8 26 L14 21 Z" fill={c} opacity="0.85"/>
+      {/* Right eagle head facing right */}
+      <ellipse cx="26" cy="13" rx="3.2" ry="2.8" fill={c} filter={`url(#${id})`}/>
+      <path d="M29 13 L32 15 L29 14.5" fill={c}/>
+      {/* Right wing spreading up-right */}
+      <path d="M26 16 L33 22 L30 20 L32 26 L26 21 Z" fill={c} opacity="0.85"/>
+      {/* Body connecting both heads */}
+      <ellipse cx="20" cy="22" rx="4" ry="3" fill={c} opacity="0.7"/>
+      {numLabel(20, 30, 9)}
     </>,
 
-    /* P2 — Lightning Fist Shield (orange) */
+    /* P2 — Dark red pentagonal shield, crossed swords top, armored fist + golden lightning bolt */
     2: <>
       <defs>{glowFilter}</defs>
-      {/* Shield */}
-      <path d="M20 4 L33 9 L33 26 C33 33 27 39 20 41 C13 39 7 33 7 26 L7 9 Z"
-        fill={`${c}20`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
-      {/* Crossed swords at top */}
-      <line x1="11" y1="5"  x2="23" y2="14" stroke={c} strokeWidth="2"   opacity="0.65" strokeLinecap="round"/>
-      <line x1="29" y1="5"  x2="17" y2="14" stroke={c} strokeWidth="2"   opacity="0.65" strokeLinecap="round"/>
-      {/* Fist suggestion (circle) */}
-      <circle cx="20" cy="20" r="5" fill={c} opacity="0.7" filter={`url(#${id})`}/>
-      {/* Lightning bolt */}
-      <path d="M23 15 L17 22 L21 22 L17 30 L27 20 L23 20 Z"
-        fill={c} filter={`url(#${id})`}/>
+      {/* Pentagon shield */}
+      <path d="M20 3 L36 11 L36 27 C36 33 30 39 20 41 C10 39 4 33 4 27 L4 11 Z"
+        fill={`${c}20`} stroke={c} strokeWidth="1.8" filter={`url(#${id})`}/>
+      {/* Crossed sword left (handle top-left, blade goes down-right) */}
+      <line x1="10" y1="4" x2="22" y2="14" stroke={c} strokeWidth="2.2" strokeLinecap="round" opacity="0.9"/>
+      <line x1="8" y1="6" x2="12" y2="6" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.9"/>
+      {/* Crossed sword right (handle top-right, blade goes down-left) */}
+      <line x1="30" y1="4" x2="18" y2="14" stroke={c} strokeWidth="2.2" strokeLinecap="round" opacity="0.9"/>
+      <line x1="32" y1="6" x2="28" y2="6" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.9"/>
+      {/* Armored gauntlet/fist (rounded rectangle = glove) */}
+      <rect x="16" y="17" width="8" height="9" rx="2.5" fill={c} opacity="0.85" filter={`url(#${id})`}/>
+      {/* Knuckle ridges */}
+      <line x1="17" y1="17" x2="17" y2="20" stroke="rgba(0,0,0,0.4)" strokeWidth="1"/>
+      <line x1="20" y1="17" x2="20" y2="20" stroke="rgba(0,0,0,0.4)" strokeWidth="1"/>
+      <line x1="23" y1="17" x2="23" y2="20" stroke="rgba(0,0,0,0.4)" strokeWidth="1"/>
+      {/* Golden lightning bolt held by fist */}
+      <path d="M22 11 L16 21 L20.5 21 L17 30 L28 18 L23 18 Z"
+        fill="#fbbf24" filter={`url(#${id})`}/>
+      {/* Fire glow at bottom */}
+      <ellipse cx="20" cy="37" rx="8" ry="3" fill={`${c}40`}/>
     </>,
 
-    /* P3 — Scorpion Hex (dark grey) */
+    /* P3 — Dark circle with 8 spike protrusions, large golden scorpion inside */
     3: <>
       <defs>{glowFilter}</defs>
-      {/* Hexagon frame */}
-      <polygon points="20,2 35,11 35,29 20,38 5,29 5,11"
-        fill={`${c}18`} stroke={c} strokeWidth="1.5"/>
-      {/* Claws */}
-      <path d="M14 23 L7 18 M14 23 L7 26" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.85"/>
-      <path d="M26 23 L33 18 M26 23 L33 26" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.85"/>
-      {/* Body */}
-      <ellipse cx="20" cy="24" rx="5" ry="6" fill={c} opacity="0.9" filter={`url(#${id})`}/>
-      {/* Tail curving up */}
-      <path d="M20 18 C21 13 25 10 24 6" stroke={c} strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-      {/* Stinger */}
-      <circle cx="24" cy="5" r="2" fill={c} filter={`url(#${id})`}/>
+      {/* 8-spike sun border */}
+      <polygon points="20,1 22.5,7 27,3 26,9 32,8 29,13 36,15 31,18 36,22 30,23 33,29 27,28 27,35 22,31 20,38 18,31 13,35 13,28 7,29 10,23 4,22 9,18 4,15 11,13 8,8 14,9 13,3 18,7"
+        fill={`${c}22`} stroke={c} strokeWidth="1.2" filter={`url(#${id})`}/>
+      {/* Dark inner circle */}
+      <circle cx="20" cy="20" r="13" fill="#0d0d0d" stroke={c} strokeWidth="1" opacity="0.85"/>
+      {/* Scorpion body segments */}
+      <ellipse cx="20" cy="23" rx="4.5" ry="5.5" fill="#ca8a04" opacity="0.95" filter={`url(#${id})`}/>
+      <ellipse cx="20" cy="19" rx="3.5" ry="3" fill="#ca8a04" opacity="0.9"/>
+      {/* Scorpion tail curving up with stinger */}
+      <path d="M20 17 C21 13 24 11 25 8 C26 6 24 4 23 5" stroke="#ca8a04" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+      <path d="M23 5 L25 3 L24 6" fill="#ca8a04"/>
+      {/* Left claw arm */}
+      <path d="M16 22 L11 19 L9 16 M11 19 L10 23" stroke="#ca8a04" strokeWidth="2" fill="none" strokeLinecap="round"/>
+      {/* Right claw arm */}
+      <path d="M24 22 L29 19 L31 16 M29 19 L30 23" stroke="#ca8a04" strokeWidth="2" fill="none" strokeLinecap="round"/>
+      {/* Legs */}
+      <line x1="17" y1="24" x2="12" y2="26" stroke="#ca8a04" strokeWidth="1.2" opacity="0.7"/>
+      <line x1="17" y1="26" x2="12" y2="29" stroke="#ca8a04" strokeWidth="1.2" opacity="0.7"/>
+      <line x1="23" y1="24" x2="28" y2="26" stroke="#ca8a04" strokeWidth="1.2" opacity="0.7"/>
+      <line x1="23" y1="26" x2="28" y2="29" stroke="#ca8a04" strokeWidth="1.2" opacity="0.7"/>
     </>,
 
-    /* P4 — Demon Wolf Head (dark gold/brown, red eyes) */
+    /* P4 — Floating beast/demon head, wide scaled head, banana horns, red glowing eyes, nose ring, 3 red bars */
     4: <>
       <defs>{glowFilter}</defs>
-      {/* Head */}
-      <path d="M10 36 Q8 28 10 22 Q12 14 20 12 Q28 14 30 22 Q32 28 30 36 Q26 38 20 39 Q14 38 10 36 Z"
-        fill={`${c}25`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
-      {/* Horns */}
-      <path d="M13 18 L9 7 L15 16" fill={c} opacity="0.9"/>
-      <path d="M27 18 L31 7 L25 16" fill={c} opacity="0.9"/>
-      {/* Red eyes */}
-      <ellipse cx="16" cy="22" rx="3" ry="2.5" fill="#ef4444" filter={`url(#${id})`}/>
-      <ellipse cx="24" cy="22" rx="3" ry="2.5" fill="#ef4444" filter={`url(#${id})`}/>
-      <ellipse cx="16" cy="22" rx="1.5" ry="1.5" fill="#fff" opacity="0.4"/>
-      <ellipse cx="24" cy="22" rx="1.5" ry="1.5" fill="#fff" opacity="0.4"/>
-      {/* Snout */}
-      <path d="M15 29 C17 32 23 32 25 29" stroke={c} strokeWidth="2" fill="none" strokeLinecap="round"/>
+      {/* Wide scaled head — no frame */}
+      <path d="M6 14 Q5 8 10 7 Q15 5 20 6 Q25 5 30 7 Q35 8 34 14 Q35 22 30 28 Q25 33 20 34 Q15 33 10 28 Q5 22 6 14 Z"
+        fill={`${c}28`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
+      {/* Scale texture lines */}
+      <path d="M10 12 Q13 10 16 12 Q19 14 22 12 Q25 10 28 12 Q31 14 33 13" stroke={c} strokeWidth="0.7" fill="none" opacity="0.4"/>
+      <path d="M9 16 Q12 14 15 16 Q18 18 21 16 Q24 14 27 16 Q30 18 33 17" stroke={c} strokeWidth="0.7" fill="none" opacity="0.4"/>
+      {/* Left banana-shaped curved horn */}
+      <path d="M10 12 Q4 8 3 4 Q5 2 8 5 Q11 9 12 14" fill={c} opacity="0.9"/>
+      {/* Right banana-shaped curved horn */}
+      <path d="M30 12 Q36 8 37 4 Q35 2 32 5 Q29 9 28 14" fill={c} opacity="0.9"/>
+      {/* Left glowing red eye */}
+      <ellipse cx="15" cy="20" rx="3.5" ry="3" fill="#dc2626" filter={`url(#${id})`}/>
+      <ellipse cx="15" cy="20" rx="2" ry="1.8" fill="#ff4444"/>
+      <ellipse cx="15" cy="20" rx="1" ry="1" fill="#fff" opacity="0.5"/>
+      {/* Right glowing red eye */}
+      <ellipse cx="25" cy="20" rx="3.5" ry="3" fill="#dc2626" filter={`url(#${id})`}/>
+      <ellipse cx="25" cy="20" rx="2" ry="1.8" fill="#ff4444"/>
+      <ellipse cx="25" cy="20" rx="1" ry="1" fill="#fff" opacity="0.5"/>
+      {/* Nose ring at bottom of muzzle */}
+      <ellipse cx="20" cy="28" rx="2.5" ry="1.5" fill="none" stroke={c} strokeWidth="1.8"/>
+      {/* 3 red bars below */}
+      <rect x="12" y="32" width="16" height="1.8" rx="0.9" fill="#dc2626" opacity="0.9"/>
+      <rect x="13" y="35" width="14" height="1.8" rx="0.9" fill="#dc2626" opacity="0.7"/>
+      <rect x="14" y="38" width="12" height="1.8" rx="0.9" fill="#dc2626" opacity="0.5"/>
     </>,
 
-    /* P5 — Snake + Daggers Diamond (purple) */
+    /* P5 — Purple diamond/hexagonal frame, two combat knives X, snake head emerging from center */
     5: <>
       <defs>{glowFilter}</defs>
-      {/* Diamond frame */}
-      <polygon points="20,3 37,20 20,37 3,20"
-        fill={`${c}18`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
-      {/* Crossed daggers */}
-      <line x1="11" y1="11" x2="29" y2="29" stroke={c} strokeWidth="2" opacity="0.5" strokeLinecap="round"/>
-      <line x1="29" y1="11" x2="11" y2="29" stroke={c} strokeWidth="2" opacity="0.5" strokeLinecap="round"/>
-      {/* Snake body (S-curve) */}
-      <path d="M13 22 Q17 14 20 20 Q23 26 27 18" stroke={c} strokeWidth="3.5"
-        fill="none" strokeLinecap="round" filter={`url(#${id})`}/>
-      {/* Snake head */}
-      <ellipse cx="28" cy="17" rx="3.5" ry="2.5" fill={c} transform="rotate(-30,28,17)"/>
-      {/* Tongue */}
-      <path d="M30 16 L33 14 M30 16 L33 18" stroke={c} strokeWidth="1" strokeLinecap="round" opacity="0.8"/>
+      {/* Diamond/hexagonal frame */}
+      <polygon points="20,2 38,20 20,38 2,20"
+        fill={`${c}18`} stroke={c} strokeWidth="2" filter={`url(#${id})`}/>
+      {/* Combat knife 1 — diagonal top-left to bottom-right */}
+      <line x1="9" y1="9" x2="31" y2="31" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.6"/>
+      {/* Knife guard left */}
+      <line x1="8" y1="11" x2="11" y2="8" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.8"/>
+      {/* Knife handle left */}
+      <rect x="5" y="5" width="5" height="2.5" rx="1" fill={c} opacity="0.75" transform="rotate(45,7.5,6.25)"/>
+      {/* Combat knife 2 — diagonal top-right to bottom-left */}
+      <line x1="31" y1="9" x2="9" y2="31" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.6"/>
+      {/* Knife guard right */}
+      <line x1="32" y1="11" x2="29" y2="8" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.8"/>
+      {/* Knife handle right */}
+      <rect x="30" y="5" width="5" height="2.5" rx="1" fill={c} opacity="0.75" transform="rotate(-45,32.5,6.25)"/>
+      {/* Snake long neck curving from bottom */}
+      <path d="M20 38 Q18 30 20 24 Q22 18 20 14" stroke={c} strokeWidth="3.5" fill="none" strokeLinecap="round" filter={`url(#${id})`}/>
+      {/* Snake head open mouth at top center */}
+      <ellipse cx="20" cy="12" rx="5" ry="3.5" fill={c} filter={`url(#${id})`}/>
+      {/* Upper jaw */}
+      <path d="M15 11 Q20 9 25 11 L25 12 Q20 10.5 15 12 Z" fill={c}/>
+      {/* Open mouth / lower jaw */}
+      <path d="M15 13 Q20 15.5 25 13" stroke={c} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+      {/* Tongue forked */}
+      <path d="M20 9 L19 6 M20 9 L21 6" stroke="#ef4444" strokeWidth="1.2" strokeLinecap="round"/>
+      {/* Snake eye */}
+      <ellipse cx="17" cy="11" rx="1.2" ry="1.2" fill="#fbbf24"/>
     </>,
 
-    /* P6 — Trident Shield (blue + gold trident) */
+    /* P6 — Blue hexagonal shield, thick tentacles, golden trident prominent in foreground */
     6: <>
       <defs>{glowFilter}</defs>
-      {/* Shield */}
-      <path d="M20 3 L34 9 L34 26 C34 34 28 40 20 43 C12 40 6 34 6 26 L6 9 Z"
-        fill={`${c}1a`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
-      {/* Tentacle hints */}
-      <path d="M11 28 Q9 21 13 17" stroke={c} strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.6"/>
-      <path d="M29 28 Q31 21 27 17" stroke={c} strokeWidth="2.5" fill="none" strokeLinecap="round" opacity="0.6"/>
-      {/* Trident shaft */}
-      <line x1="20" y1="10" x2="20" y2="34" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round"/>
-      {/* Trident prongs */}
-      <line x1="14" y1="10" x2="14" y2="16" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/>
-      <line x1="26" y1="10" x2="26" y2="16" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round"/>
-      <line x1="14" y1="16" x2="17" y2="16" stroke="#f59e0b" strokeWidth="1.5"/>
-      <line x1="23" y1="16" x2="26" y2="16" stroke="#f59e0b" strokeWidth="1.5"/>
+      {/* Hexagonal shield */}
+      <polygon points="20,2 35,11 35,29 20,38 5,29 5,11"
+        fill={`${c}1a`} stroke={c} strokeWidth="1.8" filter={`url(#${id})`}/>
+      {/* Thick tentacle 1 — left upper */}
+      <path d="M10 14 Q8 18 11 22 Q14 26 11 30" stroke={c} strokeWidth="3.5" fill="none" strokeLinecap="round" opacity="0.65"/>
+      {/* Thick tentacle 2 — left lower */}
+      <path d="M8 22 Q6 27 9 32" stroke={c} strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.5"/>
+      {/* Thick tentacle 3 — right upper */}
+      <path d="M30 14 Q32 18 29 22 Q26 26 29 30" stroke={c} strokeWidth="3.5" fill="none" strokeLinecap="round" opacity="0.65"/>
+      {/* Thick tentacle 4 — right lower */}
+      <path d="M32 22 Q34 27 31 32" stroke={c} strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.5"/>
+      {/* Trident shaft — prominent, tall center */}
+      <line x1="20" y1="8" x2="20" y2="36" stroke="#fbbf24" strokeWidth="3" strokeLinecap="round" filter={`url(#${id})`}/>
+      {/* Center prong (tallest) */}
+      <path d="M20 8 L18 14 L20 12 L22 14 Z" fill="#fbbf24"/>
+      {/* Left prong */}
+      <line x1="13" y1="8" x2="13" y2="18" stroke="#fbbf24" strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M13 8 L11 13 L13 11 L15 13 Z" fill="#fbbf24"/>
+      {/* Right prong */}
+      <line x1="27" y1="8" x2="27" y2="18" stroke="#fbbf24" strokeWidth="2.2" strokeLinecap="round"/>
+      <path d="M27 8 L25 13 L27 11 L29 13 Z" fill="#fbbf24"/>
+      {/* Crossbar connecting side prongs to shaft */}
+      <line x1="13" y1="17" x2="27" y2="17" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round"/>
     </>,
 
-    /* P7 — Viking Helmet + Crossed Axes (silver) */
+    /* P7 — No frame, two large crossed battle axes, spiked Viking helmet center, chain at bottom */
     7: <>
       <defs>{glowFilter}</defs>
-      {/* Circle border */}
-      <circle cx="20" cy="20" r="17" fill={`${c}14`} stroke={c} strokeWidth="1.5"/>
-      {/* Crossed axes (diagonal) */}
-      <line x1="8"  y1="32" x2="32" y2="8"  stroke={c} strokeWidth="2.5" opacity="0.55" strokeLinecap="round"/>
-      <line x1="32" y1="32" x2="8"  y2="8"  stroke={c} strokeWidth="2.5" opacity="0.55" strokeLinecap="round"/>
-      {/* Axe heads */}
-      <path d="M6 10 L12 7 L10 13 Z" fill={c} opacity="0.85"/>
-      <path d="M34 10 L28 7 L30 13 Z" fill={c} opacity="0.85"/>
-      <path d="M6 30 L12 33 L10 27 Z" fill={c} opacity="0.85"/>
-      <path d="M34 30 L28 33 L30 27 Z" fill={c} opacity="0.85"/>
-      {/* Helmet dome */}
-      <path d="M13 24 Q13 15 20 13 Q27 15 27 24 L25 26 L20 28 L15 26 Z"
+      {/* Axe 1 — top-left to bottom-right diagonal */}
+      <line x1="10" y1="8" x2="30" y2="32" stroke={c} strokeWidth="2.2" strokeLinecap="round" opacity="0.7"/>
+      {/* Axe 1 blade — top-left (crescent shape) */}
+      <path d="M5 5 Q12 2 14 10 Q10 12 5 10 Z" fill={c} opacity="0.9"/>
+      {/* Axe 1 blade — bottom-right */}
+      <path d="M35 35 Q28 38 26 30 Q30 28 35 30 Z" fill={c} opacity="0.9"/>
+      {/* Axe 2 — top-right to bottom-left diagonal */}
+      <line x1="30" y1="8" x2="10" y2="32" stroke={c} strokeWidth="2.2" strokeLinecap="round" opacity="0.7"/>
+      {/* Axe 2 blade — top-right */}
+      <path d="M35 5 Q28 2 26 10 Q30 12 35 10 Z" fill={c} opacity="0.9"/>
+      {/* Axe 2 blade — bottom-left */}
+      <path d="M5 35 Q12 38 14 30 Q10 28 5 30 Z" fill={c} opacity="0.9"/>
+      {/* Viking helmet dome */}
+      <path d="M14 26 Q13 18 20 15 Q27 18 26 26 L24 27 L20 29 L16 27 Z"
         fill={c} filter={`url(#${id})`}/>
-      {/* Horns */}
-      <line x1="13" y1="20" x2="7" y2="13" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.8"/>
-      <line x1="13" y1="20" x2="8" y2="18" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.6"/>
-      <line x1="27" y1="20" x2="33" y2="13" stroke={c} strokeWidth="2.5" strokeLinecap="round" opacity="0.8"/>
-      <line x1="27" y1="20" x2="32" y2="18" stroke={c} strokeWidth="2" strokeLinecap="round" opacity="0.6"/>
+      {/* Helmet nose guard */}
+      <rect x="19" y="23" width="2" height="6" rx="1" fill={`${c}cc`}/>
+      {/* Center spike on top */}
+      <polygon points="20,12 18.5,16 21.5,16" fill={c}/>
+      {/* Left curved horn */}
+      <path d="M14 21 Q9 16 8 11 Q10 9 13 13 Q15 17 15 22" fill={c} opacity="0.85"/>
+      {/* Right curved horn */}
+      <path d="M26 21 Q31 16 32 11 Q30 9 27 13 Q25 17 25 22" fill={c} opacity="0.85"/>
+      {/* Chain links at bottom */}
+      <ellipse cx="16" cy="34" rx="2.2" ry="1.2" fill="none" stroke={c} strokeWidth="1.2" opacity="0.65"/>
+      <ellipse cx="20" cy="34" rx="2.2" ry="1.2" fill="none" stroke={c} strokeWidth="1.2" opacity="0.65"/>
+      <ellipse cx="24" cy="34" rx="2.2" ry="1.2" fill="none" stroke={c} strokeWidth="1.2" opacity="0.65"/>
     </>,
 
-    /* P8 — Skull Diamond + 5 Stars (orange-red) */
+    /* P8 — 3D copper/bronze diamond, ivory skull center, 5 silver metallic stars at corners */
     8: <>
-      <defs>{glowFilter}</defs>
-      {/* 5 stars around */}
-      {[[20,3],[35,14],[29,34],[11,34],[5,14]].map(([sx,sy],i) => (
-        <polygon key={i} points={`${sx},${sy-3} ${sx+1.8},${sy} ${sx+3.5},${sy-1} ${sx+2.2},${sy+2} ${sx+3.5},${sy+4} ${sx},${sy+2.5} ${sx-3.5},${sy+4} ${sx-2.2},${sy+2} ${sx-3.5},${sy-1} ${sx-1.8},${sy}`}
-          fill={c} opacity="0.75" filter={`url(#${id})`}/>
-      ))}
-      {/* Diamond */}
-      <polygon points="20,7 32,20 20,33 8,20" fill={`${c}22`} stroke={c} strokeWidth="1.5"/>
-      {/* Skull head */}
-      <ellipse cx="20" cy="19" rx="7" ry="6.5" fill={c} opacity="0.95" filter={`url(#${id})`}/>
-      {/* Jaw */}
-      <rect x="16" y="24" width="8" height="4.5" rx="1.5" fill={c} opacity="0.9"/>
-      {/* Eye sockets */}
-      <ellipse cx="17" cy="19" rx="2.5" ry="2.5" fill="rgba(0,0,0,0.6)"/>
-      <ellipse cx="23" cy="19" rx="2.5" ry="2.5" fill="rgba(0,0,0,0.6)"/>
-      {/* Teeth */}
-      <line x1="17.5" y1="24.5" x2="17.5" y2="28" stroke="rgba(0,0,0,0.5)" strokeWidth="1.5"/>
-      <line x1="20"   y1="24.5" x2="20"   y2="28" stroke="rgba(0,0,0,0.5)" strokeWidth="1.5"/>
-      <line x1="22.5" y1="24.5" x2="22.5" y2="28" stroke="rgba(0,0,0,0.5)" strokeWidth="1.5"/>
-    </>,
-
-    /* P9 — Military Skull + Beret + Crossbones (dark brown) */
-    9: <>
-      <defs>{glowFilter}</defs>
-      {/* Circle border */}
-      <circle cx="20" cy="20" r="17" fill={`${c}18`} stroke={c} strokeWidth="1.5"/>
-      {/* Skull */}
-      <ellipse cx="20" cy="18" rx="8.5" ry="8" fill={c} filter={`url(#${id})`}/>
-      {/* Beret (flat top) */}
-      <path d="M11 15 Q11 9 20 8 Q29 9 29 15" fill={c} opacity="0.75"/>
-      {/* Eye sockets */}
-      <ellipse cx="16.5" cy="18" rx="3" ry="2.5" fill="rgba(0,0,0,0.6)"/>
-      <ellipse cx="23.5" cy="18" rx="3" ry="2.5" fill="rgba(0,0,0,0.6)"/>
-      {/* Jaw */}
-      <rect x="15" y="24" width="10" height="5" rx="2" fill={c}/>
-      {/* Teeth */}
-      <line x1="17" y1="24" x2="17" y2="29" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5"/>
-      <line x1="20" y1="24" x2="20" y2="29" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5"/>
-      <line x1="23" y1="24" x2="23" y2="29" stroke="rgba(0,0,0,0.45)" strokeWidth="1.5"/>
-      {/* Crossbones */}
-      <line x1="7"  y1="35" x2="33" y2="29" stroke={c} strokeWidth="3.5" strokeLinecap="round" opacity="0.85"/>
-      <line x1="7"  y1="29" x2="33" y2="35" stroke={c} strokeWidth="3.5" strokeLinecap="round" opacity="0.85"/>
-    </>,
-
-    /* P10 — Flaming Demon Face (red-dark) */
-    10: <>
-      <defs>
-        {glowFilter}
-        <radialGradient id={`rg${p}`} cx="50%" cy="40%" r="55%">
-          <stop offset="0%" stopColor={c} stopOpacity="0.9"/>
-          <stop offset="100%" stopColor="#1a0000" stopOpacity="1"/>
-        </radialGradient>
-      </defs>
-      {/* Flames */}
-      <path d="M11 38 Q9 29 13 22 Q9 20 11 12 Q16 18 15 22 Q19 13 21 8 Q24 16 22 22 Q26 14 28 10 Q30 18 27 23 Q31 29 29 38 Z"
-        fill={`url(#rg${p})`} filter={`url(#${id})`}/>
-      {/* Face oval */}
-      <ellipse cx="20" cy="27" rx="9" ry="9" fill={`${c}30`} stroke={c} strokeWidth="1"/>
-      {/* Glowing eyes */}
-      <ellipse cx="16.5" cy="26" rx="3" ry="2.5" fill="#fff" opacity="0.85" filter={`url(#${id})`}/>
-      <ellipse cx="23.5" cy="26" rx="3" ry="2.5" fill="#fff" opacity="0.85" filter={`url(#${id})`}/>
-      <ellipse cx="16.5" cy="26" rx="1.8" ry="1.8" fill={c}/>
-      <ellipse cx="23.5" cy="26" rx="1.8" ry="1.8" fill={c}/>
-      {/* Grin */}
-      <path d="M14 31 Q17 34 20 34 Q23 34 26 31" stroke={c} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-    </>,
-
-    /* P11 — Master: Zombie Face + Daggers + Fire (gold) */
-    11: <>
       <defs>
         {glowFilter}
         <linearGradient id={lg} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#fff" stopOpacity="0.45"/>
-          <stop offset="100%" stopColor={c} stopOpacity="1"/>
+          <stop offset="0%" stopColor="#e86234"/>
+          <stop offset="60%" stopColor={c}/>
+          <stop offset="100%" stopColor="#7a2508"/>
         </linearGradient>
-        <radialGradient id={`rg${p}`} cx="50%" cy="70%" r="50%">
-          <stop offset="0%" stopColor={`${c}55`}/>
-          <stop offset="100%" stopColor="transparent"/>
-        </radialGradient>
       </defs>
-      {/* Outer glow ring */}
-      <circle cx="20" cy="20" r="18.5" fill="none" stroke={c} strokeWidth="1" opacity="0.35"/>
-      {/* Bottom fire glow */}
-      <ellipse cx="20" cy="34" rx="14" ry="7" fill={`url(#rg${p})`}/>
-      {/* Crossed daggers behind face */}
-      <line x1="11" y1="9"  x2="30" y2="32" stroke={c} strokeWidth="2.5" opacity="0.5" strokeLinecap="round"/>
-      <line x1="29" y1="9"  x2="10" y2="32" stroke={c} strokeWidth="2.5" opacity="0.5" strokeLinecap="round"/>
-      {/* Dagger handles */}
-      <line x1="9"  y1="7"  x2="13" y2="11" stroke={c} strokeWidth="3" strokeLinecap="round" opacity="0.7"/>
-      <line x1="31" y1="7"  x2="27" y2="11" stroke={c} strokeWidth="3" strokeLinecap="round" opacity="0.7"/>
-      {/* Face */}
-      <path d="M13 29 Q11 22 14 17 Q17 12 20 12 Q23 12 26 17 Q29 22 27 29 Q24 35 20 36 Q16 35 13 29 Z"
-        fill={`url(#${lg})`} filter={`url(#${id})`}/>
+      {/* 5 silver 3D metallic stars — arranged at diamond corners and midpoints */}
+      {/* Top */}
+      <polygon points="20,1 21.2,4.5 24.5,4.5 21.8,6.5 22.8,10 20,8 17.2,10 18.2,6.5 15.5,4.5 18.8,4.5"
+        fill="#d4d4d4" filter={`url(#${id})`}/>
+      {/* Right */}
+      <polygon points="37,18 38.2,21.5 39,21.5 38,22.5 38.5,25 37,23.5 35.5,25 36,22.5 35,21.5 35.8,21.5"
+        fill="#d4d4d4" filter={`url(#${id})`}/>
+      {/* Bottom */}
+      <polygon points="20,29 21.2,32.5 24.5,32.5 21.8,34.5 22.8,38 20,36 17.2,38 18.2,34.5 15.5,32.5 18.8,32.5"
+        fill="#d4d4d4" filter={`url(#${id})`}/>
+      {/* Left */}
+      <polygon points="3,18 4.2,21.5 5,21.5 4,22.5 4.5,25 3,23.5 1.5,25 2,22.5 1,21.5 1.8,21.5"
+        fill="#d4d4d4" filter={`url(#${id})`}/>
+      {/* Upper-right mid */}
+      <polygon points="31,7 31.8,9.5 34,9.5 32.3,11 33,13.5 31,12 29,13.5 29.7,11 28,9.5 30.2,9.5"
+        fill="#d4d4d4" filter={`url(#${id})`}/>
+      {/* 3D diamond body with beveled edges */}
+      <polygon points="20,8 33,20 20,32 7,20" fill={`url(#${lg})`} stroke="#7a2508" strokeWidth="0.8"/>
+      {/* Bevel highlights */}
+      <polygon points="20,8 33,20 27,20 20,14" fill="rgba(255,255,255,0.18)"/>
+      <polygon points="20,8 7,20 13,20 20,14" fill="rgba(0,0,0,0.15)"/>
+      {/* Ivory skull cranium */}
+      <ellipse cx="20" cy="19" rx="6.5" ry="6" fill="#e8e0d0" filter={`url(#${id})`}/>
+      {/* Skull jaw */}
+      <rect x="16.5" y="23.5" width="7" height="4" rx="1.5" fill="#ddd4c0"/>
       {/* Eye sockets */}
-      <ellipse cx="16.5" cy="22" rx="3" ry="2.5" fill="rgba(0,0,0,0.65)"/>
-      <ellipse cx="23.5" cy="22" rx="3" ry="2.5" fill="rgba(0,0,0,0.65)"/>
-      {/* Eye glow */}
-      <ellipse cx="16.5" cy="22" rx="1.5" ry="1.5" fill={c} opacity="0.8"/>
-      <ellipse cx="23.5" cy="22" rx="1.5" ry="1.5" fill={c} opacity="0.8"/>
-      {/* Skull teeth */}
-      <rect x="16" y="27" width="8" height="4" rx="1" fill="rgba(0,0,0,0.5)"/>
-      <line x1="18" y1="27" x2="18" y2="31" stroke={c} strokeWidth="1.2" opacity="0.6"/>
-      <line x1="20" y1="27" x2="20" y2="31" stroke={c} strokeWidth="1.2" opacity="0.6"/>
-      <line x1="22" y1="27" x2="22" y2="31" stroke={c} strokeWidth="1.2" opacity="0.6"/>
+      <ellipse cx="17.5" cy="19" rx="2.2" ry="2.2" fill="rgba(0,0,0,0.7)"/>
+      <ellipse cx="22.5" cy="19" rx="2.2" ry="2.2" fill="rgba(0,0,0,0.7)"/>
+      {/* Teeth gaps */}
+      <line x1="17.5" y1="23.5" x2="17.5" y2="27" stroke="rgba(0,0,0,0.5)" strokeWidth="1.2"/>
+      <line x1="20" y1="23.5" x2="20" y2="27" stroke="rgba(0,0,0,0.5)" strokeWidth="1.2"/>
+      <line x1="22.5" y1="23.5" x2="22.5" y2="27" stroke="rgba(0,0,0,0.5)" strokeWidth="1.2"/>
+    </>,
+
+    /* P9 — Dark angular crest, bat-wing blades left/right, military skull with beret, crossed bones below */
+    9: <>
+      <defs>{glowFilter}</defs>
+      {/* Angular crest badge background */}
+      <path d="M20 3 L33 8 L36 18 L33 28 L20 36 L7 28 L4 18 L7 8 Z"
+        fill={`${c}20`} stroke={c} strokeWidth="1.5" filter={`url(#${id})`}/>
+      {/* Left bat-wing/blade extension */}
+      <path d="M7 14 L2 8 L3 16 L1 22 L5 20 L4 26 L8 20 Z" fill={c} opacity="0.85"/>
+      {/* Right bat-wing/blade extension */}
+      <path d="M33 14 L38 8 L37 16 L39 22 L35 20 L36 26 L32 20 Z" fill={c} opacity="0.85"/>
+      {/* Skull cranium */}
+      <ellipse cx="20" cy="17" rx="8" ry="7.5" fill={c} filter={`url(#${id})`}/>
+      {/* Beret (flat tilted cap) */}
+      <path d="M12 14 Q13 8 20 7 Q27 6 28 11 Q24 13 20 13 Q16 14 12 14 Z" fill={`${c}dd`}/>
+      {/* Beret brim line */}
+      <line x1="12" y1="14" x2="29" y2="13" stroke={c} strokeWidth="1.2" opacity="0.6"/>
+      {/* Small gold badge on beret */}
+      <polygon points="20,8 20.8,10 22.5,10 21.2,11.2 21.7,13 20,12 18.3,13 18.8,11.2 17.5,10 19.2,10"
+        fill="#fbbf24" opacity="0.9"/>
+      {/* Eye sockets */}
+      <ellipse cx="16.5" cy="17" rx="2.8" ry="2.5" fill="rgba(0,0,0,0.65)"/>
+      <ellipse cx="23.5" cy="17" rx="2.8" ry="2.5" fill="rgba(0,0,0,0.65)"/>
+      {/* Skull jaw */}
+      <rect x="15" y="22.5" width="10" height="4.5" rx="2" fill={c}/>
+      <line x1="17.5" y1="22.5" x2="17.5" y2="27" stroke="rgba(0,0,0,0.45)" strokeWidth="1.3"/>
+      <line x1="20" y1="22.5" x2="20" y2="27" stroke="rgba(0,0,0,0.45)" strokeWidth="1.3"/>
+      <line x1="22.5" y1="22.5" x2="22.5" y2="27" stroke="rgba(0,0,0,0.45)" strokeWidth="1.3"/>
+      {/* Crossed large bones (X) below skull */}
+      <line x1="9" y1="31" x2="31" y2="38" stroke={c} strokeWidth="3.5" strokeLinecap="round" opacity="0.9"/>
+      <line x1="31" y1="31" x2="9" y2="38" stroke={c} strokeWidth="3.5" strokeLinecap="round" opacity="0.9"/>
+      {/* Bone end knobs */}
+      <circle cx="9" cy="31" r="2.5" fill={c}/>
+      <circle cx="31" cy="38" r="2.5" fill={c}/>
+      <circle cx="31" cy="31" r="2.5" fill={c}/>
+      <circle cx="9" cy="38" r="2.5" fill={c}/>
+    </>,
+
+    /* P10 — Downward-pointing chevron/V-shield, split cyborg+zombie face, bullet shapes at bottom */
+    10: <>
+      <defs>
+        {glowFilter}
+        <linearGradient id={lg} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#374151"/>
+          <stop offset="50%" stopColor={c}/>
+          <stop offset="100%" stopColor="#4b1919"/>
+        </linearGradient>
+      </defs>
+      {/* Chevron / V-shape shield pointing down */}
+      <path d="M3 5 L20 39 L37 5 Z"
+        fill={`${c}20`} stroke={c} strokeWidth="1.8" filter={`url(#${id})`}/>
+      {/* Vertical center divider line */}
+      <line x1="20" y1="7" x2="20" y2="33" stroke="rgba(255,255,255,0.25)" strokeWidth="0.8"/>
+      {/* LEFT HALF — mechanical/cyborg */}
+      {/* Cyborg circular yellow glowing eye */}
+      <circle cx="14" cy="17" r="4" fill="#1a1a2e" stroke="#ca8a04" strokeWidth="1.2"/>
+      <circle cx="14" cy="17" r="2.5" fill="#ca8a04" opacity="0.9" filter={`url(#${id})`}/>
+      <circle cx="14" cy="17" r="1.2" fill="#fff" opacity="0.6"/>
+      {/* Tech panel lines left */}
+      <line x1="8" y1="13" x2="12" y2="13" stroke={c} strokeWidth="1" opacity="0.5"/>
+      <line x1="8" y1="15" x2="11" y2="15" stroke={c} strokeWidth="1" opacity="0.4"/>
+      <line x1="9" y1="22" x2="13" y2="22" stroke={c} strokeWidth="1" opacity="0.5"/>
+      {/* Left side of jaw — mechanical panels */}
+      <rect x="10" y="23" width="9" height="6" rx="1" fill={`${c}40`} stroke={c} strokeWidth="0.6"/>
+      <line x1="12" y1="23" x2="12" y2="29" stroke={c} strokeWidth="0.6" opacity="0.6"/>
+      <line x1="14" y1="23" x2="14" y2="29" stroke={c} strokeWidth="0.6" opacity="0.6"/>
+      {/* RIGHT HALF — zombie/flesh */}
+      {/* Zombie red glowing eye */}
+      <ellipse cx="26" cy="17" rx="3.5" ry="3" fill="#1a0000"/>
+      <ellipse cx="26" cy="17" rx="2.2" ry="2" fill="#dc2626" opacity="0.9" filter={`url(#${id})`}/>
+      <ellipse cx="26" cy="17" rx="1" ry="0.8" fill="#ff8888" opacity="0.7"/>
+      {/* Rotting flesh texture lines right */}
+      <path d="M22 14 Q24 12 26 14" stroke="#7a3333" strokeWidth="1" fill="none" opacity="0.6"/>
+      <path d="M23 11 Q25 9 28 11" stroke="#7a3333" strokeWidth="1" fill="none" opacity="0.5"/>
+      {/* Right side of jaw — rotting/exposed teeth */}
+      <rect x="21" y="23" width="9" height="6" rx="1" fill="#2a1010" stroke="#5a2020" strokeWidth="0.6"/>
+      <line x1="23" y1="23" x2="23" y2="29" stroke="#7a3333" strokeWidth="1" opacity="0.7"/>
+      <line x1="25" y1="23" x2="25" y2="29" stroke="#7a3333" strokeWidth="1" opacity="0.7"/>
+      <line x1="27" y1="23" x2="27" y2="29" stroke="#7a3333" strokeWidth="1" opacity="0.7"/>
+      {/* Bullet shapes along the bottom edge */}
+      <ellipse cx="14" cy="35" rx="1.5" ry="2.5" fill={c} opacity="0.75"/>
+      <ellipse cx="17" cy="36.5" rx="1.5" ry="2.5" fill={c} opacity="0.75"/>
+      <ellipse cx="20" cy="37.5" rx="1.5" ry="2.5" fill={c} opacity="0.75"/>
+      <ellipse cx="23" cy="36.5" rx="1.5" ry="2.5" fill={c} opacity="0.75"/>
+      <ellipse cx="26" cy="35" rx="1.5" ry="2.5" fill={c} opacity="0.75"/>
+    </>,
+
+    /* P11 — No frame, 3 ice-blue daggers pointing up, 2 skulls below, fire/golden glow at base */
+    11: <>
+      <defs>
+        {glowFilter}
+        <radialGradient id={`rg${p}`} cx="50%" cy="85%" r="60%">
+          <stop offset="0%" stopColor={c} stopOpacity="0.8"/>
+          <stop offset="60%" stopColor={`${c}44`} stopOpacity="0.4"/>
+          <stop offset="100%" stopColor="transparent" stopOpacity="0"/>
+        </radialGradient>
+        <linearGradient id={lg} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#b0e0ff"/>
+          <stop offset="100%" stopColor={c}/>
+        </linearGradient>
+      </defs>
+      {/* Golden fire glow at base */}
+      <ellipse cx="20" cy="37" rx="16" ry="6" fill={`url(#rg${p})`}/>
+      {/* Fire tips */}
+      <path d="M11 37 Q12 32 14 30 Q13 28 14 25 Q16 29 15 32 Q17 27 19 24 Q20 29 19 32 Q21 27 23 24 Q23 29 22 32 Q24 28 26 30 Q27 32 28 37 Z"
+        fill={`${c}66`} filter={`url(#${id})`}/>
+      {/* Center dagger — straight up, tallest */}
+      <path d="M20 3 L18.5 8 L19.2 8 L19.2 22 L20.8 22 L20.8 8 L21.5 8 Z"
+        fill={`url(#${lg})`} filter={`url(#${id})`}/>
+      <path d="M20 3 L18 9 L22 9 Z" fill="#e0f4ff"/>
+      {/* Left dagger — angled left-upward */}
+      <path d="M14 7 L12 12 L12.7 12.5 L16 24 L17.2 23.5 L14.3 12.5 L15 12 Z"
+        fill={`url(#${lg})`} filter={`url(#${id})`} transform="rotate(-18,14,15)"/>
+      {/* Right dagger — angled right-upward */}
+      <path d="M26 7 L28 12 L27.3 12.5 L24 24 L22.8 23.5 L25.7 12.5 L25 12 Z"
+        fill={`url(#${lg})`} filter={`url(#${id})`} transform="rotate(18,26,15)"/>
+      {/* Left skull — dark mechanical, yellow eye */}
+      <ellipse cx="13" cy="30" rx="5.5" ry="5" fill="#2a2a3a" stroke={c} strokeWidth="0.8"/>
+      <rect x="10" y="33.5" width="6" height="2.5" rx="1" fill="#222230"/>
+      <ellipse cx="11.5" cy="29.5" rx="1.8" ry="1.5" fill="rgba(0,0,0,0.7)"/>
+      <ellipse cx="11.5" cy="29.5" rx="1" ry="0.9" fill="#ca8a04" opacity="0.9"/>
+      <ellipse cx="14.5" cy="29.5" rx="1.8" ry="1.5" fill="rgba(0,0,0,0.7)"/>
+      <line x1="11" y1="33.5" x2="11" y2="36" stroke={c} strokeWidth="0.9" opacity="0.5"/>
+      <line x1="13" y1="33.5" x2="13" y2="36" stroke={c} strokeWidth="0.9" opacity="0.5"/>
+      <line x1="15" y1="33.5" x2="15" y2="36" stroke={c} strokeWidth="0.9" opacity="0.5"/>
+      {/* Right skull — rotting zombie, red eye */}
+      <ellipse cx="27" cy="30" rx="5.5" ry="5" fill="#2a1010" stroke="#dc2626" strokeWidth="0.8"/>
+      <rect x="24" y="33.5" width="6" height="2.5" rx="1" fill="#1a0808"/>
+      <ellipse cx="25" cy="29.5" rx="1.8" ry="1.5" fill="rgba(0,0,0,0.7)"/>
+      <ellipse cx="28.5" cy="29.5" rx="1.8" ry="1.5" fill="rgba(0,0,0,0.7)"/>
+      <ellipse cx="28.5" cy="29.5" rx="1" ry="0.9" fill="#dc2626" opacity="0.9" filter={`url(#${id})`}/>
+      <line x1="25" y1="33.5" x2="25" y2="36" stroke="#dc2626" strokeWidth="0.9" opacity="0.6"/>
+      <line x1="27" y1="33.5" x2="27" y2="36" stroke="#dc2626" strokeWidth="0.9" opacity="0.6"/>
+      <line x1="29" y1="33.5" x2="29" y2="36" stroke="#dc2626" strokeWidth="0.9" opacity="0.6"/>
     </>,
   };
 
