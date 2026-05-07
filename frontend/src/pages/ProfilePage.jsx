@@ -1355,8 +1355,48 @@ export default function ProfilePage() {
 
   /* ── FINAL RENDER ─────────────────────────────────────────────────────────── */
   return (
-    <div style={{ minHeight: "100vh", background: "#09070b", fontFamily: "Cairo, sans-serif", direction: "rtl", color: "#f8f2e7" }}>
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: "#09070b", fontFamily: "Cairo, sans-serif", direction: "rtl", color: "#f8f2e7", position: "relative" }}>
+
+      {/* ── Art Background ── */}
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", overflow: "hidden" }}>
+
+        {/* Image 1 — Baroque divine (top-left) */}
+        <div style={{ position: "absolute", top: 0, left: 0, width: "58%", height: "52%", overflow: "hidden" }}>
+          <img
+            src="https://i.pinimg.com/736x/a0/be/c2/a0bec239e77e424ecca7f30bfd8a29d1.jpg"
+            alt=""
+            style={{
+              width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top",
+              filter: "brightness(0.28) saturate(0.55) sepia(0.15)",
+              transform: "scale(1.06)",
+            }}
+          />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, transparent 20%, #09070b 75%)" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, transparent 40%, #09070b 100%)" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to right, transparent 40%, #09070b 100%)" }} />
+        </div>
+
+        {/* Image 2 — Dark oligarch (bottom-right) */}
+        <div style={{ position: "absolute", bottom: 0, right: 0, width: "58%", height: "52%", overflow: "hidden" }}>
+          <img
+            src="https://i.pinimg.com/736x/21/e4/7b/21e47bbf1c1ba178e0a16e50f3565e99.jpg"
+            alt=""
+            style={{
+              width: "100%", height: "100%", objectFit: "cover", objectPosition: "center center",
+              filter: "brightness(0.30) saturate(0.5) sepia(0.1)",
+              transform: "scale(1.06)",
+            }}
+          />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(315deg, transparent 20%, #09070b 75%)" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, transparent 40%, #09070b 100%)" }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to left, transparent 40%, #09070b 100%)" }} />
+        </div>
+
+        {/* Central vignette to keep the middle clean */}
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 55% 60% at 50% 50%, transparent 0%, #09070b88 70%, #09070bcc 100%)" }} />
+      </div>
+
+      <div style={{ maxWidth: 720, margin: "0 auto", position: "relative", zIndex: 1 }}>
 
         {/* Hero */}
         {renderHero()}
