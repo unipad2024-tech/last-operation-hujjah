@@ -106,6 +106,8 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 class AdminLogin(BaseModel):
     username: str = "admin"
@@ -603,6 +605,10 @@ async def update_me(body: UserUpdate, user: dict = Depends(require_user)):
         if len(body.password) < 6:
             raise HTTPException(400, "كلمة المرور قصيرة")
         updates["password_hash"] = hash_pw(body.password)
+    if body.bio is not None:
+        updates["bio"] = body.bio[:300]
+    if body.avatar_url is not None:
+        updates["avatar_url"] = body.avatar_url[:500]
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
@@ -3846,6 +3852,7 @@ async def community_create_category(body: CommunityCategoryCreate, user: dict = 
         "rejection_reason": "",
         "questions_count": 0,
         "play_count": 0,
+        "likes_count": 0,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "submitted_at": None,
         "reviewed_at": None,
@@ -3865,7 +3872,9 @@ async def community_my_categories(user: dict = Depends(require_user)):
 async def community_browse_categories(skip: int = 0, limit: int = 20):
     cats = await db.community_categories.find(
         {"status": "approved"}, {"_id": 0}
-    ).sort("play_count", -1).skip(skip).limit(limit).to_list(limit)
+    ).sort([("play_count", -1), ("likes_count", -1)]).skip(skip).limit(limit).to_list(limit)
+    for c in cats:
+        c.setdefault("likes_count", 0)
     return cats
 
 @api_router.delete("/community/categories/{cat_id}")
@@ -4195,6 +4204,171 @@ async def admin_process_monthly_earnings(body: dict = {}, admin: dict = Depends(
         "total_points_awarded": total_points_awarded,
         "total_sar_awarded": round(total_points_awarded / COMMUNITY_POINTS_TO_SAR, 2),
     }
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COMMUNITY LIKES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.post("/community/categories/{cat_id}/like")
+async def like_community_category(cat_id: str, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "status": "approved"})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    existing = await db.community_likes.find_one({"user_id": user["id"], "category_id": cat_id})
+    if existing:
+        await db.community_likes.delete_one({"user_id": user["id"], "category_id": cat_id})
+        await db.community_categories.update_one({"id": cat_id}, {"$inc": {"likes_count": -1}})
+        return {"liked": False}
+    await db.community_likes.insert_one({
+        "user_id": user["id"],
+        "category_id": cat_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    await db.community_categories.update_one({"id": cat_id}, {"$inc": {"likes_count": 1}})
+    return {"liked": True}
+
+@api_router.get("/community/categories/{cat_id}/liked")
+async def check_category_liked(cat_id: str, user: dict = Depends(require_user)):
+    existing = await db.community_likes.find_one({"user_id": user["id"], "category_id": cat_id})
+    return {"liked": bool(existing)}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# USER PROFILES & FOLLOWS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _calc_level(game_count: int, approved_cats: int, total_plays: int, is_premium: bool) -> int:
+    score = (game_count // 10) + (approved_cats * 3) + (total_plays // 50) + (5 if is_premium else 0)
+    return max(1, 1 + score)
+
+@api_router.get("/profile/{username}")
+async def get_profile(username: str, current_user: Optional[dict] = Depends(get_current_user)):
+    user = await db.users.find_one(
+        {"username": username},
+        {"_id": 0, "password_hash": 0, "answered_question_ids": 0, "email": 0, "is_locked": 0}
+    )
+    if not user:
+        raise HTTPException(404, "المستخدم غير موجود")
+
+    game_count    = user.get("game_count", 0)
+    is_premium    = user.get("subscription_type") == "premium"
+    approved_cats = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
+
+    plays_res = await db.community_categories.aggregate([
+        {"$match": {"creator_id": user["id"], "status": "approved"}},
+        {"$group": {"_id": None, "total": {"$sum": "$play_count"}}},
+    ]).to_list(1)
+    total_plays = plays_res[0]["total"] if plays_res else 0
+
+    likes_res = await db.community_categories.aggregate([
+        {"$match": {"creator_id": user["id"], "status": "approved"}},
+        {"$group": {"_id": None, "total": {"$sum": "$likes_count"}}},
+    ]).to_list(1)
+    total_likes = likes_res[0]["total"] if likes_res else 0
+
+    followers_count = await db.follows.count_documents({"following_id": user["id"]})
+    following_count = await db.follows.count_documents({"follower_id": user["id"]})
+
+    is_following = False
+    is_own       = False
+    if current_user:
+        is_own = current_user["id"] == user["id"]
+        if not is_own:
+            is_following = bool(await db.follows.find_one(
+                {"follower_id": current_user["id"], "following_id": user["id"]}
+            ))
+
+    profile = {
+        "id":                user["id"],
+        "username":          user["username"],
+        "bio":               user.get("bio", ""),
+        "avatar_url":        user.get("avatar_url", ""),
+        "subscription_type": user.get("subscription_type", "free"),
+        "level":             _calc_level(game_count, approved_cats, total_plays, is_premium),
+        "game_count":        game_count,
+        "approved_categories": approved_cats,
+        "total_plays":       total_plays,
+        "total_likes":       total_likes,
+        "followers_count":   followers_count,
+        "following_count":   following_count,
+        "is_following":      is_following,
+        "is_own":            is_own,
+        "created_at":        user.get("created_at", ""),
+    }
+
+    if is_own:
+        wallet = await db.community_wallets.find_one({"user_id": user["id"]}, {"_id": 0})
+        profile["wallet"] = wallet or {"balance": 0.0, "total_earned": 0.0, "monthly_pending_sar": 0.0, "month": ""}
+
+    return profile
+
+@api_router.post("/profile/{username}/follow")
+async def follow_user(username: str, current_user: dict = Depends(require_user)):
+    target = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not target:
+        raise HTTPException(404, "المستخدم غير موجود")
+    if target["id"] == current_user["id"]:
+        raise HTTPException(400, "لا يمكنك متابعة نفسك")
+    existing = await db.follows.find_one({"follower_id": current_user["id"], "following_id": target["id"]})
+    if existing:
+        raise HTTPException(400, "أنت تتابع هذا المستخدم مسبقاً")
+    await db.follows.insert_one({
+        "follower_id":  current_user["id"],
+        "following_id": target["id"],
+        "created_at":   datetime.now(timezone.utc).isoformat(),
+    })
+    return {"message": "تمت المتابعة"}
+
+@api_router.delete("/profile/{username}/follow")
+async def unfollow_user(username: str, current_user: dict = Depends(require_user)):
+    target = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not target:
+        raise HTTPException(404, "المستخدم غير موجود")
+    res = await db.follows.delete_one({"follower_id": current_user["id"], "following_id": target["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(400, "أنت لا تتابع هذا المستخدم")
+    return {"message": "تم إلغاء المتابعة"}
+
+@api_router.get("/profile/{username}/followers")
+async def get_followers(username: str, skip: int = 0, limit: int = 20):
+    user = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not user:
+        raise HTTPException(404, "المستخدم غير موجود")
+    follows = await db.follows.find(
+        {"following_id": user["id"]}, {"_id": 0, "follower_id": 1}
+    ).skip(skip).limit(limit).to_list(limit)
+    ids = [f["follower_id"] for f in follows]
+    users = await db.users.find(
+        {"id": {"$in": ids}},
+        {"_id": 0, "id": 1, "username": 1, "avatar_url": 1, "subscription_type": 1, "bio": 1}
+    ).to_list(limit)
+    return users
+
+@api_router.get("/profile/{username}/following")
+async def get_following(username: str, skip: int = 0, limit: int = 20):
+    user = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not user:
+        raise HTTPException(404, "المستخدم غير موجود")
+    follows = await db.follows.find(
+        {"follower_id": user["id"]}, {"_id": 0, "following_id": 1}
+    ).skip(skip).limit(limit).to_list(limit)
+    ids = [f["following_id"] for f in follows]
+    users = await db.users.find(
+        {"id": {"$in": ids}},
+        {"_id": 0, "id": 1, "username": 1, "avatar_url": 1, "subscription_type": 1, "bio": 1}
+    ).to_list(limit)
+    return users
+
+@api_router.get("/profile/{username}/categories")
+async def get_profile_categories(username: str, skip: int = 0, limit: int = 20):
+    user = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not user:
+        raise HTTPException(404, "المستخدم غير موجود")
+    cats = await db.community_categories.find(
+        {"creator_id": user["id"], "status": "approved"}, {"_id": 0}
+    ).sort([("play_count", -1), ("likes_count", -1)]).skip(skip).limit(limit).to_list(limit)
+    for c in cats:
+        c.setdefault("likes_count", 0)
+    return cats
 
 app.include_router(api_router)
 

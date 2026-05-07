@@ -36,6 +36,7 @@ import QuestionPage from "@/pages/QuestionPage";
 import SecretWordPage from "@/pages/SecretWordPage";
 import AdminLoginPage from "@/pages/AdminLoginPage";
 import AdminDashboard from "@/pages/AdminDashboard";
+import ProfilePage from "@/pages/ProfilePage";
 
 function App() {
   useBackendWarmup();
@@ -59,6 +60,8 @@ function App() {
             <Route path="/question" element={<QuestionPage />} />
             <Route path="/secret/:questionId" element={<SecretWordPage />} />
             <Route path="/community" element={<CommunityPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile/:username" element={<ProfilePage />} />
             <Route path="/admin" element={<AdminLoginPage />} />
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
           </Routes>
