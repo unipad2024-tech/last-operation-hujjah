@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
@@ -95,12 +95,14 @@ export default function ProfilePage() {
   const [profile,       setProfile]       = useState(null);
   const [loading,       setLoading]       = useState(true);
   const [tab,           setTab]           = useState(0);
-  const [editing,       setEditing]       = useState(false);
-  const [editBio,       setEditBio]       = useState("");
-  const [editAvatar,    setEditAvatar]    = useState("");
-  const [editUsername,  setEditUsername]  = useState("");
-  const [saving,        setSaving]        = useState(false);
-  const [following,     setFollowing]     = useState(false);
+  const [editing,        setEditing]        = useState(false);
+  const [editBio,        setEditBio]        = useState("");
+  const [editAvatar,     setEditAvatar]     = useState("");
+  const [editUsername,   setEditUsername]   = useState("");
+  const [saving,         setSaving]         = useState(false);
+  const [following,      setFollowing]      = useState(false);
+  const [uploadingAvatar,setUploadingAvatar]= useState(false);
+  const avatarInputRef = useRef(null);
 
   // Cats
   const [cats,          setCats]          = useState([]);
@@ -189,6 +191,27 @@ export default function ProfilePage() {
     }
   };
 
+  const handleAvatarUpload = async (file) => {
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) { toast.error("يُسمح فقط بـ JPG / PNG / WEBP"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("الحجم الأقصى 5 ميغابايت"); return; }
+    setUploadingAvatar(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const { data } = await axios.post(`${API}/community/upload`, form, {
+        headers: { Authorization: `Bearer ${userToken}`, "Content-Type": "multipart/form-data" },
+      });
+      setEditAvatar(data.url);
+      toast.success("تم رفع الصورة");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "فشل رفع الصورة");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
@@ -260,10 +283,30 @@ export default function ProfilePage() {
             />
             <div style={{ fontSize: 11, color: "#d8cdb8", textAlign: "left" }}>{editBio.length}/300</div>
           </div>
+          {/* Avatar upload */}
           <div>
-            <label style={S.label}>رابط صورة الملف (URL)</label>
-            <input style={{ ...S.input, direction: "ltr" }} value={editAvatar}
-              onChange={e => setEditAvatar(e.target.value)} placeholder="https://..." />
+            <label style={S.label}>صورة الملف الشخصي</label>
+            {editAvatar && (
+              <div style={{ marginBottom: 8, position: "relative", display: "inline-block" }}>
+                <img src={editAvatar} alt="avatar"
+                  style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(242,184,91,0.4)" }} />
+                <button onClick={() => setEditAvatar("")}
+                  style={{ position: "absolute", top: -4, right: -4, background: "#ff5f6d", border: "none", borderRadius: "50%", width: 20, height: 20, color: "#fff", cursor: "pointer", fontSize: 11, lineHeight: "20px", textAlign: "center" }}>✕</button>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <input style={{ ...S.input, flex: 1, minWidth: 140, fontSize: 12, padding: "9px 12px", direction: "ltr" }}
+                value={editAvatar} onChange={e => setEditAvatar(e.target.value)} placeholder="https://..." />
+              <button
+                style={{ ...S.btnSecondary, padding: "9px 14px", fontSize: 12, flexShrink: 0, opacity: uploadingAvatar ? 0.6 : 1 }}
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploadingAvatar}>
+                {uploadingAvatar ? "⏳" : "📁 رفع"}
+              </button>
+              <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/webp"
+                style={{ display: "none" }}
+                onChange={e => handleAvatarUpload(e.target.files?.[0])} />
+            </div>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button style={S.btnPrimary} onClick={handleSaveProfile} disabled={saving}>

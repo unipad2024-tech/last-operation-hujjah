@@ -3836,6 +3836,7 @@ async def _add_points(user_id: str, points: int):
 class CommunityCategoryCreate(BaseModel):
     name: str
     description: str = ""
+    image_url: str = ""
 
 @api_router.post("/community/categories")
 async def community_create_category(body: CommunityCategoryCreate, user: dict = Depends(require_user)):
@@ -3848,6 +3849,7 @@ async def community_create_category(body: CommunityCategoryCreate, user: dict = 
         "creator_username": user.get("username", ""),
         "name": body.name.strip(),
         "description": body.description.strip(),
+        "image_url": body.image_url.strip(),
         "status": "draft",
         "rejection_reason": "",
         "questions_count": 0,
@@ -3888,12 +3890,54 @@ async def community_delete_category(cat_id: str, user: dict = Depends(require_us
     await db.community_questions.delete_many({"category_id": cat_id})
     return {"message": "تم الحذف"}
 
+@api_router.put("/community/categories/{cat_id}")
+async def community_update_category(cat_id: str, body: CommunityCategoryCreate, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    if cat["status"] not in ("draft", "rejected"):
+        raise HTTPException(400, "لا يمكن تعديل فئة قيد المراجعة أو معتمدة")
+    updates = {}
+    if body.name.strip():
+        updates["name"] = body.name.strip()
+    if body.description is not None:
+        updates["description"] = body.description.strip()
+    if body.image_url is not None:
+        updates["image_url"] = body.image_url.strip()
+    if updates:
+        await db.community_categories.update_one({"id": cat_id}, {"$set": updates})
+    updated = await db.community_categories.find_one({"id": cat_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/community/upload")
+async def community_upload(file: UploadFile = File(...), user: dict = Depends(require_user)):
+    """Upload endpoint for community creators (no admin required)."""
+    _require_premium(user)
+    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_EXTS:
+        raise HTTPException(400, "يُسمح فقط بـ PNG / JPG / WEBP")
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "الحجم الأقصى 5 ميغابايت")
+    filename = f"comm_{uuid.uuid4().hex}.{ext}"
+    dest = UPLOAD_DIR / filename
+    dest.write_bytes(content)
+    backend_url = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+    if backend_url:
+        base = f"https://{backend_url}"
+    else:
+        base = "https://backend-production-cfa1f.up.railway.app"
+    url = f"{base}/api/static/uploads/{filename}"
+    return {"url": url}
+
 # ── Creator: Questions ─────────────────────────────────────────────────────
 
 class CommunityQuestionCreate(BaseModel):
     text: str
     answer: str
     difficulty: str = "medium"
+    image_url: str = ""
+    answer_image_url: str = ""
 
 @api_router.post("/community/categories/{cat_id}/questions")
 async def community_add_question(cat_id: str, body: CommunityQuestionCreate, user: dict = Depends(require_user)):
@@ -3912,6 +3956,8 @@ async def community_add_question(cat_id: str, body: CommunityQuestionCreate, use
         "text": body.text.strip(),
         "answer": body.answer.strip(),
         "difficulty": body.difficulty,
+        "image_url": body.image_url.strip(),
+        "answer_image_url": body.answer_image_url.strip(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.community_questions.insert_one(q)
