@@ -4264,35 +4264,60 @@ async def admin_process_monthly_earnings(body: dict = {}, admin: dict = Depends(
     }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# XP / LEVEL SYSTEM
+# XP / PRESTIGE SYSTEM  — 11 prestiges × 55 levels each
+# Curve: slow start, accelerates toward level 55 (need 10,000 XP per prestige)
 # ══════════════════════════════════════════════════════════════════════════════
 
-_XP_THRESHOLDS = [0, 150, 350, 700, 1200, 2000, 3200, 5000, 7500, 11000, 16000, 23000, 32000, 45000, 60000]
+_XP_PER_PRESTIGE = 10_000   # XP needed within one prestige cycle
+_MAX_PRESTIGE    = 11        # P1–P10 regular + P11 Master
+
+def _prestige_xp_for_level(n: int) -> int:
+    """Cumulative XP from prestige-start needed to reach level n (0-55)."""
+    if n <= 0:  return 0
+    if n >= 55: return _XP_PER_PRESTIGE
+    t = n / 55
+    return int(_XP_PER_PRESTIGE * (t * t * 0.6 + t * 0.4))
 
 def _calc_xp(game_count: int, approved_cats: int, total_plays: int, total_likes: int, is_premium: bool) -> int:
     return (game_count * 10) + (approved_cats * 50) + (total_plays * 2) + (total_likes * 5) + (100 if is_premium else 0)
 
-def _xp_to_level(xp: int) -> int:
-    level = 1
-    for i, t in enumerate(_XP_THRESHOLDS):
-        if xp >= t:
-            level = i + 1
+def _xp_to_level(total_xp: int, prestige: int) -> int:
+    """Level within current prestige cycle (0-55)."""
+    pxp   = max(0, total_xp - prestige * _XP_PER_PRESTIGE)
+    level = 0
+    for n in range(1, 56):
+        if pxp >= _prestige_xp_for_level(n):
+            level = n
         else:
             break
     return level
 
-def _xp_progress(xp: int) -> dict:
-    for i, threshold in enumerate(_XP_THRESHOLDS[:-1]):
-        next_t = _XP_THRESHOLDS[i + 1]
-        if xp < next_t:
-            return {
-                "current_xp":   xp - threshold,
-                "needed_xp":    next_t - threshold,
-                "percent":      round(((xp - threshold) / (next_t - threshold)) * 100, 1),
-                "total_xp":     xp,
-                "next_level_at": next_t,
-            }
-    return {"current_xp": xp, "needed_xp": 0, "percent": 100, "total_xp": xp, "next_level_at": xp}
+def _xp_progress(total_xp: int, prestige: int) -> dict:
+    pxp   = max(0, total_xp - prestige * _XP_PER_PRESTIGE)
+    level = 0
+    for n in range(1, 56):
+        if pxp >= _prestige_xp_for_level(n):
+            level = n
+        else:
+            break
+    if level >= 55:
+        return {
+            "current_xp": _XP_PER_PRESTIGE, "needed_xp": _XP_PER_PRESTIGE,
+            "percent": 100, "total_xp": total_xp, "next_level_at": total_xp,
+            "prestige_xp": pxp, "can_prestige": prestige < _MAX_PRESTIGE,
+        }
+    current_t = _prestige_xp_for_level(level)
+    next_t    = _prestige_xp_for_level(level + 1)
+    pct       = round(((pxp - current_t) / (next_t - current_t)) * 100, 1) if next_t > current_t else 0
+    return {
+        "current_xp":    pxp - current_t,
+        "needed_xp":     next_t - current_t,
+        "percent":       pct,
+        "total_xp":      total_xp,
+        "next_level_at": prestige * _XP_PER_PRESTIGE + next_t,
+        "prestige_xp":   pxp,
+        "can_prestige":  False,
+    }
 
 # ══════════════════════════════════════════════════════════════════════════════
 # COMMUNITY LIKES
@@ -4367,9 +4392,10 @@ async def get_profile(username: str, current_user: Optional[dict] = Depends(get_
                 {"follower_id": current_user["id"], "following_id": user["id"]}
             ))
 
+    prestige = user.get("prestige", 0)
     total_xp = _calc_xp(game_count, approved_cats, total_plays, total_likes, is_premium)
-    level    = _xp_to_level(total_xp)
-    xp_prog  = _xp_progress(total_xp)
+    level    = _xp_to_level(total_xp, prestige)
+    xp_prog  = _xp_progress(total_xp, prestige)
 
     profile = {
         "id":                  user["id"],
@@ -4380,6 +4406,7 @@ async def get_profile(username: str, current_user: Optional[dict] = Depends(get_
         "accent_color":        user.get("accent_color", "#f2b85b"),
         "interests":           user.get("interests", []),
         "subscription_type":   user.get("subscription_type", "free"),
+        "prestige":            prestige,
         "level":               level,
         "total_xp":            total_xp,
         "xp_progress":         xp_prog,
@@ -4427,6 +4454,38 @@ async def unfollow_user(username: str, current_user: dict = Depends(require_user
     if res.deleted_count == 0:
         raise HTTPException(400, "أنت لا تتابع هذا المستخدم")
     return {"message": "تم إلغاء المتابعة"}
+
+@api_router.post("/profile/{username}/prestige")
+async def do_prestige(username: str, current_user: dict = Depends(require_user)):
+    """Upgrade to next prestige — requires reaching level 55 of current prestige."""
+    if current_user["username"] != username:
+        raise HTTPException(403, "غير مسموح")
+    user = await db.users.find_one({"username": username})
+    if not user:
+        raise HTTPException(404, "المستخدم غير موجود")
+    prestige = user.get("prestige", 0)
+    if prestige >= _MAX_PRESTIGE:
+        raise HTTPException(400, "أنت على أعلى رتبة — ماستر 👑")
+    game_count    = user.get("game_count", 0)
+    is_premium    = user.get("subscription_type") == "premium"
+    approved_cats = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
+    plays_res     = await db.community_categories.aggregate([
+        {"$match": {"creator_id": user["id"], "status": "approved"}},
+        {"$group": {"_id": None, "total": {"$sum": "$play_count"}}},
+    ]).to_list(1)
+    likes_res     = await db.community_categories.aggregate([
+        {"$match": {"creator_id": user["id"], "status": "approved"}},
+        {"$group": {"_id": None, "total": {"$sum": "$likes_count"}}},
+    ]).to_list(1)
+    total_plays = plays_res[0]["total"] if plays_res else 0
+    total_likes = likes_res[0]["total"] if likes_res else 0
+    total_xp    = _calc_xp(game_count, approved_cats, total_plays, total_likes, is_premium)
+    level       = _xp_to_level(total_xp, prestige)
+    if level < 55:
+        raise HTTPException(400, f"تحتاج الوصول للمستوى 55 أولاً — أنت في المستوى {level}")
+    new_prestige = prestige + 1
+    await db.users.update_one({"username": username}, {"$set": {"prestige": new_prestige}})
+    return {"ok": True, "new_prestige": new_prestige}
 
 @api_router.get("/profile/{username}/followers")
 async def get_followers(username: str, skip: int = 0, limit: int = 20):

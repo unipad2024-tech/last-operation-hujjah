@@ -6,29 +6,147 @@ import { useGame } from "@/context/GameContext";
 
 const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
 
-/* ── XP / Level config (mirrors backend) ───────────────────────────────────── */
-const XP_THRESHOLDS = [0, 150, 350, 700, 1200, 2000, 3200, 5000, 7500, 11000, 16000, 23000, 32000, 45000, 60000];
+/* ── Prestige System (mirrors backend: 11 prestiges × 55 levels) ────────────── */
+const XP_PER_PRESTIGE = 10_000;
 
-const LEVEL_META = [
-  { title: "مبتدئ",   color: "#9ca3af", icon: "🌱" },
-  { title: "مبتدئ",   color: "#9ca3af", icon: "🌱" },
-  { title: "متحمس",   color: "#60a5fa", icon: "⚡" },
-  { title: "متحمس",   color: "#60a5fa", icon: "⚡" },
-  { title: "متمرس",   color: "#34d399", icon: "🎯" },
-  { title: "متمرس",   color: "#34d399", icon: "🎯" },
-  { title: "خبير",    color: "#f59e0b", icon: "🔥" },
-  { title: "خبير",    color: "#f59e0b", icon: "🔥" },
-  { title: "متقدم",   color: "#f97316", icon: "💎" },
-  { title: "متقدم",   color: "#f97316", icon: "💎" },
-  { title: "بطل",     color: "#a855f7", icon: "👑" },
-  { title: "بطل",     color: "#a855f7", icon: "👑" },
-  { title: "أسطورة",  color: "#ec4899", icon: "🌟" },
-  { title: "أسطورة",  color: "#ec4899", icon: "🌟" },
-  { title: "نخبة",    color: "#f2b85b", icon: "⭐" },
+const PRESTIGE_META = [
+  { name: "مُجنَّد",        color: "#4ade80", glow: "#4ade8044" },  // P1  Green
+  { name: "مقاتل",          color: "#fb923c", glow: "#fb923c44" },  // P2  Orange
+  { name: "محارب",          color: "#facc15", glow: "#facc1544" },  // P3  Yellow
+  { name: "فارس",           color: "#f87171", glow: "#f8717144" },  // P4  Red
+  { name: "حامٍ",           color: "#c084fc", glow: "#c084fc44" },  // P5  Purple
+  { name: "بطل",            color: "#60a5fa", glow: "#60a5fa44" },  // P6  Blue
+  { name: "أسطورة",         color: "#22d3ee", glow: "#22d3ee44" },  // P7  Cyan
+  { name: "نخبة",           color: "#f472b6", glow: "#f472b644" },  // P8  Pink
+  { name: "أسطورة النخبة",  color: "#94a3b8", glow: "#94a3b844" },  // P9  Silver
+  { name: "بطل الأبطال",    color: "#f59e0b", glow: "#f59e0b55" },  // P10 Gold
+  { name: "ماستر",          color: "#f2b85b", glow: "#f2b85b77" },  // P11 Master
 ];
 
-function getLevelMeta(level) {
-  return LEVEL_META[Math.min(level - 1, LEVEL_META.length - 1)] || LEVEL_META[0];
+function getPrestigeMeta(prestige) {
+  const p = Math.max(1, Math.min(11, prestige || 1));
+  return PRESTIGE_META[p - 1];
+}
+
+/* ── Prestige Badge SVG ──────────────────────────────────────────────────────── */
+function PrestigeBadge({ prestige, size = 40 }) {
+  const p = Math.max(1, Math.min(11, prestige || 1));
+  const m = PRESTIGE_META[p - 1];
+  const c = m.color;
+  const id = `pbf${p}`;
+  const lg = `pblg${p}`;
+  const num = p < 11 ? String(p) : "M";
+
+  const glowFilter = (
+    <filter id={id} x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  );
+
+  const numLabel = (x, y, fs = 11) => (
+    <text x={x} y={y} textAnchor="middle" fontSize={fs} fontWeight="900"
+      fill="rgba(0,0,0,0.55)" fontFamily="sans-serif" letterSpacing="-0.5">{num}</text>
+  );
+
+  const shapes = {
+    1: <>  {/* Shield */}
+      <defs>{glowFilter}</defs>
+      <path d="M20 3 L34 8 L34 24 C34 32 28 38 20 41 C12 38 6 32 6 24 L6 8 Z" fill={c} filter={`url(#${id})`} opacity="0.95"/>
+      <path d="M20 8 L28 12 L28 24 C28 29 25 33 20 35 C15 33 12 29 12 24 L12 12 Z" fill="rgba(255,255,255,0.13)"/>
+      {numLabel(20, 27)}
+    </>,
+    2: <>  {/* Diamond */}
+      <defs>{glowFilter}</defs>
+      <polygon points="20,3 37,20 20,37 3,20" fill={c} filter={`url(#${id})`} opacity="0.95"/>
+      <polygon points="20,9 31,20 20,31 9,20" fill="rgba(255,255,255,0.13)"/>
+      {numLabel(20, 24)}
+    </>,
+    3: <>  {/* 5-Pointed Star */}
+      <defs>{glowFilter}</defs>
+      <polygon points="20,2 23.5,13 35,13 26,20.5 29.5,32 20,25.5 10.5,32 14,20.5 5,13 16.5,13" fill={c} filter={`url(#${id})`} opacity="0.95"/>
+      {numLabel(20, 25, 10)}
+    </>,
+    4: <>  {/* Kite / Arrow */}
+      <defs>{glowFilter}</defs>
+      <path d="M20 2 L38 15 L20 38 L2 15 Z" fill={c} filter={`url(#${id})`} opacity="0.95"/>
+      <path d="M20 8 L31 17 L20 32 L9 17 Z" fill="rgba(255,255,255,0.13)"/>
+      {numLabel(20, 24)}
+    </>,
+    5: <>  {/* Hexagon */}
+      <defs>{glowFilter}</defs>
+      <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" fill={c} filter={`url(#${id})`} opacity="0.95"/>
+      <polygon points="20,7 31,13.5 31,26.5 20,33 9,26.5 9,13.5" fill="rgba(255,255,255,0.13)"/>
+      {numLabel(20, 24)}
+    </>,
+    6: <>  {/* Sunburst Circle */}
+      <defs>{glowFilter}</defs>
+      {[0,45,90,135,180,225,270,315].map(deg => {
+        const r = deg * Math.PI / 180;
+        return <line key={deg} x1={20+15*Math.cos(r)} y1={20+15*Math.sin(r)} x2={20+20*Math.cos(r)} y2={20+20*Math.sin(r)} stroke={c} strokeWidth="2.5" opacity="0.75"/>;
+      })}
+      <circle cx="20" cy="20" r="13" fill={c} filter={`url(#${id})`} opacity="0.95"/>
+      {numLabel(20, 24)}
+    </>,
+    7: <>  {/* Octagon Gem */}
+      <defs>{glowFilter}</defs>
+      <polygon points="13,2 27,2 38,13 38,27 27,38 13,38 2,27 2,13" fill={c} filter={`url(#${id})`} opacity="0.95"/>
+      <polygon points="14,6 26,6 34,14 34,26 26,34 14,34 6,26 6,14" fill="rgba(255,255,255,0.13)"/>
+      {numLabel(20, 24)}
+    </>,
+    8: <>  {/* Crown */}
+      <defs>{glowFilter}</defs>
+      <path d="M4 34 L4 19 L11 28 L20 12 L29 28 L36 19 L36 34 Z" fill={c} filter={`url(#${id})`} opacity="0.95"/>
+      <circle cx="20" cy="12" r="2.5" fill="rgba(255,255,255,0.9)"/>
+      <circle cx="4"  cy="19" r="2"   fill="rgba(255,255,255,0.7)"/>
+      <circle cx="36" cy="19" r="2"   fill="rgba(255,255,255,0.7)"/>
+      {numLabel(20, 31)}
+    </>,
+    9: <>  {/* Wings */}
+      <defs>{glowFilter}</defs>
+      <path d="M20 21 C18 13 6 9 2 16 C7 19 14 17 17 21 Z" fill={c} opacity="0.9" filter={`url(#${id})`}/>
+      <path d="M20 21 C22 13 34 9 38 16 C33 19 26 17 23 21 Z" fill={c} opacity="0.9"/>
+      <path d="M20 21 C16 25 3 24 2 31 C8 31 15 26 17 23 Z" fill={c} opacity="0.65"/>
+      <path d="M20 21 C24 25 37 24 38 31 C32 31 25 26 23 23 Z" fill={c} opacity="0.65"/>
+      <circle cx="20" cy="22" r="4.5" fill={c} filter={`url(#${id})`}/>
+      {numLabel(20, 25.5, 7)}
+    </>,
+    10: <>  {/* 8-Pointed Ornate Star */}
+      <defs>
+        {glowFilter}
+        <linearGradient id={lg} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0.35"/>
+          <stop offset="100%" stopColor={c}/>
+        </linearGradient>
+      </defs>
+      <polygon points="20,2 22.7,12.5 33,9 26,19 37,20 26,21 33,31 22.7,27.5 20,38 17.3,27.5 7,31 14,21 3,20 14,19 7,9 17.3,12.5" fill={`url(#${lg})`} filter={`url(#${id})`}/>
+      {numLabel(20, 24, 10)}
+    </>,
+    11: <>  {/* Master Crown + Ring */}
+      <defs>
+        {glowFilter}
+        <linearGradient id={lg} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0.5"/>
+          <stop offset="100%" stopColor={c}/>
+        </linearGradient>
+      </defs>
+      <circle cx="20" cy="20" r="18" fill="none" stroke={c} strokeWidth="1.5" opacity="0.45"/>
+      <circle cx="20" cy="20" r="15" fill="none" stroke={c} strokeWidth="0.5" opacity="0.25"/>
+      <path d="M6 33 L6 18 L12.5 27 L20 10 L27.5 27 L34 18 L34 33 Z" fill={`url(#${lg})`} filter={`url(#${id})`}/>
+      <circle cx="20"   cy="10" r="2.5" fill="#fff" opacity="0.95"/>
+      <circle cx="6"    cy="18" r="2"   fill="#fff" opacity="0.8"/>
+      <circle cx="34"   cy="18" r="2"   fill="#fff" opacity="0.8"/>
+      {numLabel(20, 31, 9)}
+    </>,
+  };
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ filter: `drop-shadow(0 0 ${size/6}px ${m.glow})`, flexShrink: 0 }}>
+      {shapes[p]}
+    </svg>
+  );
 }
 
 /* ── Banner presets ─────────────────────────────────────────────────────────── */
@@ -81,26 +199,31 @@ function Avatar({ url, username, size = 80, accent = "#f2b85b", pulse = false })
   );
 }
 
-function XPBar({ progress, accent, level }) {
-  const { percent, current_xp, needed_xp } = progress || {};
+function XPBar({ progress, accent, level, prestige }) {
+  const { percent, current_xp, needed_xp, can_prestige } = progress || {};
   const pct = Math.min(100, percent || 0);
+  const isMax = can_prestige;
   return (
     <div style={{ padding: "0 20px 16px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)" }}>
-          Lv.{level} → Lv.{level + 1}
+        <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.45)" }}>
+          {isMax ? (prestige < 11 ? "✨ جاهز للبرستيج!" : "👑 ماستر") : `Lv.${level} → Lv.${level + 1}`}
         </span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: accent }}>
-          {needed_xp > 0 ? `${current_xp} / ${needed_xp} XP` : "MAX"}
+        <span style={{ fontSize: 12, fontWeight: 700, color: isMax ? accent : "rgba(255,255,255,0.5)" }}>
+          {isMax ? "MAX" : `${current_xp} / ${needed_xp} XP`}
         </span>
       </div>
-      <div style={{ height: 6, background: "rgba(255,255,255,0.1)", borderRadius: 999, overflow: "hidden" }}>
+      <div style={{ height: 7, background: "rgba(255,255,255,0.08)", borderRadius: 999, overflow: "hidden" }}>
         <div style={{
           height: "100%", borderRadius: 999,
-          background: `linear-gradient(90deg, ${accent}88, ${accent})`,
+          background: isMax
+            ? `linear-gradient(90deg, ${accent}, #fff8, ${accent})`
+            : `linear-gradient(90deg, ${accent}66, ${accent})`,
           width: `${pct}%`,
-          transition: "width 1s cubic-bezier(0.4,0,0.2,1)",
-          boxShadow: `0 0 8px ${accent}88`,
+          transition: "width 1.2s cubic-bezier(0.4,0,0.2,1)",
+          boxShadow: `0 0 10px ${accent}88`,
+          backgroundSize: isMax ? "200% 100%" : "100% 100%",
+          animation: isMax ? "shimmer 2s linear infinite" : "none",
         }} />
       </div>
     </div>
@@ -197,6 +320,9 @@ export default function ProfilePage() {
   const [eInterests,     setEInterests]     = useState("");
   const [saving,         setSaving]         = useState(false);
 
+  /* Prestige */
+  const [prestigeBusy,   setPrestigeBusy]   = useState(false);
+
   /* Follow */
   const [followBusy,     setFollowBusy]     = useState(false);
 
@@ -281,6 +407,17 @@ export default function ProfilePage() {
     finally { setFollowBusy(false); }
   };
 
+  const handlePrestige = async () => {
+    if (!userToken) return;
+    setPrestigeBusy(true);
+    try {
+      const { data } = await axios.post(`${API}/profile/${profile.username}/prestige`, {}, h);
+      toast.success(`🎉 برستيج ${data.new_prestige} — مبروك!`);
+      await loadProfile();
+    } catch (e) { toast.error(e?.response?.data?.detail || "خطأ"); }
+    finally { setPrestigeBusy(false); }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -331,8 +468,11 @@ export default function ProfilePage() {
     );
   }
 
-  const accent    = profile.accent_color || "#f2b85b";
-  const levelMeta = getLevelMeta(profile.level);
+  const accent       = profile.accent_color || "#f2b85b";
+  const prestige     = profile.prestige || 0;
+  const prestigeMeta = prestige > 0 ? getPrestigeMeta(prestige) : null;
+  const canPrestige  = profile.xp_progress?.can_prestige && profile.is_own;
+  const prestigeColor = prestigeMeta ? prestigeMeta.color : accent;
 
   /* resolve banner */
   const bannerStyle = profile.banner_url
@@ -360,26 +500,48 @@ export default function ProfilePage() {
       {/* Avatar row */}
       <div style={{ padding: "0 20px", marginTop: -48, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div style={{ position: "relative" }}>
-          <Avatar url={profile.avatar_url} username={profile.username} size={96} accent={accent} pulse={profile.is_own} />
-          {/* Level ring */}
-          <div style={{
-            position: "absolute", bottom: -6, right: -6,
-            background: `linear-gradient(135deg, ${accent}, ${accent}88)`,
-            borderRadius: 999, padding: "3px 8px",
-            fontSize: 11, fontWeight: 900, color: "#0a0710",
-            boxShadow: `0 2px 8px ${accent}66`,
-          }}>
-            {levelMeta.icon} {profile.level}
-          </div>
+          <Avatar url={profile.avatar_url} username={profile.username} size={96} accent={prestigeColor} pulse={profile.is_own} />
+          {/* Prestige badge OR level ring */}
+          {prestige > 0 ? (
+            <div style={{ position: "absolute", bottom: -10, right: -10 }}>
+              <PrestigeBadge prestige={prestige} size={38} />
+            </div>
+          ) : (
+            <div style={{
+              position: "absolute", bottom: -6, right: -6,
+              background: `linear-gradient(135deg, ${accent}, ${accent}88)`,
+              borderRadius: 999, padding: "3px 8px",
+              fontSize: 11, fontWeight: 900, color: "#0a0710",
+              boxShadow: `0 2px 8px ${accent}66`,
+            }}>
+              Lv.{profile.level}
+            </div>
+          )}
         </div>
 
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingBottom: 8 }}>
           {profile.is_own ? (
-            <button onClick={() => setEditing(e => !e)}
-              style={{ background: editing ? `${accent}22` : "rgba(255,255,255,0.08)", border: `1px solid ${editing ? accent : "rgba(255,255,255,0.15)"}`, borderRadius: 12, padding: "10px 18px", color: editing ? accent : "#f8f2e7", cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif", fontWeight: 800, transition: "all 0.2s" }}>
-              {editing ? "✕ إغلاق" : "✏️ تعديل البروفايل"}
-            </button>
+            <>
+              <button onClick={() => setEditing(e => !e)}
+                style={{ background: editing ? `${accent}22` : "rgba(255,255,255,0.08)", border: `1px solid ${editing ? accent : "rgba(255,255,255,0.15)"}`, borderRadius: 12, padding: "10px 18px", color: editing ? accent : "#f8f2e7", cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif", fontWeight: 800, transition: "all 0.2s" }}>
+                {editing ? "✕ إغلاق" : "✏️ تعديل"}
+              </button>
+              {canPrestige && prestige < 11 && (
+                <button onClick={handlePrestige} disabled={prestigeBusy}
+                  style={{
+                    background: `linear-gradient(135deg, ${prestigeMeta?.color || accent}, ${accent})`,
+                    border: "none", borderRadius: 12, padding: "10px 18px",
+                    color: "#0a0710", cursor: "pointer", fontSize: 13,
+                    fontFamily: "Cairo, sans-serif", fontWeight: 900,
+                    opacity: prestigeBusy ? 0.6 : 1, transition: "all 0.2s",
+                    boxShadow: `0 4px 16px ${accent}55`,
+                    animation: "pulse 2s infinite",
+                  }}>
+                  {prestigeBusy ? "..." : `⭐ برستيج ${prestige + 1}`}
+                </button>
+              )}
+            </>
           ) : (
             <button onClick={handleFollow} disabled={followBusy}
               style={{
@@ -406,11 +568,18 @@ export default function ProfilePage() {
         </div>
         <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>@{profile.username}</div>
 
-        {/* Level badge */}
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8, background: `${levelMeta.color}14`, border: `1px solid ${levelMeta.color}33`, borderRadius: 999, padding: "4px 12px" }}>
-          <span style={{ fontSize: 14 }}>{levelMeta.icon}</span>
-          <span style={{ fontSize: 12, fontWeight: 900, color: levelMeta.color }}>Lv.{profile.level}</span>
-          <span style={{ fontSize: 12, color: levelMeta.color, fontWeight: 700 }}>{levelMeta.title}</span>
+        {/* Level + Prestige badge */}
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          {prestige > 0 && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: `${prestigeColor}14`, border: `1px solid ${prestigeColor}33`, borderRadius: 999, padding: "4px 12px" }}>
+              <PrestigeBadge prestige={prestige} size={18} />
+              <span style={{ fontSize: 12, fontWeight: 900, color: prestigeColor }}>{prestigeMeta.name}</span>
+            </div>
+          )}
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: `${accent}12`, border: `1px solid ${accent}28`, borderRadius: 999, padding: "4px 12px" }}>
+            <span style={{ fontSize: 12, fontWeight: 900, color: accent }}>Lv.{profile.level}</span>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontWeight: 600 }}>/55</span>
+          </div>
         </div>
 
         {/* Bio */}
@@ -444,7 +613,7 @@ export default function ProfilePage() {
 
       {/* XP Bar */}
       <div style={{ marginTop: 14 }}>
-        <XPBar progress={profile.xp_progress} accent={accent} level={profile.level} />
+        <XPBar progress={profile.xp_progress} accent={prestigeColor} level={profile.level} prestige={prestige} />
       </div>
     </>
   );

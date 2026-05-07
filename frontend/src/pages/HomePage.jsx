@@ -164,37 +164,38 @@ function UserMenu({ currentUser, isPremium, navigate, logoutUser }) {
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          display: "flex", alignItems: "center", gap: 10,
-          background: "rgba(241,225,148,0.08)",
-          border: `1.5px solid ${open ? "rgba(241,225,148,0.5)" : "rgba(241,225,148,0.22)"}`,
-          borderRadius: 999, padding: "6px 14px 6px 6px",
+          display: "flex", alignItems: "center", gap: 11,
+          background: open ? "rgba(241,225,148,0.13)" : "rgba(241,225,148,0.08)",
+          border: `1.5px solid ${open ? "rgba(241,225,148,0.55)" : "rgba(241,225,148,0.25)"}`,
+          borderRadius: 999, padding: "7px 16px 7px 7px",
           cursor: "pointer", transition: "all 0.2s",
+          boxShadow: open ? "0 0 16px rgba(241,225,148,0.15)" : "none",
         }}
       >
         {avatarUrl ? (
-          <img src={avatarUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} onError={e => { e.target.style.display="none"; }} />
+          <img src={avatarUrl} alt="" style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "2px solid rgba(241,225,148,0.35)" }} onError={e => { e.target.style.display="none"; }} />
         ) : (
-          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(241,225,148,0.18)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#F1E194", flexShrink: 0 }}>
+          <div style={{ width: 42, height: 42, borderRadius: "50%", background: "rgba(241,225,148,0.18)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 900, color: "#F1E194", flexShrink: 0, border: "2px solid rgba(241,225,148,0.3)" }}>
             {avatarLetter}
           </div>
         )}
-        <div style={{ lineHeight: 1.3, textAlign: "right" }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: "#F1E194" }}>{currentUser.username}</div>
-          <div style={{ fontSize: 10, color: isPremium ? "#FCD34D" : "rgba(241,225,148,0.45)", fontWeight: 700 }}>
+        <div style={{ lineHeight: 1.35, textAlign: "right" }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#F1E194" }}>{currentUser.username}</div>
+          <div style={{ fontSize: 11, color: isPremium ? "#FCD34D" : "rgba(241,225,148,0.5)", fontWeight: 700 }}>
             {isPremium ? "✦ عضو مميز" : "مجاني"}
           </div>
         </div>
-        <span style={{ color: "rgba(241,225,148,0.5)", fontSize: 10, marginRight: 2 }}>{open ? "▲" : "▼"}</span>
+        <span style={{ color: "rgba(241,225,148,0.5)", fontSize: 11, marginRight: 2 }}>{open ? "▲" : "▼"}</span>
       </button>
 
       {/* Dropdown */}
       {open && (
         <div style={{
-          position: "absolute", top: "calc(100% + 8px)", right: 0,
-          background: "rgba(10,5,8,0.97)", border: "1px solid rgba(241,225,148,0.2)",
-          borderRadius: 16, padding: 8, minWidth: 200,
-          boxShadow: "0 16px 40px rgba(0,0,0,0.6)",
-          backdropFilter: "blur(20px)", zIndex: 100,
+          position: "absolute", top: "calc(100% + 10px)", right: 0,
+          background: "rgba(10,5,8,0.97)", border: "1px solid rgba(241,225,148,0.22)",
+          borderRadius: 18, padding: 8, minWidth: 230,
+          boxShadow: "0 20px 50px rgba(0,0,0,0.7)",
+          backdropFilter: "blur(24px)", zIndex: 100,
           animation: "fadeIn 0.15s ease",
         }}>
           {/* Header */}
@@ -212,16 +213,16 @@ function UserMenu({ currentUser, isPremium, navigate, logoutUser }) {
           ].map(({ icon, label, action, gold }) => (
             <button key={label} onClick={action}
               style={{
-                display: "flex", alignItems: "center", gap: 10, width: "100%",
-                padding: "10px 14px", borderRadius: 10, border: "none",
-                background: "transparent", color: gold ? "#FCD34D" : "rgba(241,225,148,0.8)",
-                cursor: "pointer", fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 13,
+                display: "flex", alignItems: "center", gap: 12, width: "100%",
+                padding: "13px 16px", borderRadius: 12, border: "none",
+                background: "transparent", color: gold ? "#FCD34D" : "rgba(241,225,148,0.85)",
+                cursor: "pointer", fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 15,
                 textAlign: "right", transition: "background 0.15s",
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(241,225,148,0.08)"; }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(241,225,148,0.09)"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
             >
-              <span>{icon}</span><span>{label}</span>
+              <span style={{ fontSize: 17 }}>{icon}</span><span>{label}</span>
             </button>
           ))}
 
@@ -229,16 +230,16 @@ function UserMenu({ currentUser, isPremium, navigate, logoutUser }) {
           <div style={{ height: 1, background: "rgba(241,225,148,0.08)", margin: "6px 0" }} />
           <button onClick={() => { logoutUser(); setOpen(false); }}
             style={{
-              display: "flex", alignItems: "center", gap: 10, width: "100%",
-              padding: "10px 14px", borderRadius: 10, border: "none",
-              background: "transparent", color: "rgba(255,100,100,0.7)",
-              cursor: "pointer", fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 13,
+              display: "flex", alignItems: "center", gap: 12, width: "100%",
+              padding: "13px 16px", borderRadius: 12, border: "none",
+              background: "transparent", color: "rgba(255,100,100,0.75)",
+              cursor: "pointer", fontFamily: "Cairo, sans-serif", fontWeight: 700, fontSize: 15,
               textAlign: "right", transition: "background 0.15s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,80,80,0.08)"; }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,80,80,0.09)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
           >
-            <span>🚪</span><span>تسجيل خروج</span>
+            <span style={{ fontSize: 17 }}>🚪</span><span>تسجيل خروج</span>
           </button>
         </div>
       )}
