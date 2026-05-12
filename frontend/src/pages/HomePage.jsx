@@ -600,7 +600,7 @@ export default function HomePage() {
           icon="🔮"
           accent
         >
-          <p style={ST.body}>حُجّة لعبة تنافسية جماعية، تختار فئات وتدخل تحدي مباشر مع فريق ثاني… الهدف؟ تثبت إنك الأذكى</p>
+          <p style={ST.body}>حُجّة لعبة تنافسية جماعية، تختار فئات وتدخل تحدي مباشر مع فريق ثاني… الهدف تثبت إنك الأذكى</p>
         </BgSection>
 
         <BgSection
@@ -608,7 +608,7 @@ export default function HomePage() {
           title="كيف تلعب؟"
           icon="🎮"
         >
-          <p style={ST.body}>كل فريق يختار 3 فئات، بعدها تبدأون تختارون الأسئلة (300 / 600 / 900)، تجاوب وتكسب نقاط… واللي يجمع أكثر يفوز</p>
+          <p style={ST.body}>كل فريق يختار 3 فئات، بعدها تبدأون تختارون الأسئلة (300 / 600 / 900)، تجاوب وتكسب نقاط</p>
         </BgSection>
 
         <BgSection
@@ -616,7 +616,7 @@ export default function HomePage() {
           title="نظام النقاط"
           icon="🏅"
         >
-          <p style={ST.body}>كل ما زادت قيمة السؤال، زادت صعوبته… لكن بالمقابل نقاطه أعلى. القرار لك: تلعبها آمن أو تخاطر؟</p>
+          <p style={ST.body}>كل ما زادت قيمة السؤال زادت صعوبته… لكن نقاطه أعلى، القرار لك</p>
           <div style={{ display:"flex", gap:24, justifyContent:"center", marginTop:28, flexWrap:"wrap" }}>
             {[["300","سهل","#6ee7b7"],["600","متوسط","#fcd34d"],["900","صعب","#f87171"]].map(([pts,lbl,col])=>(
               <div key={pts} style={{ textAlign:"center" }}>
@@ -632,7 +632,7 @@ export default function HomePage() {
           title="وسائل المساعدة"
           icon="⚡"
         >
-          <p style={ST.body}>عندك أدوات تساعدك: تغيير السؤال، مضاعفة النقاط، وزيادة الوقت… استخدمها في الوقت الصح عشان تقلب المباراة</p>
+          <p style={ST.body}>عندك وسائل مساعدة: تغيير السؤال، مضاعفة النقاط، وزيادة الوقت… استخدمها بذكاء</p>
           <div style={{ display:"flex", gap:32, justifyContent:"center", marginTop:28, flexWrap:"wrap" }}>
             {[["🔄","تغيير السؤال"],["⚡","مضاعفة النقاط"],["⏱️","زيادة الوقت"]].map(([ic,t])=>(
               <div key={t} style={{ textAlign:"center" }}>
@@ -648,7 +648,7 @@ export default function HomePage() {
           title="مجتمع حُجّة"
           icon="🏘️"
         >
-          <p style={ST.body}>أنشئ فئاتك الخاصة وخلي غيرك يلعبها… ومع الوقت ممكن تكسب من فئاتك وتنتشر بين اللاعبين</p>
+          <p style={ST.body}>أنشئ فئاتك الخاصة وخلي غيرك يلعبها، ومع الوقت ممكن تنتشر وتكسب منها</p>
         </BgSection>
 
         <BgSection
@@ -656,7 +656,7 @@ export default function HomePage() {
           title="احفظ فئاتك"
           icon="❤️"
         >
-          <p style={ST.body}>أي فئة تعجبك تقدر تحفظها وترجع لها بأي وقت، بدون ما تضيعها</p>
+          <p style={ST.body}>أي فئة تعجبك تقدر تحفظها وترجع لها بأي وقت</p>
         </BgSection>
 
         <BgSection
