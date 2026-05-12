@@ -595,76 +595,81 @@ export default function HomePage() {
         <div style={{ height: 3, background: "linear-gradient(90deg, transparent, rgba(241,225,148,0.35), transparent)" }} />
 
         <BgSection
-          bg="https://images.pexels.com/photos/163064/play-stone-network-networked-163064.jpeg?auto=compress&cs=tinysrgb&w=1400"
+          bg="https://i.pinimg.com/736x/64/18/cb/6418cb92ddf7922e669e4ce4db23848e.jpg"
           title="وش هي حُجّة؟"
           icon="🔮"
           accent
         >
-          <p style={ST.body}>حُجّة لعبة تنافسية جماعية، تختار فئات وتدخل تحدي مباشر مع فريق ثاني… الهدف تثبت إنك الأذكى</p>
+          <p style={ST.body}>
+            حُجّة لعبة تنافسية تُلعب بين فريقين، كل فريق يختار فئات من اهتمامه، ويبدأون يتنافسون سؤال بسؤال.
+            <br/><br/>
+            الفريق اللي يجاوب أكثر ويجمع أعلى نقاط هو الفائز — بسيطة بالفكرة، لكن حماسها ما يوصف.
+          </p>
         </BgSection>
 
         <BgSection
-          bg="https://images.pexels.com/photos/776654/pexels-photo-776654.jpeg?auto=compress&cs=tinysrgb&w=1400"
+          bg="https://i.pinimg.com/736x/36/00/6c/36006c18d0ceba3b6484e719baf61ab4.jpg"
           title="كيف تلعب؟"
           icon="🎮"
         >
-          <p style={ST.body}>كل فريق يختار 3 فئات، بعدها تبدأون تختارون الأسئلة (300 / 600 / 900)، تجاوب وتكسب نقاط</p>
+          <p style={ST.body}>
+            ١. كل فريق يختار ٣ فئات من قائمة الفئات المتاحة<br/><br/>
+            ٢. بعدها تبدأ اللعبة — كل فريق بالدور يختار سؤالاً بقيمة (٣٠٠ / ٦٠٠ / ٩٠٠)<br/><br/>
+            ٣. المضيف يقرأ السؤال والفريق يجاوب — إذا صح تضاف النقاط<br/><br/>
+            ٤. في النهاية، الفريق الأعلى نقاطاً يفوز
+          </p>
         </BgSection>
 
         <BgSection
-          bg="https://images.pexels.com/photos/730547/pexels-photo-730547.jpeg?auto=compress&cs=tinysrgb&w=1400"
+          bg="https://i.pinimg.com/736x/56/97/94/56979465960904af524d8f19895c2615.jpg"
           title="نظام النقاط"
           icon="🏅"
         >
-          <p style={ST.body}>كل ما زادت قيمة السؤال زادت صعوبته… لكن نقاطه أعلى، القرار لك</p>
-          <div style={{ display:"flex", gap:24, justifyContent:"center", marginTop:28, flexWrap:"wrap" }}>
-            {[["300","سهل","#6ee7b7"],["600","متوسط","#fcd34d"],["900","صعب","#f87171"]].map(([pts,lbl,col])=>(
-              <div key={pts} style={{ textAlign:"center" }}>
-                <div style={{ fontSize:"clamp(2rem,4vw,3rem)", fontWeight:900, color:col, textShadow:`0 0 24px ${col}80`, lineHeight:1 }}>{pts}</div>
-                <div style={{ fontSize:"0.78rem", color:`${col}aa`, fontWeight:700, marginTop:6, fontFamily:"Cairo,sans-serif" }}>{lbl}</div>
-              </div>
-            ))}
-          </div>
+          <p style={ST.body}>
+            كل سؤال له قيمة من ٣ مستويات:<br/><br/>
+            <span style={{ color:"#6ee7b7", fontWeight:800 }}>٣٠٠ — سهل</span> &nbsp;|&nbsp;
+            <span style={{ color:"#fcd34d", fontWeight:800 }}>٦٠٠ — متوسط</span> &nbsp;|&nbsp;
+            <span style={{ color:"#f87171", fontWeight:800 }}>٩٠٠ — صعب</span>
+            <br/><br/>
+            كلما زادت القيمة، زادت الصعوبة — لكن المكافأة تستاهل. القرار لك: تلعبها آمن أو تخاطر وتحاول تقلب النتيجة؟
+          </p>
         </BgSection>
 
         <BgSection
-          bg="https://images.pexels.com/photos/1040157/pexels-photo-1040157.jpeg?auto=compress&cs=tinysrgb&w=1400"
+          bg="https://i.pinimg.com/736x/da/90/57/da9057e1d03b0ca70434ca358b2cf483.jpg"
           title="وسائل المساعدة"
           icon="⚡"
         >
-          <p style={ST.body}>عندك وسائل مساعدة: تغيير السؤال، مضاعفة النقاط، وزيادة الوقت… استخدمها بذكاء</p>
-          <div style={{ display:"flex", gap:32, justifyContent:"center", marginTop:28, flexWrap:"wrap" }}>
-            {[["🔄","تغيير السؤال"],["⚡","مضاعفة النقاط"],["⏱️","زيادة الوقت"]].map(([ic,t])=>(
-              <div key={t} style={{ textAlign:"center" }}>
-                <div style={{ fontSize:"2rem", marginBottom:8 }}>{ic}</div>
-                <div style={{ fontSize:"0.82rem", color:"rgba(241,225,148,0.75)", fontWeight:700, fontFamily:"Cairo,sans-serif" }}>{t}</div>
-              </div>
-            ))}
-          </div>
+          <p style={ST.body}>
+            عندك ٣ وسائل مساعدة تقدر تستخدمها خلال اللعبة — كل وسيلة مرة وحدة بس:<br/><br/>
+            🔄 <span style={{ color:"#F1E194", fontWeight:700 }}>تغيير السؤال</span> — استبدل السؤال الحالي بسؤال جديد من نفس الفئة<br/><br/>
+            ⚡ <span style={{ color:"#F1E194", fontWeight:700 }}>مضاعفة النقاط</span> — إذا جاوبت صح، تاخذ ضعف النقاط<br/><br/>
+            ⏱️ <span style={{ color:"#F1E194", fontWeight:700 }}>زيادة الوقت</span> — ضاعف وقت الإجابة إذا احتجت تفكر أكثر
+          </p>
         </BgSection>
 
         <BgSection
-          bg="https://images.pexels.com/photos/1181406/pexels-photo-1181406.jpeg?auto=compress&cs=tinysrgb&w=1400"
+          bg="https://i.pinimg.com/736x/a0/c9/f1/a0c9f12d8bc8059f13e65282eeeba1c8.jpg"
           title="مجتمع حُجّة"
           icon="🏘️"
         >
-          <p style={ST.body}>أنشئ فئاتك الخاصة وخلي غيرك يلعبها، ومع الوقت ممكن تنتشر وتكسب منها</p>
+          <p style={ST.body}>
+            مو بس تلعب — تقدر تصنع المحتوى.<br/><br/>
+            أنشئ فئاتك الخاصة بأسئلتك، أضف صور وخيارات، وبعد ما تنشر تصير متاحة لكل اللاعبين.<br/><br/>
+            ومع الوقت، الفئات الناجحة ممكن تنتشر وتكسب منها — المجتمع هو اللي يحكم.
+          </p>
         </BgSection>
 
         <BgSection
-          bg="https://images.pexels.com/photos/590493/pexels-photo-590493.jpeg?auto=compress&cs=tinysrgb&w=1400"
+          bg="https://i.pinimg.com/736x/8f/a5/47/8fa54727d5f690d8bd20cd5210155c84.jpg"
           title="احفظ فئاتك"
           icon="❤️"
         >
-          <p style={ST.body}>أي فئة تعجبك تقدر تحفظها وترجع لها بأي وقت</p>
-        </BgSection>
-
-        <BgSection
-          bg="https://images.pexels.com/photos/1618200/pexels-photo-1618200.jpeg?auto=compress&cs=tinysrgb&w=1400"
-          title="نظام البطولة"
-          icon="🏆"
-        >
-          <p style={ST.body}>ادخل بنظام بطولة كامل وتحدى أكثر من فريق… والأفضل يكون فريقك شخصين عشان الحماس يكون أعلى 🔥</p>
+          <p style={ST.body}>
+            لقيت فئة عجبتك وما تبي تضيعها؟<br/><br/>
+            اضغط إعجاب وتنحفظ في قائمة مفضلتك — ترجعلها بأي وقت بدون ما تدور عليها من جديد.<br/><br/>
+            سواء فئة من المجتمع أو من الفئات الرسمية، كلها تنحفظ في مكان واحد.
+          </p>
         </BgSection>
 
         {/* ── Contact ── */}
