@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { X, ZoomIn, Pause, Play, RotateCcw } from "lucide-react";
+import { X, ZoomIn, Pause, Play, RotateCcw, RefreshCw, Zap, Clock } from "lucide-react";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CSS SPEC LAYOUT — Orange-panel · Roman BG · Big centered answer modal
@@ -15,8 +15,9 @@ const FONT_LINK = "https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;7
 export default function QuestionPage() {
   const navigate  = useNavigate();
   const { state } = useLocation();
-  const { session, updateScore, gameSettings, switchTurn, teamScores } = useGame();
-  const { question, catName, slot } = state || {};
+  const { session, updateScore, gameSettings, switchTurn, teamScores, getNextQuestion } = useGame();
+  const { question: initialQuestion, catName, slot } = state || {};
+  const [question, setQuestion] = useState(initialQuestion);
 
   const isWordCat = question?.category_id === "cat_word" || question?.question_type === "secret_word";
   const diff = question?.difficulty || 300;
@@ -34,6 +35,8 @@ export default function QuestionPage() {
   const [zoomedImage, setZoomedImage] = useState(null);
   const [imgLoaded, setImgLoaded]     = useState(false);
   const timerRef = useRef(null);
+  const [lifelines, setLifelines]     = useState({ change: true, double: true, time: true });
+  const [doubleActive, setDoubleActive] = useState(false);
 
   useEffect(() => {
     if (!timerOn || timeLeft <= 0) return;
@@ -67,16 +70,45 @@ export default function QuestionPage() {
     } catch {}
   };
 
+  const handleChangeQuestion = async () => {
+    if (!lifelines.change || !question) return;
+    setLifelines(l => ({ ...l, change: false }));
+    const newQ = await getNextQuestion(question.category_id, question.difficulty);
+    if (newQ) {
+      setQuestion(newQ);
+      setImgLoaded(false);
+      setTimeLeft(TIMER_DURATION);
+      setTimerOn(true);
+      setTensionDone(false);
+      setShowAnswer(false);
+      toast("🔄 تم تغيير السؤال", { duration: 2000 });
+    }
+  };
+
+  const handleDoublePoints = () => {
+    if (!lifelines.double) return;
+    setLifelines(l => ({ ...l, double: false }));
+    setDoubleActive(true);
+    toast("⚡ مضاعفة النقاط مفعّلة!", { duration: 2000 });
+  };
+
+  const handleExtraTime = () => {
+    if (!lifelines.time) return;
+    setLifelines(l => ({ ...l, time: false }));
+    setTimeLeft(t => t * 2);
+    toast("⏱️ تم مضاعفة الوقت!", { duration: 2000 });
+  };
+
   const handleReveal = () => { setTimerOn(false); setShowAnswer(true); };
   const handleAssign = async (team) => {
     if (assigned) return;
-    const pts = question?.difficulty || 300;
+    const pts = (question?.difficulty || 300) * (doubleActive ? 2 : 1);
     await updateScore(team, pts);
     setScoredTeam(team);
     setAssigned(true);
     playCorrect();
     window.dispatchEvent(new Event("scoreUpdated"));
-    toast.success(`+${pts} ✓`, { duration: 2000 });
+    toast.success(`+${pts}${doubleActive ? " ⚡×2" : ""} ✓`, { duration: 2000 });
   };
   const handleSkip = () => { setScoredTeam("skip"); setAssigned(true); };
   const handleBack = () => { switchTurn(); navigate("/game"); };
@@ -181,6 +213,17 @@ export default function QuestionPage() {
         .helper-title { font-weight: 800; font-size: 0.68rem; color: var(--muted); letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 8px; }
         .hbtn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,180,80,0.14); background: rgba(255,255,255,0.05); color: var(--text); display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: background 0.2s, transform 0.13s; }
         .hbtn:hover { background: rgba(255,180,80,0.10); transform: scale(1.1); }
+        .hbtn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; }
+        .lifeline-wrap { position: relative; display: flex; flex-direction: column; align-items: center; }
+        .lifeline-tip {
+          position: absolute; top: calc(100% + 5px); left: 50%; transform: translateX(-50%);
+          background: rgba(8,4,16,0.94); border: 1px solid rgba(255,180,80,0.22);
+          color: rgba(247,241,232,0.82); font-size: 0.60rem; font-weight: 600;
+          padding: 4px 8px; border-radius: 7px; white-space: nowrap;
+          pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 20;
+          direction: rtl; text-align: center; line-height: 1.4; max-width: 140px; white-space: normal;
+        }
+        .lifeline-wrap:hover .lifeline-tip { opacity: 1; }
 
         /* ── Question panel ── */
         .question-panel {
@@ -585,9 +628,25 @@ export default function QuestionPage() {
           <div className="helper-card">
             <div className="helper-title">وسائل المساعدة</div>
             <div style={{ display:"flex", flexWrap:"wrap", gap:"7px" }}>
-              {[["⏱️","مزيد وقت"],["🔄","تغيير السؤال"],["🎯","مساعدة الجمهور"]].map(([icon, label], i) => (
-                <button key={i} className="hbtn" title={label}>{icon}</button>
-              ))}
+              <div className="lifeline-wrap">
+                <button className="hbtn" disabled={!lifelines.change} onClick={handleChangeQuestion}>
+                  <RefreshCw size={16}/>
+                </button>
+                <div className="lifeline-tip">تغيير السؤال بسؤال جديد</div>
+              </div>
+              <div className="lifeline-wrap">
+                <button className="hbtn" disabled={!lifelines.double} onClick={handleDoublePoints}
+                  style={doubleActive ? { borderColor:"rgba(251,191,36,0.55)", background:"rgba(251,191,36,0.12)" } : {}}>
+                  <Zap size={16}/>
+                </button>
+                <div className="lifeline-tip">مضاعفة النقاط إذا كانت الإجابة صحيحة</div>
+              </div>
+              <div className="lifeline-wrap">
+                <button className="hbtn" disabled={!lifelines.time} onClick={handleExtraTime}>
+                  <Clock size={16}/>
+                </button>
+                <div className="lifeline-tip">مضاعفة وقت الإجابة</div>
+              </div>
             </div>
           </div>
 
