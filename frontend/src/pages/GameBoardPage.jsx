@@ -177,19 +177,6 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
         alignItems:"stretch", gap:7,
         width:68, flexShrink:0,
       }}>
-        {/* team dot only */}
-        <div style={{
-          display:"flex", alignItems:"center", justifyContent:"center",
-          height:10, marginBottom:1,
-        }}>
-          <span style={{
-            width:5, height:5, borderRadius:"50%",
-            background: active ? dot : "rgba(80,60,40,.25)",
-            boxShadow: active ? `0 0 7px ${dot}` : "none",
-            animation: active ? "hj-pulse 1.4s ease-in-out infinite" : "none",
-            transition:"all .3s", flexShrink:0,
-          }}/>
-        </div>
         {DIFFICULTIES.map(d => <CoinBtn key={d} diff={d} slot={slot}/>)}
       </div>
     );
@@ -345,7 +332,7 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
 /* ════════════════════════════════════════════════════════════════════
    TEAM SCORE BADGE — solid metallic bronze
 ════════════════════════════════════════════════════════════════════ */
-function ScoreBadge({ name, score, active, side, testId }) {
+function ScoreBadge({ name, score, active, side, testId, onAdd, onRemove }) {
   const isRed  = side === "left";
   const accent = isRed ? "#b33a3a" : "#2a5fa8";
   const dimAcc = isRed ? "rgba(179,58,58,.6)" : "rgba(42,95,168,.6)";
@@ -387,25 +374,37 @@ function ScoreBadge({ name, score, active, side, testId }) {
           whiteSpace:"nowrap",
         }}>{name}</span>
       </div>
-      <div
-        data-testid={testId}
-        style={{
-          fontSize:"clamp(1.75rem,2.4vw,2.5rem)",
-          fontWeight:900,
-          color:"#f5e090",
-          lineHeight:1,
-          letterSpacing:"-.02em",
-          fontFamily:"Cairo,sans-serif",
-          textShadow: active ? "0 0 18px rgba(245,224,144,.45)" : "none",
-          transition:"text-shadow .35s",
-          textAlign: side==="left"?"left":"right",
-        }}
-      >
-        <ScoreCounter value={score}/>
+      <div style={{ display:"flex", alignItems:"center", gap:6, flexDirection: side==="left"?"row":"row-reverse" }}>
+        <button onClick={onRemove} style={adjBtn}>−</button>
+        <div
+          data-testid={testId}
+          style={{
+            fontSize:"clamp(1.75rem,2.4vw,2.5rem)",
+            fontWeight:900,
+            color:"#f5e090",
+            lineHeight:1,
+            letterSpacing:"-.02em",
+            fontFamily:"Cairo,sans-serif",
+            textShadow: active ? "0 0 18px rgba(245,224,144,.45)" : "none",
+            transition:"text-shadow .35s",
+            textAlign:"center", minWidth:56,
+          }}
+        >
+          <ScoreCounter value={score}/>
+        </div>
+        <button onClick={onAdd} style={adjBtn}>+</button>
       </div>
     </div>
   );
 }
+
+const adjBtn = {
+  width:22, height:22, borderRadius:"50%",
+  background:"rgba(201,168,76,.18)", border:"1px solid rgba(201,168,76,.35)",
+  color:"#8b6a10", fontFamily:"Cairo,sans-serif", fontWeight:900, fontSize:".78rem",
+  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+  lineHeight:1, padding:0, flexShrink:0,
+};
 
 /* ════════════════════════════════════════════════════════════════════
    MAIN PAGE
@@ -596,6 +595,8 @@ export default function GameBoardPage() {
               active={currentTurn===1}
               side="left"
               testId="team1-score"
+              onAdd={()=>updateScore(1,100)}
+              onRemove={()=>updateScore(1,-100)}
             />
           </div>
 
@@ -631,9 +632,10 @@ export default function GameBoardPage() {
               }}>لعبة معرفية</div>
             </div>
 
-            {/* Turn indicator */}
-            <div
+            {/* Turn indicator — clickable to switch */}
+            <button
               data-testid="turn-indicator"
+              onClick={switchTurn}
               style={{
                 display:"flex", alignItems:"center", gap:7,
                 padding:"3px 14px", borderRadius:99,
@@ -642,14 +644,20 @@ export default function GameBoardPage() {
                 fontSize:".68rem", fontWeight:700,
                 color:"#5c3d10",
                 letterSpacing:".04em", whiteSpace:"nowrap",
-              }}>
+                cursor:"pointer", fontFamily:"Cairo,sans-serif",
+                transition:"background .2s",
+              }}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(201,168,76,.22)"}
+              onMouseLeave={e=>e.currentTarget.style.background="rgba(201,168,76,.12)"}
+              title="اضغط لتبديل الدور"
+            >
               <span style={{
                 width:6, height:6, borderRadius:"50%",
                 background:currentTurn===1?"#b33a3a":"#2a5fa8",
                 animation:"hj-pulse 1.4s ease-in-out infinite",
               }}/>
               دور {currentTurn===1?team1Name:team2Name}
-            </div>
+            </button>
           </div>
 
           {/* Team 2 + End */}
@@ -660,6 +668,8 @@ export default function GameBoardPage() {
               active={currentTurn===2}
               side="right"
               testId="team2-score"
+              onAdd={()=>updateScore(2,100)}
+              onRemove={()=>updateScore(2,-100)}
             />
             <button
               data-testid="end-game-btn"
