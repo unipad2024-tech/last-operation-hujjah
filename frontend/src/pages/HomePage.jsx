@@ -2,6 +2,22 @@ import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGame } from "@/context/GameContext";
 
+/* ── Fade-in via IntersectionObserver ── */
+function useFadeIn() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { el.style.opacity="1"; el.style.transform="translateY(0)"; obs.unobserve(el); } },
+      { threshold: 0.10 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return ref;
+}
+
 /* ── Art background sources ───────────────────────────────────────────────── */
 const ART = {
   schoolOfAthens:
@@ -251,6 +267,8 @@ export default function HomePage() {
   const navigate  = useNavigate();
   const { currentUser, logoutUser } = useGame();
   const isPremium = currentUser?.subscription_type === "premium";
+  const aboutRef  = useRef(null);
+  const scrollToAbout = () => aboutRef.current?.scrollIntoView({ behavior: "smooth" });
 
   return (
     <div className="relative min-h-screen overflow-x-hidden" style={{ minHeight: "100svh" }}>
@@ -546,7 +564,226 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+
+        {/* ── Scroll down indicator ── */}
+        <button
+          onClick={scrollToAbout}
+          style={{
+            marginTop: "2.5rem", background: "none", border: "none",
+            cursor: "pointer", display: "flex", flexDirection: "column",
+            alignItems: "center", gap: 6, opacity: 0.45,
+            transition: "opacity 0.2s",
+          }}
+          onMouseEnter={e => e.currentTarget.style.opacity="0.85"}
+          onMouseLeave={e => e.currentTarget.style.opacity="0.45"}
+        >
+          <span style={{ color: "#F1E194", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.15em" }}>اعرف أكثر</span>
+          <span style={{ color: "#F1E194", fontSize: "1.2rem", animation: "hj-bounce 1.6s ease-in-out infinite" }}>↓</span>
+        </button>
       </main>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          ABOUT / LANDING SECTIONS
+      ═══════════════════════════════════════════════════════════════ */}
+      <style>{`
+        @keyframes hj-bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(6px)} }
+        .hj-fade { opacity:0; transform:translateY(28px); transition:opacity 0.65s ease, transform 0.65s ease; }
+      `}</style>
+
+      <div ref={aboutRef} style={{ position: "relative", zIndex: 10, background: "rgba(6,0,2,0.92)", backdropFilter: "blur(2px)" }}>
+
+        {/* ── divider ── */}
+        <div style={{ height: 3, background: "linear-gradient(90deg, transparent, rgba(241,225,148,0.35), transparent)" }} />
+
+        <LandingSection icon="🔮" title="وش هي حُجّة؟" accent>
+          <p style={bodyText}>لعبة تنافسية بين فريقين، تختار فئات، تجاوب، وتثبت إنك الأذكى</p>
+          <PlaceholderImg label="فريقين يتنافسان" />
+        </LandingSection>
+
+        <Divider/>
+
+        <LandingSection icon="🎮" title="كيف تلعب؟">
+          <ul style={{ ...bodyText, listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+            {["كل فريق يختار 3 فئات","تختار سؤال (300 / 600 / 900)","تجاوب وتكسب نقاط","الفريق الأعلى يفوز"].map((t,i) => (
+              <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <span style={{ color: "#F1E194", fontWeight: 900, flexShrink: 0, marginTop: 1 }}>{i+1}.</span>
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
+          <PlaceholderImg label="البورد 3×2" />
+        </LandingSection>
+
+        <Divider/>
+
+        <LandingSection icon="🏅" title="نظام النقاط">
+          <p style={bodyText}>"كل سؤال له قيمة، كل ما كانت أعلى كان أصعب… وأربح"</p>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginTop: 16 }}>
+            {[["300","سهل","#6ee7b7"],["600","متوسط","#fcd34d"],["900","صعب","#f87171"]].map(([pts,lbl,col]) => (
+              <div key={pts} style={{ textAlign: "center", padding: "14px 24px", borderRadius: 16, background: `rgba(241,225,148,0.05)`, border: `1.5px solid ${col}40` }}>
+                <div style={{ fontSize: "1.8rem", fontWeight: 900, color: col }}>{pts}</div>
+                <div style={{ fontSize: "0.72rem", color: `${col}cc`, fontWeight: 700, marginTop: 4 }}>{lbl}</div>
+              </div>
+            ))}
+          </div>
+        </LandingSection>
+
+        <Divider/>
+
+        <LandingSection icon="⚡" title="وسائل المساعدة">
+          <ul style={{ ...bodyText, listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+            {[["🔄","تغيير السؤال"],["⚡","مضاعفة النقاط"],["⏱️","زيادة الوقت"]].map(([ic,t]) => (
+              <li key={t} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: "1.1rem" }}>{ic}</span><span>{t}</span>
+              </li>
+            ))}
+          </ul>
+          <p style={{ ...bodyText, marginTop: 14, color: "rgba(241,225,148,0.45)", fontStyle: "italic" }}>
+            "استخدمها بذكاء عشان تقلب النتيجة"
+          </p>
+        </LandingSection>
+
+        <Divider/>
+
+        <LandingSection icon="🏘️" title="مجتمع حُجّة">
+          <p style={bodyText}>تقدر تنشئ فئاتك الخاصة، وتخلي غيرك يلعبها</p>
+          <p style={{ ...bodyText, color: "rgba(241,225,148,0.42)", marginTop: 8, fontStyle: "italic" }}>
+            ويمكن تكسب من فئاتك مستقبلاً ✦
+          </p>
+          <PlaceholderImg label="إنشاء فئة مجتمع" />
+        </LandingSection>
+
+        <Divider/>
+
+        <LandingSection icon="❤️" title="احفظ فئاتك">
+          <p style={bodyText}>أي فئة تعجبك تقدر تحفظها وترجع لها بأي وقت</p>
+          <PlaceholderImg label="قائمة المفضلة" />
+        </LandingSection>
+
+        <Divider/>
+
+        <LandingSection icon="🏆" title="نظام البطولة">
+          <p style={bodyText}>العب بنظام بطولة كامل وتحدى أكثر من فريق</p>
+          <p style={{ ...bodyText, color: "rgba(241,225,148,0.42)", marginTop: 8, fontStyle: "italic" }}>
+            يفضل يكون الفريق شخصين لزيادة الحماس 🔥
+          </p>
+          <PlaceholderImg label="شجرة البطولة" />
+        </LandingSection>
+
+        <Divider/>
+
+        {/* ── Contact ── */}
+        <ContactSection />
+
+        <div style={{ height: 60 }} />
+      </div>
+
     </div>
+  );
+}
+
+/* ── shared style ── */
+const bodyText = {
+  color: "rgba(241,225,148,0.72)",
+  fontSize: "clamp(0.88rem,1.5vw,1.05rem)",
+  lineHeight: 1.75,
+  fontFamily: "Cairo, sans-serif",
+  fontWeight: 500,
+  margin: 0,
+};
+
+function Divider() {
+  return <div style={{ height: 1, background: "linear-gradient(90deg,transparent,rgba(241,225,148,0.10),transparent)", margin: "0 5%" }} />;
+}
+
+function PlaceholderImg({ label }) {
+  return (
+    <div style={{
+      marginTop: 20, borderRadius: 16,
+      background: "rgba(241,225,148,0.04)",
+      border: "1.5px dashed rgba(241,225,148,0.14)",
+      height: 120, display: "flex", alignItems: "center", justifyContent: "center",
+      color: "rgba(241,225,148,0.22)", fontSize: "0.78rem", fontWeight: 700,
+      fontFamily: "Cairo, sans-serif", letterSpacing: "0.08em",
+    }}>
+      {label}
+    </div>
+  );
+}
+
+function LandingSection({ icon, title, children, accent }) {
+  const ref = useFadeIn();
+  return (
+    <section
+      ref={ref}
+      className="hj-fade"
+      style={{
+        maxWidth: 680, margin: "0 auto",
+        padding: "clamp(36px,6vw,64px) clamp(20px,5vw,40px)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+        <span style={{ fontSize: "1.6rem" }}>{icon}</span>
+        <h2 style={{
+          fontFamily: "Cairo, sans-serif", fontWeight: 900, margin: 0,
+          fontSize: "clamp(1.3rem,2.5vw,1.8rem)",
+          color: accent ? "#F1E194" : "rgba(241,225,148,0.92)",
+          textShadow: accent ? "0 0 24px rgba(241,225,148,0.35)" : "none",
+        }}>{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ContactSection() {
+  const ref = useFadeIn();
+  return (
+    <section
+      ref={ref}
+      className="hj-fade"
+      style={{
+        maxWidth: 680, margin: "0 auto",
+        padding: "clamp(36px,6vw,64px) clamp(20px,5vw,40px)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+        <span style={{ fontSize: "1.6rem" }}>📬</span>
+        <h2 style={{ fontFamily: "Cairo, sans-serif", fontWeight: 900, margin: 0, fontSize: "clamp(1.3rem,2.5vw,1.8rem)", color: "rgba(241,225,148,0.92)" }}>تواصل معنا</h2>
+      </div>
+      <p style={bodyText}>عندك اقتراح أو فكرة؟ تواصل معنا</p>
+      <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+        {[
+          { icon: "✉️", label: "البريد الإلكتروني", value: "hujjahgame@gmail.com", href: "mailto:hujjahgame@gmail.com" },
+          { icon: "📸", label: "انستقرام",           value: "hujjah.game",          href: "https://instagram.com/hujjah.game" },
+          { icon: "🎵", label: "تيك توك",            value: "huajjh.game",          href: "https://tiktok.com/@huajjh.game" },
+        ].map(({ icon, label, value, href }) => (
+          <a
+            key={value}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: "flex", alignItems: "center", gap: 14,
+              padding: "14px 18px", borderRadius: 14,
+              background: "rgba(241,225,148,0.05)",
+              border: "1px solid rgba(241,225,148,0.12)",
+              textDecoration: "none", transition: "border-color 0.2s, background 0.2s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor="rgba(241,225,148,0.32)"; e.currentTarget.style.background="rgba(241,225,148,0.09)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(241,225,148,0.12)"; e.currentTarget.style.background="rgba(241,225,148,0.05)"; }}
+          >
+            <span style={{ fontSize: "1.2rem" }}>{icon}</span>
+            <div>
+              <div style={{ fontSize: "0.68rem", color: "rgba(241,225,148,0.38)", fontWeight: 700, fontFamily: "Cairo, sans-serif", marginBottom: 2 }}>{label}</div>
+              <div style={{ fontSize: "0.9rem", color: "rgba(241,225,148,0.82)", fontWeight: 700, fontFamily: "Cairo, sans-serif" }}>{value}</div>
+            </div>
+          </a>
+        ))}
+      </div>
+      <p style={{ ...bodyText, marginTop: 20, color: "rgba(241,225,148,0.38)", fontSize: "0.8rem" }}>
+        تابعنا عشان تشوف أحدث الفئات والتحديات
+      </p>
+    </section>
   );
 }
