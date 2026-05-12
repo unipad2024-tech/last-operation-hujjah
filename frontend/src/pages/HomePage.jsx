@@ -710,12 +710,11 @@ function BgSection({ bg, title, icon, children, accent }) {
         position: "absolute", inset: 0,
         backgroundImage: `url("${bg}")`,
         backgroundSize: "cover", backgroundPosition: "center",
-        filter: "brightness(0.45) saturate(0.7)",
       }} />
       {/* dark overlay */}
       <div style={{
         position: "absolute", inset: 0,
-        background: "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.72) 60%, rgba(0,0,0,0.85) 100%)",
+        background: "rgba(0,0,0,0.60)",
       }} />
       {/* content */}
       <div
