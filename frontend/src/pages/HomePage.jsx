@@ -595,7 +595,7 @@ export default function HomePage() {
         <div style={{ height: 3, background: "linear-gradient(90deg, transparent, rgba(241,225,148,0.35), transparent)" }} />
 
         <BgSection
-          bg="https://i.pinimg.com/736x/64/18/cb/6418cb92ddf7922e669e4ce4db23848e.jpg"
+          bg="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=1400&q=80"
           title="وش هي حُجّة؟"
           icon="🔮"
           accent
@@ -608,7 +608,7 @@ export default function HomePage() {
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/736x/36/00/6c/36006c18d0ceba3b6484e719baf61ab4.jpg"
+          bg="https://images.unsplash.com/photo-1511512578047-dfb367046420?w=1400&q=80"
           title="كيف تلعب؟"
           icon="🎮"
         >
@@ -621,7 +621,7 @@ export default function HomePage() {
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/736x/56/97/94/56979465960904af524d8f19895c2615.jpg"
+          bg="https://images.unsplash.com/photo-1606167668584-78701c57f13d?w=1400&q=80"
           title="نظام النقاط"
           icon="🏅"
         >
@@ -636,7 +636,7 @@ export default function HomePage() {
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/736x/da/90/57/da9057e1d03b0ca70434ca358b2cf483.jpg"
+          bg="https://images.unsplash.com/photo-1553481187-be93c21490a9?w=1400&q=80"
           title="وسائل المساعدة"
           icon="⚡"
         >
@@ -649,7 +649,7 @@ export default function HomePage() {
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/736x/a0/c9/f1/a0c9f12d8bc8059f13e65282eeeba1c8.jpg"
+          bg="https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1400&q=80"
           title="مجتمع حُجّة"
           icon="🏘️"
         >
@@ -661,7 +661,7 @@ export default function HomePage() {
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/736x/8f/a5/47/8fa54727d5f690d8bd20cd5210155c84.jpg"
+          bg="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1400&q=80"
           title="احفظ فئاتك"
           icon="❤️"
         >
