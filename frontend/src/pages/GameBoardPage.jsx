@@ -177,10 +177,10 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
         alignItems:"stretch", gap:7,
         width:68, flexShrink:0,
       }}>
-        {/* team dot label */}
+        {/* team dot only */}
         <div style={{
           display:"flex", alignItems:"center", justifyContent:"center",
-          gap:4, height:18, marginBottom:1,
+          height:10, marginBottom:1,
         }}>
           <span style={{
             width:5, height:5, borderRadius:"50%",
@@ -189,15 +189,6 @@ function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn 
             animation: active ? "hj-pulse 1.4s ease-in-out infinite" : "none",
             transition:"all .3s", flexShrink:0,
           }}/>
-          <span style={{
-            fontSize:".56rem", fontWeight:800,
-            color: active ? dot : "rgba(80,60,40,.45)",
-            fontFamily:"Cairo,sans-serif",
-            letterSpacing:".05em",
-            transition:"color .3s",
-          }}>
-            {slot===1?"الفريق ١":"الفريق ٢"}
-          </span>
         </div>
         {DIFFICULTIES.map(d => <CoinBtn key={d} diff={d} slot={slot}/>)}
       </div>
@@ -424,6 +415,7 @@ export default function GameBoardPage() {
   const {
     session, resetGame, currentTurn, markTileUsed, isTileUsed,
     teamScores, saveSession, gameMode, tournamentState,
+    switchTurn, updateScore, userToken,
   } = useGame();
 
   const [categories,     setCategories]     = useState([]);
@@ -431,6 +423,7 @@ export default function GameBoardPage() {
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [showWinner,     setShowWinner]     = useState(false);
   const [clickingTile,   setClickingTile]   = useState(null);
+  const [showHost,       setShowHost]       = useState(false);
 
   const team1Name = session?.team1_name || "الفريق الأحمر";
   const team2Name = session?.team2_name || "الفريق الأخضر";
@@ -873,7 +866,79 @@ export default function GameBoardPage() {
           </div>
         )}
 
+        {/* ── HOST CONTROLS — bottom-left corner, logged-in only ── */}
+        {userToken && (
+          <div style={{
+            position:"fixed", bottom:16, left:16, zIndex:50,
+            display:"flex", flexDirection:"column", alignItems:"flex-start", gap:6,
+          }}>
+            {showHost && (
+              <div style={{
+                background:"linear-gradient(160deg,#faf6ee,#f0e8d5)",
+                border:"2px solid #c9a84c",
+                boxShadow:"0 0 0 1px #8b6a10, 0 8px 28px rgba(30,15,5,.45)",
+                borderRadius:14, padding:"10px 12px",
+                display:"flex", flexDirection:"column", gap:8,
+                fontFamily:"Cairo,sans-serif", minWidth:180,
+                animation:"hj-fadein .2s ease both",
+              }}>
+                {/* switch turn */}
+                <button
+                  onClick={() => { switchTurn(); toast("🔄 تم تبديل الدور", { duration: 1500 }); }}
+                  style={{
+                    width:"100%", padding:"6px 10px", borderRadius:8,
+                    background:"linear-gradient(145deg,#1a2a5c,#0f1840)",
+                    border:"1.5px solid #c9a84c", color:"#f5e090",
+                    fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:".75rem",
+                    cursor:"pointer",
+                  }}
+                >⇄ تبديل الدور</button>
+
+                {/* team 1 points */}
+                <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                  <span style={{ fontSize:".65rem", fontWeight:800, color:"#b33a3a", flex:1 }}>{team1Name}</span>
+                  <button onClick={() => updateScore(1,  300)} style={hCtrlBtn("#6ee7b7")}>+300</button>
+                  <button onClick={() => updateScore(1, -300)} style={hCtrlBtn("#fca5a5")}>-300</button>
+                </div>
+
+                {/* team 2 points */}
+                <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                  <span style={{ fontSize:".65rem", fontWeight:800, color:"#2a5fa8", flex:1 }}>{team2Name}</span>
+                  <button onClick={() => updateScore(2,  300)} style={hCtrlBtn("#6ee7b7")}>+300</button>
+                  <button onClick={() => updateScore(2, -300)} style={hCtrlBtn("#fca5a5")}>-300</button>
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => setShowHost(h => !h)}
+              title="تحكم المضيف"
+              style={{
+                width:32, height:32, borderRadius:"50%",
+                background:"rgba(201,168,76,.18)",
+                border:"1.5px solid rgba(201,168,76,.45)",
+                color:"#8b6a10", fontSize:".9rem",
+                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                boxShadow:"0 2px 8px rgba(80,50,20,.2)",
+                transition:"background .2s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background="rgba(201,168,76,.32)"}
+              onMouseLeave={e => e.currentTarget.style.background="rgba(201,168,76,.18)"}
+            >⚙</button>
+          </div>
+        )}
+
       </div>
     </>
   );
+}
+
+function hCtrlBtn(col) {
+  return {
+    padding:"3px 7px", borderRadius:6,
+    background:"transparent",
+    border:`1px solid ${col}`,
+    color: col, fontFamily:"Cairo,sans-serif",
+    fontWeight:700, fontSize:".68rem",
+    cursor:"pointer",
+  };
 }
