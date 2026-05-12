@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { getFavorites, addFavorite, removeFavorite } from "../lib/api";
 
 const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
 const GameContext = createContext(null);
@@ -51,6 +52,9 @@ export const GameProvider = ({ children }) => {
     } catch { return { team1: 0, team2: 0 }; }
   });
 
+  // ─── Favorites ────────────────────────────────────────────────────────────
+  const [favorites, setFavorites] = useState([]);
+
   // ─── Game Mode & Tournament ───────────────────────────────────────────────
   const [gameMode, setGameModeState] = useState(() => localStorage.getItem("hujjah_mode") || "standard");
   const [tournamentState, setTournamentState] = useState(() => {
@@ -61,6 +65,15 @@ export const GameProvider = ({ children }) => {
   useEffect(() => {
     axios.get(`${API}/settings`).then(({ data }) => setGameSettings(data)).catch(() => {});
   }, []);
+
+  // Load favorites when user logs in
+  useEffect(() => {
+    if (userToken) {
+      getFavorites(userToken).then(setFavorites).catch(() => {});
+    } else {
+      setFavorites([]);
+    }
+  }, [userToken]);
 
   // Sync teamScores when session changes
   useEffect(() => {
@@ -264,6 +277,21 @@ export const GameProvider = ({ children }) => {
     return await updateScore(team, delta);
   };
 
+  const toggleFavorite = async (categoryId, categoryType = "admin") => {
+    if (!userToken) return;
+    const isFav = favorites.some(f => f.id === categoryId);
+    if (isFav) {
+      await removeFavorite(userToken, categoryId, categoryType);
+      setFavorites(prev => prev.filter(f => f.id !== categoryId));
+    } else {
+      await addFavorite(userToken, categoryId, categoryType);
+      const updated = await getFavorites(userToken);
+      setFavorites(updated);
+    }
+  };
+
+  const isFavorite = (categoryId) => favorites.some(f => f.id === categoryId);
+
   const resetGame = () => {
     saveSession(null);
     resetTurn();
@@ -285,7 +313,8 @@ export const GameProvider = ({ children }) => {
       tournamentState, setTournament, updateTournament,
       createSession, updateSession, getNextQuestion, updateScore, setExactScore, adjustScoreDelta,
       resetGame, saveSession, loginUser, registerUser, logoutUser, refreshUser,
-      toggleDarkMode, switchTurn, setTurn, resetTurn
+      toggleDarkMode, switchTurn, setTurn, resetTurn,
+      favorites, toggleFavorite, isFavorite
     }}>
       {children}
     </GameContext.Provider>

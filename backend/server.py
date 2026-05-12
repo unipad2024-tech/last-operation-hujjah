@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid, random, shutil, re, json, httpx, asyncio, io, time
+import os, logging, uuid, random, shutil, re, json, httpx, asyncio, io, time, string
 from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
@@ -155,6 +155,7 @@ class Category(BaseModel):
     color: str = "#5B0E14"
     order: int = 0
     group_id: Optional[str] = None
+    code: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 class CategoryCreate(BaseModel):
@@ -860,9 +861,19 @@ def _invalidate_category_cache():
     for k in ["categories:True", "categories:False", "free-categories"]:
         _cache.pop(k, None)
 
+async def _generate_unique_category_code() -> str:
+    chars = string.ascii_uppercase + string.digits
+    while True:
+        code = "".join(random.choices(chars, k=6))
+        exists = await db.categories.find_one({"code": code}, {"_id": 1})
+        comm_exists = await db.community_categories.find_one({"code": code}, {"_id": 1})
+        if not exists and not comm_exists:
+            return code
+
 @api_router.post("/categories")
 async def create_category(body: CategoryCreate, admin: dict = Depends(get_admin)):
     cat = Category(**body.model_dump())
+    cat.code = await _generate_unique_category_code()
     await db.categories.insert_one(cat.model_dump())
     _invalidate_category_cache()
     await log_admin_action(admin, "إضافة", "فئة", cat.name)
@@ -3867,6 +3878,7 @@ async def community_create_category(body: CommunityCategoryCreate, user: dict = 
         "questions_count": 0,
         "play_count": 0,
         "likes_count": 0,
+        "code": await _generate_unique_category_code(),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "submitted_at": None,
         "reviewed_at": None,
@@ -4087,6 +4099,82 @@ async def community_my_payouts(user: dict = Depends(require_user)):
         {"user_id": user["id"]}, {"_id": 0}
     ).sort("created_at", -1).to_list(50)
     return payouts
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CATEGORY CODE LOOKUP
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.get("/category/code/{code}")
+async def get_category_by_code(code: str):
+    code = code.strip().upper()
+    # search admin categories
+    cat = await db.categories.find_one({"code": code}, {"_id": 0})
+    if cat:
+        return {"type": "admin", "category": cat}
+    # search community categories
+    comm = await db.community_categories.find_one(
+        {"code": code, "status": "approved"}, {"_id": 0}
+    )
+    if comm:
+        return {"type": "community", "category": comm}
+    raise HTTPException(404, "الكود غير صحيح أو الفئة غير موجودة")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FAVORITES
+# ══════════════════════════════════════════════════════════════════════════════
+
+class FavoriteAction(BaseModel):
+    category_id: str
+    category_type: str = "admin"  # "admin" | "community"
+
+@api_router.post("/favorites/add")
+async def favorites_add(body: FavoriteAction, user: dict = Depends(require_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$addToSet": {"favorites": {"id": body.category_id, "type": body.category_type}}}
+    )
+    return {"message": "تمت الإضافة"}
+
+@api_router.delete("/favorites/remove")
+async def favorites_remove(body: FavoriteAction, user: dict = Depends(require_user)):
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$pull": {"favorites": {"id": body.category_id, "type": body.category_type}}}
+    )
+    return {"message": "تم الحذف"}
+
+@api_router.get("/favorites")
+async def favorites_get(user: dict = Depends(require_user)):
+    user_doc = await db.users.find_one({"id": user["id"]}, {"_id": 0, "favorites": 1})
+    favs = user_doc.get("favorites", []) if user_doc else []
+    if not favs:
+        return []
+    admin_ids = [f["id"] for f in favs if f.get("type") == "admin"]
+    comm_ids  = [f["id"] for f in favs if f.get("type") == "community"]
+    result = []
+    if admin_ids:
+        cats = await db.categories.find({"id": {"$in": admin_ids}}, {"_id": 0}).to_list(200)
+        for c in cats:
+            c["_fav_type"] = "admin"
+        result.extend(cats)
+    if comm_ids:
+        cats = await db.community_categories.find({"id": {"$in": comm_ids}}, {"_id": 0}).to_list(200)
+        for c in cats:
+            c["_fav_type"] = "community"
+        result.extend(cats)
+    return result
+
+@api_router.post("/admin/migrate/category-codes")
+async def migrate_category_codes(admin: dict = Depends(get_admin)):
+    """Assign codes to existing categories that don't have one yet."""
+    updated = 0
+    for col_name in ("categories", "community_categories"):
+        col = db[col_name]
+        async for doc in col.find({"code": {"$in": [None, ""]}}, {"_id": 1, "id": 1}):
+            code = await _generate_unique_category_code()
+            await col.update_one({"_id": doc["_id"]}, {"$set": {"code": code}})
+            updated += 1
+    return {"migrated": updated}
 
 # ── Notifications ──────────────────────────────────────────────────────────
 
@@ -4578,6 +4666,11 @@ async def startup_event():
         await db.suspicious_logs.create_index([("created_at", -1)])
         await db.ip_logs.create_index([("user_id", 1)])
         await db.ip_logs.create_index([("ts", 1)], expireAfterSeconds=7200)  # auto-purge IP logs after 2h
+        # Category code indexes
+        await db.categories.create_index([("code", 1)], unique=True, sparse=True)
+        await db.community_categories.create_index([("code", 1)], unique=True, sparse=True)
+        # Favorites index
+        await db.users.create_index([("favorites", 1)])
         logger.info("DB indexes created/verified")
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
