@@ -2607,26 +2607,83 @@ export default function AdminDashboard() {
                 <p className="text-primary/50 text-sm">أسئلة في انتظار الموافقة قبل نشرها</p>
               </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                data-testid="reload-pending-btn"
-                onClick={loadPendingQuestions}
-                disabled={pendingLoading}
-                className="border border-primary/20 text-primary/60 px-4 py-2 rounded-xl font-bold text-sm hover:border-primary/50 transition-all"
-              >
-                {pendingLoading ? "⏳" : "↺"} تحديث
-              </button>
-              {pendingTotal > 0 && (
-                <button
-                  data-testid="approve-all-btn"
-                  onClick={handleApproveAll}
-                  className="bg-green-600 text-white px-5 py-2 rounded-xl font-black text-sm hover:bg-green-700 transition-all"
-                >
-                  ✓ موافقة على الكل ({pendingTotal})
-                </button>
-              )}
-            </div>
+            <button
+              data-testid="reload-pending-btn"
+              onClick={loadPendingQuestions}
+              disabled={pendingLoading}
+              className="border border-primary/20 text-primary/60 px-4 py-2 rounded-xl font-bold text-sm hover:border-primary/50 transition-all"
+            >
+              {pendingLoading ? "⏳" : "↺"} تحديث
+            </button>
           </div>
+
+          {/* Bulk action bar — always visible when questions exist */}
+          {pendingQuestions.length > 0 && !pendingLoading && (
+            <div style={{
+              background: selectedPending.size > 0 ? "rgba(99,102,241,0.14)" : "rgba(255,255,255,0.03)",
+              border: `1.5px solid ${selectedPending.size > 0 ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.08)"}`,
+              borderRadius: "14px", padding: "12px 18px", marginBottom: "18px",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap",
+              transition: "all 0.2s",
+            }}>
+              {/* Select all toggle */}
+              <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", userSelect: "none" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedPending.size === pendingQuestions.length && pendingQuestions.length > 0}
+                  onChange={() => {
+                    if (selectedPending.size === pendingQuestions.length) setSelectedPending(new Set());
+                    else setSelectedPending(new Set(pendingQuestions.map(q => q.id)));
+                  }}
+                  style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#818cf8" }}
+                />
+                <span style={{ color: selectedPending.size > 0 ? "#a5b4fc" : "rgba(243,244,246,0.5)", fontWeight: 700, fontSize: "0.88rem" }}>
+                  {selectedPending.size > 0
+                    ? `${selectedPending.size} محدد من ${pendingQuestions.length}`
+                    : "تحديد الكل"}
+                </span>
+              </label>
+
+              {/* Action buttons */}
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  onClick={handleBulkApprove}
+                  disabled={selectedPending.size === 0}
+                  style={{
+                    background: selectedPending.size > 0 ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.04)",
+                    border: `1.5px solid ${selectedPending.size > 0 ? "rgba(52,211,153,0.5)" : "rgba(255,255,255,0.08)"}`,
+                    color: selectedPending.size > 0 ? "#34d399" : "rgba(255,255,255,0.2)",
+                    padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
+                    cursor: selectedPending.size > 0 ? "pointer" : "not-allowed", transition: "all 0.15s",
+                  }}>
+                  ✓ موافقة على المحدد
+                </button>
+                <button
+                  onClick={handleApproveAll}
+                  disabled={pendingTotal === 0}
+                  style={{
+                    background: "rgba(52,211,153,0.08)", border: "1.5px solid rgba(52,211,153,0.25)",
+                    color: "rgba(52,211,153,0.6)",
+                    padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
+                    cursor: "pointer", transition: "all 0.15s",
+                  }}>
+                  ✓✓ موافقة على الكل ({pendingTotal})
+                </button>
+                <button
+                  onClick={handleBulkReject}
+                  disabled={selectedPending.size === 0}
+                  style={{
+                    background: selectedPending.size > 0 ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.04)",
+                    border: `1.5px solid ${selectedPending.size > 0 ? "rgba(239,68,68,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    color: selectedPending.size > 0 ? "#f87171" : "rgba(255,255,255,0.2)",
+                    padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
+                    cursor: selectedPending.size > 0 ? "pointer" : "not-allowed", transition: "all 0.15s",
+                  }}>
+                  ✕ حذف المحدد
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Import section */}
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-6">
@@ -2678,53 +2735,6 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          {/* Bulk action bar */}
-          {selectedPending.size > 0 && (
-            <div style={{
-              background: "rgba(99,102,241,0.12)", border: "1.5px solid rgba(99,102,241,0.4)",
-              borderRadius: "14px", padding: "12px 18px", marginBottom: "16px",
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap"
-            }}>
-              <div style={{ color: "#a5b4fc", fontWeight: 700, fontSize: "0.9rem" }}>
-                ✔ {selectedPending.size} سؤال محدد
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={handleBulkApprove}
-                  style={{ background: "rgba(52,211,153,0.18)", border: "1.5px solid rgba(52,211,153,0.5)", color: "#34d399",
-                           padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem", cursor: "pointer" }}>
-                  ✓ نشر المحدد
-                </button>
-                <button onClick={handleBulkReject}
-                  style={{ background: "rgba(239,68,68,0.12)", border: "1.5px solid rgba(239,68,68,0.4)", color: "#f87171",
-                           padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem", cursor: "pointer" }}>
-                  ✕ رفض المحدد
-                </button>
-                <button onClick={() => setSelectedPending(new Set())}
-                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(243,244,246,0.5)",
-                           padding: "7px 14px", borderRadius: "10px", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>
-                  إلغاء
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Select all row */}
-          {pendingQuestions.length > 0 && !pendingLoading && (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", padding: "0 4px" }}>
-              <input
-                type="checkbox"
-                checked={selectedPending.size === pendingQuestions.length && pendingQuestions.length > 0}
-                onChange={() => {
-                  if (selectedPending.size === pendingQuestions.length) setSelectedPending(new Set());
-                  else setSelectedPending(new Set(pendingQuestions.map(q => q.id)));
-                }}
-                style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#818cf8" }}
-              />
-              <span style={{ color: "rgba(243,244,246,0.45)", fontSize: "0.8rem", fontWeight: 700 }}>
-                {selectedPending.size === pendingQuestions.length ? "إلغاء تحديد الكل" : "تحديد الكل"}
-              </span>
-            </div>
-          )}
 
           {/* Pending list */}
           {pendingLoading ? (
