@@ -610,8 +610,8 @@ export default function HomePage() {
           content: '';
           position: absolute;
           top: 0; left: 0; right: 0;
-          height: 120px;
-          background: linear-gradient(to bottom, rgba(10,1,1,0.85), transparent);
+          height: 200px;
+          background: linear-gradient(to bottom, rgba(8,0,2,1) 0%, rgba(8,0,2,0.6) 50%, transparent 100%);
           z-index: 2;
           pointer-events: none;
         }
@@ -619,15 +619,22 @@ export default function HomePage() {
           content: '';
           position: absolute;
           bottom: 0; left: 0; right: 0;
-          height: 120px;
-          background: linear-gradient(to top, rgba(10,1,1,0.85), transparent);
+          height: 200px;
+          background: linear-gradient(to top, rgba(8,0,2,1) 0%, rgba(8,0,2,0.6) 50%, transparent 100%);
           z-index: 2;
           pointer-events: none;
         }
       `}</style>
 
-      <div ref={aboutRef} style={{ position: "relative", zIndex: 10 }}>
+      {/* ── Hero → Sections fade bridge ── */}
+      <div style={{
+        position: "relative", zIndex: 9,
+        height: "clamp(60px, 8vw, 100px)",
+        background: "linear-gradient(to bottom, rgba(8,0,2,0) 0%, rgba(8,0,2,1) 100%)",
+        marginTop: "-2px",
+      }} />
 
+      <div ref={aboutRef} style={{ position: "relative", zIndex: 10 }}>
 
         <BgSection
           bg="https://i.pinimg.com/1200x/64/18/cb/6418cb92ddf7922e669e4ce4db23848e.jpg"
@@ -715,8 +722,8 @@ export default function HomePage() {
           bg="https://i.pinimg.com/1200x/8a/a3/a9/8aa3a927f9ef80ae6931f12c9397e851.jpg"
           title="مجتمع حُجّة"
           icon="🏘"
-          bgPos="5% center"
-          extraOverlay={{ background: "linear-gradient(to left, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.5) 40%, rgba(0,0,0,0.05) 65%)" }}
+          bgPos="0% center"
+          extraOverlay={{ background: "linear-gradient(to left, rgba(5,0,0,1) 0%, rgba(5,0,0,0.97) 25%, rgba(5,0,0,0.6) 50%, rgba(5,0,0,0) 70%)" }}
         >
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
             <p style={{ ...ST.body, margin:0 }}>
