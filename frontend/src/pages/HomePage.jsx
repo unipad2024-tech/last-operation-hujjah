@@ -28,17 +28,17 @@ function useFadeIn() {
 /* ── Art background sources ───────────────────────────────────────────────── */
 const ART = {
   schoolOfAthens:
-    "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=900&w=1400",
+    "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920",
   schoolCloseup:
-    "https://images.pexels.com/photos/27063871/pexels-photo-27063871.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=900&w=1400",
+    "https://images.pexels.com/photos/27063871/pexels-photo-27063871.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920",
   rembrandtDark:
-    "https://images.unsplash.com/photo-1579168730073-4541e40ca43a?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=80&w=900",
+    "https://images.unsplash.com/photo-1579168730073-4541e40ca43a?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=90&w=1600",
   baroque:
-    "https://images.unsplash.com/photo-1745239188955-67aec6a48459?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=80&w=900",
+    "https://images.unsplash.com/photo-1745239188955-67aec6a48459?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=90&w=1600",
   marbleStatue:
-    "https://images.unsplash.com/photo-1572349387816-f96e105271ee?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=80&w=900",
+    "https://images.unsplash.com/photo-1572349387816-f96e105271ee?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=90&w=1600",
   baroqueCeiling:
-    "https://images.unsplash.com/photo-1755194359207-8e2b1861389e?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=80&w=900",
+    "https://images.unsplash.com/photo-1755194359207-8e2b1861389e?crop=entropy&cs=srgb&fm=jpg&ixlib=rb-4.1.0&q=90&w=1600",
 };
 
 /* ── ArtCollageBackground ─────────────────────────────────────────────────── */
@@ -719,11 +719,9 @@ export default function HomePage() {
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/1200x/8a/a3/a9/8aa3a927f9ef80ae6931f12c9397e851.jpg"
+          bg="https://i.pinimg.com/1200x/62/2c/61/622c61e55290e40789b6ac52221e1a28.jpg"
           title="مجتمع حُجّة"
           icon="🏘"
-          bgPos="0% center"
-          extraOverlay={{ background: "linear-gradient(to left, rgba(5,0,0,1) 0%, rgba(5,0,0,0.97) 25%, rgba(5,0,0,0.6) 50%, rgba(5,0,0,0) 70%)" }}
         >
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
             <p style={{ ...ST.body, margin:0 }}>
