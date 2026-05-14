@@ -1649,7 +1649,7 @@ async def import_questions(
         raise HTTPException(422, f"خطأ في قراءة الملف: {str(e)[:200]}")
 
     if not questions:
-        raise HTTPException(400, "لم يتم العثور على أسئلة صالحة — تأكد من الملف أو جرب تعليمات مختلفة")
+        raise HTTPException(400, "لم يتم العثور على أسئلة صالحة — تأكد من الملف، أو تحقق من /api/admin/debug/ai لتشخيص مفاتيح AI")
 
     await db.pending_questions.insert_many(questions)
     await log_admin_action(admin, "رفع ملف أسئلة", "أسئلة معلقة", filename,
@@ -3752,6 +3752,56 @@ async def seed_letter_categories(_: dict = Depends(get_super_admin)):
 # ══════════════════════════════════════════════════════════════════════════════
 # ADMIN LOGS  (Super Admin only)
 # ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.get("/admin/debug/ai")
+async def debug_ai_keys(admin: dict = Depends(get_admin)):
+    """Quick diagnostic: test every AI key configured on this server."""
+    results = {}
+
+    # 1. Check env vars
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
+    gemini_key     = os.environ.get("GEMINI_API_KEY", "")
+    results["env"] = {
+        "OPENROUTER_API_KEY": f"{'set (' + openrouter_key[:8] + '...)' if openrouter_key else 'NOT SET'}",
+        "GEMINI_API_KEY":     f"{'set (' + gemini_key[:8] + '...)' if gemini_key else 'NOT SET'}",
+    }
+
+    # 2. Test OpenRouter text
+    if openrouter_key:
+        for model in ("google/gemini-2.5-flash-preview", "google/gemini-flash-1.5"):
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    r = await client.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"},
+                        json={"model": model, "messages": [{"role": "user", "content": "قل: مرحبا"}]},
+                    )
+                results[f"openrouter_{model}"] = {
+                    "status": r.status_code,
+                    "ok": r.status_code == 200,
+                    "response": r.text[:300] if r.status_code != 200 else r.json()["choices"][0]["message"]["content"][:100],
+                }
+            except Exception as e:
+                results[f"openrouter_{model}"] = {"status": "exception", "ok": False, "response": str(e)[:200]}
+
+    # 3. Test Gemini
+    if gemini_key:
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}",
+                    json={"contents": [{"parts": [{"text": "قل: مرحبا"}]}]},
+                )
+            results["gemini_direct"] = {
+                "status": r.status_code,
+                "ok": r.status_code == 200,
+                "response": r.text[:300] if r.status_code != 200 else r.json()["candidates"][0]["content"]["parts"][0]["text"][:100],
+            }
+        except Exception as e:
+            results["gemini_direct"] = {"status": "exception", "ok": False, "response": str(e)[:200]}
+
+    return results
+
 
 @api_router.get("/admin/logs")
 async def get_admin_logs(limit: int = 50, skip: int = 0, admin: dict = Depends(get_super_admin)):
