@@ -1079,7 +1079,7 @@ async def restore_question(q_id: str, admin: dict = Depends(get_admin)):
 @api_router.patch("/questions/{q_id}/autosave")
 async def autosave_question(q_id: str, body: dict, admin: dict = Depends(get_admin)):
     """Quick auto-save for question field changes — no full validation required."""
-    allowed_fields = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty"}
+    allowed_fields = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id"}
     updates = {k: v for k, v in body.items() if k in allowed_fields}
     if not updates:
         return {"saved": False, "reason": "no valid fields"}

@@ -521,11 +521,13 @@ function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, o
   const [editText, setEditText]       = useState(false);
   const [editAnswer, setEditAnswer]   = useState(false);
   const [editDiff, setEditDiff]       = useState(false);
+  const [editCat, setEditCat]         = useState(false);
   const [editImg, setEditImg]         = useState(false);
   const [editAnsImg, setEditAnsImg]   = useState(false);
   const [tmpText, setTmpText]         = useState(q.text || "");
   const [tmpAnswer, setTmpAnswer]     = useState(q.answer || "");
   const [tmpDiff, setTmpDiff]         = useState(q.difficulty || 300);
+  const [tmpCatId, setTmpCatId]       = useState(q.category_id || "");
   const [tmpImg, setTmpImg]           = useState(q.image_url || "");
   const [tmpAnsImg, setTmpAnsImg]     = useState(q.answer_image_url || "");
   const [saving, setSaving]           = useState(false);
@@ -610,10 +612,30 @@ function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, o
                   {dc.label} · {q.difficulty} ✎
                 </span>
               )}
-              {cat && (
-                <span style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-                               color: MUTED, fontSize: "0.72rem", fontWeight: 700, padding: "2px 9px", borderRadius: "9999px" }}>
-                  {cat.icon || ""} {cat.name}
+              {editCat ? (
+                <select
+                  value={tmpCatId}
+                  onChange={e => setTmpCatId(e.target.value)}
+                  onBlur={() => { if (tmpCatId) saveField("category_id", tmpCatId); setEditCat(false); }}
+                  autoFocus
+                  style={{ background: "rgba(30,20,40,0.95)", border: "1px solid rgba(139,92,246,0.5)", color: "#c4b5fd",
+                           fontSize: "0.72rem", fontWeight: 700, padding: "2px 8px", borderRadius: "9999px",
+                           outline: "none", cursor: "pointer" }}
+                >
+                  <option value="">اختر فئة...</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.icon || ""} {c.name}</option>)}
+                </select>
+              ) : (
+                <span
+                  onClick={() => { setTmpCatId(q.category_id || ""); setEditCat(true); }}
+                  title="انقر لتغيير الفئة"
+                  style={{ background: cat ? "rgba(139,92,246,0.12)" : "rgba(239,68,68,0.12)",
+                           border: `1px solid ${cat ? "rgba(139,92,246,0.35)" : "rgba(239,68,68,0.4)"}`,
+                           color: cat ? "#c4b5fd" : "#f87171",
+                           fontSize: "0.72rem", fontWeight: 700, padding: "2px 9px", borderRadius: "9999px",
+                           cursor: "pointer", whiteSpace: "nowrap" }}
+                >
+                  {cat ? `${cat.icon || ""} ${cat.name}` : "⚠️ بدون فئة"} ✎
                 </span>
               )}
             </div>
@@ -1025,6 +1047,7 @@ export default function AdminDashboard() {
     setImportUploading(true);
     const fd = new FormData();
     fd.append("file", file);
+    if (selectedCat) fd.append("category_id", selectedCat);
     if (importCustomPrompt.trim()) fd.append("extra_prompt", importCustomPrompt.trim());
     try {
       const { data } = await axios.post(`${API}/admin/questions/import`, fd, {
