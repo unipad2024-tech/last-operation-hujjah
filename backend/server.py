@@ -1350,163 +1350,211 @@ async def _extract_image_questions(content: bytes, mime: str, category_id: str) 
 
 
 async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_prompt: str = "") -> list:
-    """Render each PDF page as image → send to OpenRouter/Gemini Vision → extract MCQ questions."""
-    use_openrouter = bool(os.environ.get("OPENROUTER_API_KEY"))
-    use_gemini     = bool(os.environ.get("GEMINI_API_KEY"))
-    if not use_openrouter and not use_gemini:
-        raise HTTPException(500, "لا يوجد AI API key مضبوط")
+    """Render each PDF page as JPEG → Vision AI → extract MCQ questions with cropped images."""
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
+    gemini_key     = os.environ.get("GEMINI_API_KEY", "")
+    if not openrouter_key and not gemini_key:
+        raise HTTPException(500, "لا يوجد AI API key — أضف OPENROUTER_API_KEY أو GEMINI_API_KEY")
     try:
-        import fitz  # pymupdf
+        import fitz
     except ImportError:
-        raise HTTPException(500, "pymupdf غير مثبّت")
+        raise HTTPException(500, "pymupdf غير مثبّت — أضف pymupdf لـ requirements.txt")
     import base64
-
-    doc      = fitz.open(file_path)
-    all_qs   = []
-    seen     = set()
-    ts       = datetime.now(timezone.utc).isoformat()
-    extra    = f"\nتعليمات إضافية: {extra_prompt}\n" if extra_prompt else ""
-
-    page_prompt = f"""أنت خبير في استخراج الأسئلة من تجميعات اختبار التحصيل الدراسي السعودي.
-
-هذه صورة لصفحة من ملف PDF. استخرج كل الأسئلة الموجودة فيها.
-
-قواعد صارمة:
-1. استخرج نص كل سؤال كاملاً كما هو دون تعديل
-2. استخرج نصوص الخيارات الأربعة كاملةً (لا تكتفِ بالحروف أ/ب/ج/د)
-3. الإجابة الصحيحة: نص الخيار الصحيح كاملاً — الإجابات غالباً في أسفل الصفحة أو في مفتاح منفصل
-4. إذا لم تجد الإجابة، اختر الأصح منطقياً
-5. الصعوبة: 300=حفظ مباشر | 600=فهم وربط | 900=تفكير عميق ومركّب
-6. bbox: موضع السؤال في الصفحة كنسبة مئوية (0.0=أعلى الصفحة، 1.0=أسفلها). top=أول سطر من السؤال، bottom=آخر سطر من آخر خيار. مثال: سؤال في منتصف الصفحة top=0.45 bottom=0.62
-7. لا تتجاهل أي سؤال
-{extra}
-أعد JSON array فقط بدون أي نص آخر أو markdown:
-[{{"text":"نص السؤال؟","choices":["الخيار أ","الخيار ب","الخيار ج","الخيار د"],"answer":"نص الإجابة الصحيحة","difficulty":300,"bbox":{{"top":0.05,"bottom":0.28}}}}]"""
-
     from PIL import Image as PILImage
     import io as _io
 
-    def _extract_json_array(raw: str):
-        """Extract JSON array from AI response, handles markdown fences."""
-        # Strip markdown code fences
-        raw = re.sub(r'```(?:json)?\s*', '', raw).strip()
-        raw = re.sub(r'```\s*$', '', raw).strip()
-        # Find array
-        m = re.search(r'\[.*\]', raw, re.DOTALL)
+    # ── helpers ────────────────────────────────────────────────────────────────
+
+    def _parse_json(raw: str):
+        """Extract JSON array from any AI response format."""
+        # Remove markdown code fences
+        cleaned = re.sub(r'```(?:json)?', '', raw, flags=re.IGNORECASE).replace('```', '').strip()
+        m = re.search(r'\[.*\]', cleaned, re.DOTALL)
         if not m:
             return None
-        text = m.group()
-        try:
-            return json.loads(text)
-        except Exception:
+        fragment = m.group()
+        for attempt in (fragment, fragment.replace("'", '"')):
             try:
-                return json.loads(text.replace("'", '"'))
+                result = json.loads(attempt)
+                if isinstance(result, list):
+                    return result
             except Exception:
-                return None
+                pass
+        return None
 
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        # 1.5x scale = ~108 DPI — readable + smaller API payload
-        mat  = fitz.Matrix(1.5, 1.5)
-        pix  = page.get_pixmap(matrix=mat)
-        img_w, img_h = pix.width, pix.height
+    async def _vision_call(img_b64: str) -> str:
+        """Call Vision API: OpenRouter primary → Gemini direct fallback."""
+        prompt = f"""أنت خبير في استخراج الأسئلة من تجميعات اختبار التحصيل الدراسي السعودي.
 
-        # JPEG for API (smaller), PNG bytes kept for cropping
-        pil_page = PILImage.open(_io.BytesIO(pix.tobytes("png")))
-        jpeg_buf = _io.BytesIO()
-        pil_page.save(jpeg_buf, format="JPEG", quality=82, optimize=True)
-        jpeg_bytes = jpeg_buf.getvalue()
-        img_b64 = base64.standard_b64encode(jpeg_bytes).decode()
-        logger.info(f"Page {page_num+1}: {img_w}x{img_h}px, JPEG {len(jpeg_bytes)//1024}KB")
+هذه صورة صفحة من PDF. استخرج كل الأسئلة منها.
+قواعد:
+1. نص السؤال كاملاً بدون تعديل
+2. نصوص الخيارات الأربعة كاملةً (لا تكتفِ بالأحرف)
+3. الإجابة الصحيحة: نص الخيار كاملاً (لو مفتاح الإجابة في أسفل الصفحة استخدمه)
+4. الصعوبة: 300=سهل 600=متوسط 900=صعب
+5. bbox: موضع السؤال كنسبة (0.0=أعلى، 1.0=أسفل) — top=بداية السؤال, bottom=نهاية آخر خيار
+{f"تعليمات: {extra_prompt}" if extra_prompt else ""}
+أعد JSON array فقط، بدون أي نص أو markdown حوله:
+[{{"text":"...","choices":["...","...","...","..."],"answer":"...","difficulty":300,"bbox":{{"top":0.10,"bottom":0.35}}}}]"""
 
-        try:
-            if use_openrouter:
-                raw = await _openrouter_vision(img_b64, "image/jpeg", page_prompt)
-            else:
-                gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        # Try OpenRouter with two models
+        if openrouter_key:
+            for model in ("google/gemini-2.5-flash-preview", "google/gemini-flash-1.5"):
+                try:
+                    async with httpx.AsyncClient(timeout=120) as client:
+                        r = await client.post(
+                            "https://openrouter.ai/api/v1/chat/completions",
+                            headers={"Authorization": f"Bearer {openrouter_key}",
+                                     "Content-Type": "application/json"},
+                            json={"model": model, "messages": [{"role": "user", "content": [
+                                {"type": "image_url",
+                                 "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                                {"type": "text", "text": prompt},
+                            ]}]},
+                        )
+                    if r.status_code == 200:
+                        content = r.json()["choices"][0]["message"]["content"]
+                        logger.info(f"  OpenRouter {model} OK")
+                        return content
+                    else:
+                        logger.warning(f"  OpenRouter {model} → {r.status_code}: {r.text[:200]}")
+                except Exception as e:
+                    logger.warning(f"  OpenRouter {model} exception: {e}")
+
+        # Gemini direct fallback
+        if gemini_key:
+            try:
                 payload = {"contents": [{"parts": [
                     {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
-                    {"text": page_prompt},
+                    {"text": prompt},
                 ]}]}
-                async with httpx.AsyncClient(timeout=90) as client:
+                async with httpx.AsyncClient(timeout=120) as client:
                     r = await client.post(
                         f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}",
                         json=payload,
                     )
-                if r.status_code != 200:
-                    logger.warning(f"Gemini PDF page {page_num+1} error: {r.text[:300]}")
-                    continue
-                raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception as e:
-            logger.warning(f"PDF page {page_num+1} vision failed: {e}")
-            continue
+                if r.status_code == 200:
+                    data = r.json()
+                    content = data["candidates"][0]["content"]["parts"][0]["text"]
+                    logger.info("  Gemini direct OK")
+                    return content
+                else:
+                    logger.warning(f"  Gemini direct → {r.status_code}: {r.text[:200]}")
+            except Exception as e:
+                logger.warning(f"  Gemini direct exception: {e}")
 
-        logger.info(f"Page {page_num+1} raw response (first 300): {raw[:300]}")
-        items = _extract_json_array(raw)
-        if not items:
-            logger.warning(f"Page {page_num+1}: no valid JSON array found in response")
-            continue
+        raise RuntimeError("All Vision AI backends failed for this page")
 
-        # Filter valid questions first, then assign bbox fallbacks
-        valid_items = []
-        for item in items:
-            text = str(item.get("text") or "").strip()
-            ans  = str(item.get("answer") or "").strip()
-            if text and ans and text not in seen:
-                valid_items.append(item)
-                seen.add(text)
+    # ── main loop ──────────────────────────────────────────────────────────────
 
-        n_items = len(valid_items)
-        for idx, item in enumerate(valid_items):
-            text    = str(item.get("text") or "").strip()
-            ans     = str(item.get("answer") or "").strip()
-            choices = item.get("choices")
+    doc    = fitz.open(file_path)
+    all_qs = []
+    seen   = set()
+    ts     = datetime.now(timezone.utc).isoformat()
+    page_errors = []
 
-            # ── Crop question image ──────────────────────────────────────
-            image_url = ""
-            try:
-                bbox = item.get("bbox") or {}
-                top_pct    = float(bbox.get("top",    -1))
-                bottom_pct = float(bbox.get("bottom", -1))
+    for page_num in range(len(doc)):
+        try:
+            page = doc[page_num]
+            pix  = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), colorspace=fitz.csRGB)
+            img_w, img_h = pix.width, pix.height
 
-                # Fallback: divide page equally if bbox missing or looks like defaults
-                if top_pct < 0 or bottom_pct < 0 or top_pct >= bottom_pct:
-                    slice_h = 1.0 / max(n_items, 1)
-                    top_pct    = idx * slice_h
-                    bottom_pct = (idx + 1) * slice_h
+            # Convert page to JPEG bytes (RGB guaranteed by colorspace=fitz.csRGB)
+            pil_page = PILImage.frombytes("RGB", (img_w, img_h), pix.samples)
+            jpeg_buf = _io.BytesIO()
+            pil_page.save(jpeg_buf, format="JPEG", quality=80, optimize=True)
+            jpeg_bytes = jpeg_buf.getvalue()
+            img_b64 = base64.standard_b64encode(jpeg_bytes).decode()
+            logger.info(f"Page {page_num+1}/{len(doc)}: {img_w}×{img_h}px JPEG={len(jpeg_bytes)//1024}KB")
 
-                # Add padding (2% top, 2% bottom)
-                top_px    = max(0,      int((top_pct    - 0.02) * img_h))
-                bottom_px = min(img_h,  int((bottom_pct + 0.02) * img_h))
+            raw = await _vision_call(img_b64)
+            logger.info(f"Page {page_num+1} response[:200]: {raw[:200]}")
 
-                if bottom_px - top_px > 30:
-                    crop = pil_page.crop((0, top_px, img_w, bottom_px))
-                    crop_buf = _io.BytesIO()
-                    crop.save(crop_buf, format="JPEG", quality=85, optimize=True)
-                    b64 = base64.standard_b64encode(crop_buf.getvalue()).decode()
-                    image_url = f"data:image/jpeg;base64,{b64}"
-                    logger.info(f"  Cropped q{idx+1}: top={top_pct:.2f} bottom={bottom_pct:.2f} size={len(b64)//1024}KB")
-            except Exception as ce:
-                logger.warning(f"Crop failed page {page_num+1} q{idx+1}: {ce}")
+            items = _parse_json(raw)
+            if not items:
+                logger.warning(f"Page {page_num+1}: JSON parse failed. raw[:400]={raw[:400]}")
+                page_errors.append(f"page {page_num+1}: no JSON")
+                continue
 
-            all_qs.append({
-                "id":               str(uuid.uuid4()),
-                "category_id":      category_id,
-                "difficulty":       _parse_difficulty(item.get("difficulty", 300)),
-                "text":             text,
-                "answer":           ans,
-                "choices":          choices if isinstance(choices, list) else [],
-                "image_url":        image_url,
-                "answer_image_url": "",
-                "image_query":      "",
-                "question_type":    "image" if image_url else "text",
-                "is_experimental":  False,
-                "status":           "pending",
-                "created_at":       ts,
-            })
+            # Collect valid items
+            valid = []
+            for item in items:
+                t = str(item.get("text") or "").strip()
+                a = str(item.get("answer") or "").strip()
+                if t and a and t not in seen:
+                    seen.add(t)
+                    valid.append(item)
+
+            n = len(valid)
+            logger.info(f"Page {page_num+1}: {n} valid questions")
+
+            for idx, item in enumerate(valid):
+                text    = str(item.get("text") or "").strip()
+                ans     = str(item.get("answer") or "").strip()
+                choices = item.get("choices")
+                if isinstance(choices, list):
+                    choices = [str(c).strip() for c in choices if str(c).strip()]
+                else:
+                    choices = []
+
+                # ── Crop image ──────────────────────────────────────────
+                image_url = ""
+                try:
+                    bbox = item.get("bbox") or {}
+                    try:
+                        top_pct    = float(bbox.get("top",    -1))
+                        bottom_pct = float(bbox.get("bottom", -1))
+                    except (TypeError, ValueError):
+                        top_pct = bottom_pct = -1
+
+                    # Use equal-slice fallback if bbox invalid/missing
+                    if not (0.0 <= top_pct < bottom_pct <= 1.0):
+                        slice_h    = 1.0 / max(n, 1)
+                        top_pct    = idx * slice_h
+                        bottom_pct = (idx + 1) * slice_h
+
+                    # 2% padding
+                    top_px    = max(0,      int((top_pct    - 0.02) * img_h))
+                    bottom_px = min(img_h,  int((bottom_pct + 0.02) * img_h))
+
+                    if bottom_px - top_px > 40:
+                        crop     = pil_page.crop((0, top_px, img_w, bottom_px))
+                        cbuf     = _io.BytesIO()
+                        crop.save(cbuf, format="JPEG", quality=85, optimize=True)
+                        b64      = base64.standard_b64encode(cbuf.getvalue()).decode()
+                        image_url = f"data:image/jpeg;base64,{b64}"
+                        logger.info(f"  q{idx+1} crop OK top={top_pct:.2f} bot={bottom_pct:.2f} {len(b64)//1024}KB")
+                except Exception as ce:
+                    logger.warning(f"  q{idx+1} crop failed: {ce}")
+
+                all_qs.append({
+                    "id":               str(uuid.uuid4()),
+                    "category_id":      category_id,
+                    "difficulty":       _parse_difficulty(item.get("difficulty", 300)),
+                    "text":             text,
+                    "answer":           ans,
+                    "choices":          choices,
+                    "image_url":        image_url,
+                    "answer_image_url": "",
+                    "image_query":      "",
+                    "question_type":    "image" if image_url else "text",
+                    "is_experimental":  False,
+                    "status":           "pending",
+                    "created_at":       ts,
+                })
+
+        except Exception as page_err:
+            logger.warning(f"Page {page_num+1} failed: {page_err}")
+            page_errors.append(f"page {page_num+1}: {page_err}")
 
     doc.close()
-    logger.info(f"PDF Vision extracted {len(all_qs)} questions")
+    logger.info(f"PDF Vision done: {len(all_qs)} questions, {len(page_errors)} page errors")
+
+    if not all_qs:
+        # Raise with details so caller can fall back to text extraction
+        detail = "; ".join(page_errors[:3]) if page_errors else "لم تُعثر على أسئلة"
+        raise RuntimeError(f"Vision extraction returned 0 questions. Errors: {detail}")
+
     return all_qs
 
 
@@ -1566,10 +1614,14 @@ async def import_questions(
             try:
                 questions = await _claude_analyze_pdf_vision(tmp_path, category_id, extra_prompt)
             except Exception as e:
-                logger.warning(f"Claude PDF Vision failed ({e}), falling back to text extraction")
+                logger.warning(f"PDF Vision failed: {e}")
+                logger.info("Falling back to text extraction...")
                 pdf_text = await _extract_pdf_text(content)
                 if not pdf_text.strip():
-                    raise HTTPException(422, "لم يُمكن استخراج نص من الـ PDF")
+                    raise HTTPException(422,
+                        f"فشل استخراج الأسئلة بالـ Vision ({str(e)[:120]}) "
+                        "وتعذّر استخراج نص من الـ PDF (قد يكون ملف مسح ضوئي). "
+                        "تأكد من وجود OPENROUTER_API_KEY أو GEMINI_API_KEY في الـ environment.")
                 questions = await _extract_via_ai(pdf_text, category_id, extra_prompt, ai_engine)
             finally:
                 if os.path.exists(tmp_path): os.remove(tmp_path)
