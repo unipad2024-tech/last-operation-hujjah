@@ -587,12 +587,40 @@ export default function HomePage() {
       ═══════════════════════════════════════════════════════════════ */}
       <style>{`
         @keyframes hj-bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(6px)} }
-        .hj-fade { opacity:0; transform:translateY(32px); transition:opacity 0.7s ease, transform 0.7s ease; }
+        .hj-fade {
+          opacity: 0;
+          transform: translateY(48px) scale(0.97);
+          filter: blur(4px);
+          transition: opacity 0.85s cubic-bezier(0.22,1,0.36,1),
+                      transform 0.85s cubic-bezier(0.22,1,0.36,1),
+                      filter 0.85s cubic-bezier(0.22,1,0.36,1);
+        }
+        .hj-section {
+          position: relative;
+          overflow: hidden;
+        }
+        .hj-section::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          height: 120px;
+          background: linear-gradient(to bottom, rgba(10,1,1,0.85), transparent);
+          z-index: 2;
+          pointer-events: none;
+        }
+        .hj-section::after {
+          content: '';
+          position: absolute;
+          bottom: 0; left: 0; right: 0;
+          height: 120px;
+          background: linear-gradient(to top, rgba(10,1,1,0.85), transparent);
+          z-index: 2;
+          pointer-events: none;
+        }
       `}</style>
 
       <div ref={aboutRef} style={{ position: "relative", zIndex: 10 }}>
 
-        <div style={{ height: 3, background: "linear-gradient(90deg, transparent, rgba(241,225,148,0.35), transparent)" }} />
 
         <BgSection
           bg="https://i.pinimg.com/1200x/64/18/cb/6418cb92ddf7922e669e4ce4db23848e.jpg"
@@ -680,6 +708,8 @@ export default function HomePage() {
           bg="https://i.pinimg.com/1200x/8a/a3/a9/8aa3a927f9ef80ae6931f12c9397e851.jpg"
           title="مجتمع حُجّة"
           icon="🏘"
+          bgPos="center 20%"
+          extraOverlay={{ background: "radial-gradient(ellipse 60% 60% at 50% 50%, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 100%)" }}
         >
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
             <p style={{ ...ST.body, margin:0 }}>
@@ -705,15 +735,22 @@ export default function HomePage() {
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/1200x/62/2c/61/622c61e55290e40789b6ac52221e1a28.jpg"
+          bg="https://i.pinimg.com/1200x/69/89/86/69898606c334b187437b881e1780106e.jpg"
           title="نظام البطولة"
           icon="🏆"
         >
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:24 }}>
             <p style={{ ...ST.body, margin:0 }}>
               العب بنظام بطولة كامل وتحدى أكثر من فريق
-              <br/><br/>
-              <span style={{ color:"rgba(241,225,148,0.55)" }}>يفضل يكون الفريق شخصين لزيادة الحماس 🔥</span>
+            </p>
+            <p style={{
+              fontFamily:"Cairo,sans-serif", fontWeight:800,
+              fontSize:"clamp(1rem,1.8vw,1.2rem)",
+              color:"#F1E194",
+              textShadow:"0 0 24px rgba(241,225,148,0.5), 0 2px 8px rgba(0,0,0,0.9)",
+              margin:0,
+            }}>
+              يفضل يكون الفريق شخصين لزيادة الحماس 🔥
             </p>
             <NavBtn to="/mode" label="شجرة البطولة" />
           </div>
@@ -741,46 +778,40 @@ const ST = {
   },
 };
 
-function BgSection({ bg, title, icon, children, accent }) {
+function BgSection({ bg, title, icon, children, accent, bgPos, extraOverlay }) {
   const ref = useFadeIn();
   return (
-    <section
-      style={{
-        position: "relative",
-        minHeight: "60vh",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        overflow: "hidden",
-      }}
+    <section className="hj-section"
+      style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}
     >
       {/* background image */}
       <div style={{
         position: "absolute", inset: 0,
         backgroundImage: `url("${bg}")`,
-        backgroundSize: "cover", backgroundPosition: "center",
+        backgroundSize: "cover",
+        backgroundPosition: bgPos || "center",
+        transform: "scale(1.04)",
       }} />
-      {/* dark overlay */}
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "rgba(0,0,0,0.58)",
-      }} />
-      {/* content — no box, just text over image */}
+      {/* base overlay */}
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.56)" }} />
+      {/* extra overlay to hide unwanted elements (e.g. cross/watermark) */}
+      {extraOverlay && <div style={{ position: "absolute", inset: 0, ...extraOverlay }} />}
+      {/* content */}
       <div
         ref={ref}
         className="hj-fade"
         style={{
-          position: "relative", zIndex: 1,
+          position: "relative", zIndex: 3,
           maxWidth: 640, width: "100%",
-          padding: "clamp(56px,9vw,96px) clamp(28px,6vw,56px)",
-          textAlign: "center",
-          direction: "rtl",
+          padding: "clamp(72px,10vw,110px) clamp(28px,6vw,56px)",
+          textAlign: "center", direction: "rtl",
         }}
       >
-        <div style={{ fontSize: "2.6rem", marginBottom: 16, filter: "drop-shadow(0 0 16px rgba(241,225,148,0.5))" }}>{icon}</div>
+        <div style={{ fontSize: "2.6rem", marginBottom: 16, filter: "drop-shadow(0 0 20px rgba(241,225,148,0.6))" }}>{icon}</div>
         <h2 style={{
           fontFamily: "Cairo, sans-serif", fontWeight: 900, margin: "0 0 22px",
-          fontSize: "clamp(1.7rem,3.2vw,2.4rem)",
-          color: "#F1E194",
-          textShadow: "0 0 40px rgba(241,225,148,0.45), 0 2px 12px rgba(0,0,0,0.9)",
+          fontSize: "clamp(1.7rem,3.2vw,2.4rem)", color: "#F1E194",
+          textShadow: "0 0 40px rgba(241,225,148,0.45), 0 2px 12px rgba(0,0,0,0.95)",
         }}>{title}</h2>
         {children}
       </div>
@@ -815,20 +846,16 @@ function NavBtn({ to, label }) {
 function ContactSection() {
   const ref = useFadeIn();
   return (
-    <section
-      style={{
-        position: "relative",
-        minHeight: "50vh",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        overflow: "hidden",
-      }}
+    <section className="hj-section"
+      style={{ minHeight: "50vh", display: "flex", alignItems: "center", justifyContent: "center" }}
     >
       <div style={{
         position: "absolute", inset: 0,
-        backgroundImage: `url("https://i.pinimg.com/1200x/26/07/c4/2607c45b88c624a06a54265fdbfaddb3.jpg")`,
+        backgroundImage: `url("https://i.pinimg.com/736x/d1/d6/a6/d1d6a699164ce6bc38a291bd4b0909c9.jpg")`,
         backgroundSize: "cover", backgroundPosition: "center",
+        transform: "scale(1.04)",
       }} />
-      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.62)" }} />
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.60)" }} />
       <div
         ref={ref}
         className="hj-fade"
