@@ -72,7 +72,8 @@ async def _obsidian_put(path: str, content: str):
             await client.put(
                 f"{OBSIDIAN_HOST}/vault/{encoded}",
                 headers={"Authorization": f"Bearer {OBSIDIAN_API_KEY}",
-                         "Content-Type": "text/markdown"},
+                         "Content-Type": "text/markdown; charset=utf-8",
+                         "ngrok-skip-browser-warning": "true"},
                 content=content.encode("utf-8"),
             )
     except Exception:
@@ -87,7 +88,8 @@ async def _obsidian_get(path: str) -> str:
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(
                 f"{OBSIDIAN_HOST}/vault/{encoded}",
-                headers={"Authorization": f"Bearer {OBSIDIAN_API_KEY}"},
+                headers={"Authorization": f"Bearer {OBSIDIAN_API_KEY}",
+                         "ngrok-skip-browser-warning": "true"},
             )
             return r.text if r.status_code == 200 else ""
     except Exception:
