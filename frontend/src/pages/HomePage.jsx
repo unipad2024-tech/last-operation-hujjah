@@ -715,8 +715,8 @@ export default function HomePage() {
           bg="https://i.pinimg.com/1200x/8a/a3/a9/8aa3a927f9ef80ae6931f12c9397e851.jpg"
           title="مجتمع حُجّة"
           icon="🏘"
-          bgPos="center 30%"
-          extraOverlay={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.15) 100%)" }}
+          bgPos="25% center"
+          extraOverlay={{ background: "linear-gradient(to left, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.1) 50%)" }}
         >
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
             <p style={{ ...ST.body, margin:0 }}>
