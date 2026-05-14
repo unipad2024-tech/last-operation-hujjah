@@ -1369,24 +1369,30 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
 
     page_prompt = f"""أنت خبير في استخراج الأسئلة من تجميعات اختبار التحصيل الدراسي السعودي.
 
-هذه صفحة من ملف PDF. استخرج كل الأسئلة الموجودة في هذه الصفحة.
+هذه صورة لصفحة من ملف PDF. استخرج كل الأسئلة الموجودة فيها.
 
 قواعد صارمة:
 1. استخرج نص كل سؤال كاملاً كما هو دون تعديل
 2. استخرج نصوص الخيارات الأربعة كاملةً (لا تكتفِ بالحروف أ/ب/ج/د)
-3. الإجابة الصحيحة: اكتب نص الخيار الصحيح كاملاً — الإجابات غالباً في أسفل الصفحة أو في مفتاح منفصل
+3. الإجابة الصحيحة: نص الخيار الصحيح كاملاً — الإجابات غالباً في أسفل الصفحة أو في مفتاح منفصل
 4. إذا لم تجد الإجابة، اختر الأصح منطقياً
 5. الصعوبة: 300=حفظ مباشر | 600=فهم وربط | 900=تفكير عميق ومركّب
-6. لا تتجاهل أي سؤال حتى لو كان جزئياً
+6. bbox: نسبة موضع السؤال في الصفحة (0.0 = أعلى، 1.0 = أسفل). top=بداية السؤال، bottom=نهاية آخر خيار قبل الإجابة
+7. لا تتجاهل أي سؤال
 {extra}
-أعد JSON array فقط بدون أي نص خارجه:
-[{{"text":"نص السؤال كاملاً؟","choices":["نص الخيار أ","نص الخيار ب","نص الخيار ج","نص الخيار د"],"answer":"نص الإجابة الصحيحة كاملاً","difficulty":300}}]"""
+أعد JSON array فقط:
+[{{"text":"نص السؤال؟","choices":["الخيار أ","الخيار ب","الخيار ج","الخيار د"],"answer":"نص الإجابة الصحيحة","difficulty":300,"bbox":{{"top":0.05,"bottom":0.22}}}}]"""
+
+    from PIL import Image as PILImage
+    import io as _io
 
     for page_num in range(len(doc)):
         page = doc[page_num]
-        mat  = fitz.Matrix(150 / 72, 150 / 72)   # 150 DPI
+        mat  = fitz.Matrix(2.0, 2.0)   # 144 DPI — جودة عالية للقص
         pix  = page.get_pixmap(matrix=mat)
-        img_b64 = base64.standard_b64encode(pix.tobytes("png")).decode()
+        png_bytes = pix.tobytes("png")
+        img_b64   = base64.standard_b64encode(png_bytes).decode()
+        img_w, img_h = pix.width, pix.height
 
         try:
             if use_openrouter:
@@ -1421,6 +1427,9 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
             except Exception:
                 continue
 
+        # Load page image once for cropping
+        pil_img = PILImage.open(_io.BytesIO(png_bytes))
+
         for item in items:
             text = str(item.get("text") or "").strip()
             ans  = str(item.get("answer") or "").strip()
@@ -1428,6 +1437,28 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
                 continue
             seen.add(text)
             choices = item.get("choices")
+
+            # ── Crop question image from page ──────────────────────────────
+            image_url = ""
+            try:
+                bbox = item.get("bbox") or {}
+                top_pct    = float(bbox.get("top",    0.0))
+                bottom_pct = float(bbox.get("bottom", 1.0))
+                # Clamp + add small padding
+                top_px    = max(0,      int((top_pct    - 0.01) * img_h))
+                bottom_px = min(img_h,  int((bottom_pct + 0.01) * img_h))
+                if bottom_px - top_px > 20:
+                    crop = pil_img.crop((0, top_px, img_w, bottom_px))
+                    crop_buf = _io.BytesIO()
+                    crop.save(crop_buf, format="PNG", optimize=True)
+                    crop_buf.seek(0)
+                    img_filename = f"q_{uuid.uuid4().hex[:12]}.png"
+                    img_path = UPLOAD_DIR / img_filename
+                    img_path.write_bytes(crop_buf.read())
+                    image_url = f"/api/static/uploads/{img_filename}"
+            except Exception as ce:
+                logger.warning(f"Crop failed page {page_num+1}: {ce}")
+
             all_qs.append({
                 "id":               str(uuid.uuid4()),
                 "category_id":      category_id,
@@ -1435,17 +1466,17 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
                 "text":             text,
                 "answer":           ans,
                 "choices":          choices if isinstance(choices, list) else [],
-                "image_url":        "",
+                "image_url":        image_url,
                 "answer_image_url": "",
                 "image_query":      "",
-                "question_type":    "text",
+                "question_type":    "image" if image_url else "text",
                 "is_experimental":  False,
                 "status":           "pending",
                 "created_at":       ts,
             })
 
     doc.close()
-    logger.info(f"Claude PDF Vision extracted {len(all_qs)} questions from {len(doc)} pages")
+    logger.info(f"PDF Vision extracted {len(all_qs)} questions")
     return all_qs
 
 
