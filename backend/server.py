@@ -1377,30 +1377,55 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
 3. الإجابة الصحيحة: نص الخيار الصحيح كاملاً — الإجابات غالباً في أسفل الصفحة أو في مفتاح منفصل
 4. إذا لم تجد الإجابة، اختر الأصح منطقياً
 5. الصعوبة: 300=حفظ مباشر | 600=فهم وربط | 900=تفكير عميق ومركّب
-6. bbox: نسبة موضع السؤال في الصفحة (0.0 = أعلى، 1.0 = أسفل). top=بداية السؤال، bottom=نهاية آخر خيار قبل الإجابة
+6. bbox: موضع السؤال في الصفحة كنسبة مئوية (0.0=أعلى الصفحة، 1.0=أسفلها). top=أول سطر من السؤال، bottom=آخر سطر من آخر خيار. مثال: سؤال في منتصف الصفحة top=0.45 bottom=0.62
 7. لا تتجاهل أي سؤال
 {extra}
-أعد JSON array فقط:
-[{{"text":"نص السؤال؟","choices":["الخيار أ","الخيار ب","الخيار ج","الخيار د"],"answer":"نص الإجابة الصحيحة","difficulty":300,"bbox":{{"top":0.05,"bottom":0.22}}}}]"""
+أعد JSON array فقط بدون أي نص آخر أو markdown:
+[{{"text":"نص السؤال؟","choices":["الخيار أ","الخيار ب","الخيار ج","الخيار د"],"answer":"نص الإجابة الصحيحة","difficulty":300,"bbox":{{"top":0.05,"bottom":0.28}}}}]"""
 
     from PIL import Image as PILImage
     import io as _io
 
+    def _extract_json_array(raw: str):
+        """Extract JSON array from AI response, handles markdown fences."""
+        # Strip markdown code fences
+        raw = re.sub(r'```(?:json)?\s*', '', raw).strip()
+        raw = re.sub(r'```\s*$', '', raw).strip()
+        # Find array
+        m = re.search(r'\[.*\]', raw, re.DOTALL)
+        if not m:
+            return None
+        text = m.group()
+        try:
+            return json.loads(text)
+        except Exception:
+            try:
+                return json.loads(text.replace("'", '"'))
+            except Exception:
+                return None
+
     for page_num in range(len(doc)):
         page = doc[page_num]
-        mat  = fitz.Matrix(2.0, 2.0)   # 144 DPI — جودة عالية للقص
+        # 1.5x scale = ~108 DPI — readable + smaller API payload
+        mat  = fitz.Matrix(1.5, 1.5)
         pix  = page.get_pixmap(matrix=mat)
-        png_bytes = pix.tobytes("png")
-        img_b64   = base64.standard_b64encode(png_bytes).decode()
         img_w, img_h = pix.width, pix.height
+
+        # JPEG for API (smaller), PNG bytes kept for cropping
+        pil_page = PILImage.open(_io.BytesIO(pix.tobytes("png")))
+        jpeg_buf = _io.BytesIO()
+        pil_page.save(jpeg_buf, format="JPEG", quality=82, optimize=True)
+        jpeg_bytes = jpeg_buf.getvalue()
+        img_b64 = base64.standard_b64encode(jpeg_bytes).decode()
+        logger.info(f"Page {page_num+1}: {img_w}x{img_h}px, JPEG {len(jpeg_bytes)//1024}KB")
 
         try:
             if use_openrouter:
-                raw = await _openrouter_vision(img_b64, "image/png", page_prompt)
+                raw = await _openrouter_vision(img_b64, "image/jpeg", page_prompt)
             else:
                 gemini_key = os.environ.get("GEMINI_API_KEY", "")
                 payload = {"contents": [{"parts": [
-                    {"inline_data": {"mime_type": "image/png", "data": img_b64}},
+                    {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
                     {"text": page_prompt},
                 ]}]}
                 async with httpx.AsyncClient(timeout=90) as client:
@@ -1409,55 +1434,63 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
                         json=payload,
                     )
                 if r.status_code != 200:
-                    logger.warning(f"Gemini PDF page {page_num+1} error: {r.text[:200]}")
+                    logger.warning(f"Gemini PDF page {page_num+1} error: {r.text[:300]}")
                     continue
                 raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
         except Exception as e:
             logger.warning(f"PDF page {page_num+1} vision failed: {e}")
             continue
 
-        m = re.search(r'\[.*\]', raw, re.DOTALL)
-        if not m:
+        logger.info(f"Page {page_num+1} raw response (first 300): {raw[:300]}")
+        items = _extract_json_array(raw)
+        if not items:
+            logger.warning(f"Page {page_num+1}: no valid JSON array found in response")
             continue
-        try:
-            items = json.loads(m.group())
-        except Exception:
-            try:
-                items = json.loads(m.group().replace("'", '"'))
-            except Exception:
-                continue
 
-        # Load page image once for cropping
-        pil_img = PILImage.open(_io.BytesIO(png_bytes))
-
+        # Filter valid questions first, then assign bbox fallbacks
+        valid_items = []
         for item in items:
             text = str(item.get("text") or "").strip()
             ans  = str(item.get("answer") or "").strip()
-            if not text or not ans or text in seen:
-                continue
-            seen.add(text)
+            if text and ans and text not in seen:
+                valid_items.append(item)
+                seen.add(text)
+
+        n_items = len(valid_items)
+        for idx, item in enumerate(valid_items):
+            text    = str(item.get("text") or "").strip()
+            ans     = str(item.get("answer") or "").strip()
             choices = item.get("choices")
 
-            # ── Crop question image from page ──────────────────────────────
+            # ── Crop question image ──────────────────────────────────────
             image_url = ""
             try:
                 bbox = item.get("bbox") or {}
-                top_pct    = float(bbox.get("top",    0.0))
-                bottom_pct = float(bbox.get("bottom", 1.0))
-                # Clamp + add small padding
-                top_px    = max(0,      int((top_pct    - 0.01) * img_h))
-                bottom_px = min(img_h,  int((bottom_pct + 0.01) * img_h))
-                if bottom_px - top_px > 20:
-                    crop = pil_img.crop((0, top_px, img_w, bottom_px))
+                top_pct    = float(bbox.get("top",    -1))
+                bottom_pct = float(bbox.get("bottom", -1))
+
+                # Fallback: divide page equally if bbox missing or looks like defaults
+                if top_pct < 0 or bottom_pct < 0 or top_pct >= bottom_pct:
+                    slice_h = 1.0 / max(n_items, 1)
+                    top_pct    = idx * slice_h
+                    bottom_pct = (idx + 1) * slice_h
+
+                # Add padding (2% top, 2% bottom)
+                top_px    = max(0,      int((top_pct    - 0.02) * img_h))
+                bottom_px = min(img_h,  int((bottom_pct + 0.02) * img_h))
+
+                if bottom_px - top_px > 30:
+                    crop = pil_page.crop((0, top_px, img_w, bottom_px))
                     crop_buf = _io.BytesIO()
-                    crop.save(crop_buf, format="PNG", optimize=True)
+                    crop.save(crop_buf, format="JPEG", quality=90, optimize=True)
                     crop_buf.seek(0)
-                    img_filename = f"q_{uuid.uuid4().hex[:12]}.png"
+                    img_filename = f"q_{uuid.uuid4().hex[:12]}.jpg"
                     img_path = UPLOAD_DIR / img_filename
                     img_path.write_bytes(crop_buf.read())
                     image_url = f"/api/static/uploads/{img_filename}"
+                    logger.info(f"  Cropped q{idx+1}: top={top_pct:.2f} bottom={bottom_pct:.2f} → {img_filename}")
             except Exception as ce:
-                logger.warning(f"Crop failed page {page_num+1}: {ce}")
+                logger.warning(f"Crop failed page {page_num+1} q{idx+1}: {ce}")
 
             all_qs.append({
                 "id":               str(uuid.uuid4()),
