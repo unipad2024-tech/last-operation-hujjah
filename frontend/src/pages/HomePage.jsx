@@ -9,7 +9,14 @@ function useFadeIn() {
     const el = ref.current;
     if (!el) return;
     const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { el.style.opacity="1"; el.style.transform="translateY(0)"; obs.unobserve(el); } },
+      ([e]) => {
+        if (e.isIntersecting) {
+          el.style.opacity = "1";
+          el.style.transform = "translateY(0) scale(1)";
+          el.style.filter = "blur(0)";
+          obs.unobserve(el);
+        }
+      },
       { threshold: 0.10 }
     );
     obs.observe(el);
@@ -589,11 +596,11 @@ export default function HomePage() {
         @keyframes hj-bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(6px)} }
         .hj-fade {
           opacity: 0;
-          transform: translateY(48px) scale(0.97);
-          filter: blur(4px);
-          transition: opacity 0.85s cubic-bezier(0.22,1,0.36,1),
-                      transform 0.85s cubic-bezier(0.22,1,0.36,1),
-                      filter 0.85s cubic-bezier(0.22,1,0.36,1);
+          transform: translateY(36px) scale(0.98);
+          filter: blur(2px);
+          transition: opacity 0.75s cubic-bezier(0.22,1,0.36,1),
+                      transform 0.75s cubic-bezier(0.22,1,0.36,1),
+                      filter 0.75s cubic-bezier(0.22,1,0.36,1);
         }
         .hj-section {
           position: relative;
