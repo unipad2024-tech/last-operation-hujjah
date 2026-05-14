@@ -1482,13 +1482,10 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
                 if bottom_px - top_px > 30:
                     crop = pil_page.crop((0, top_px, img_w, bottom_px))
                     crop_buf = _io.BytesIO()
-                    crop.save(crop_buf, format="JPEG", quality=90, optimize=True)
-                    crop_buf.seek(0)
-                    img_filename = f"q_{uuid.uuid4().hex[:12]}.jpg"
-                    img_path = UPLOAD_DIR / img_filename
-                    img_path.write_bytes(crop_buf.read())
-                    image_url = f"/api/static/uploads/{img_filename}"
-                    logger.info(f"  Cropped q{idx+1}: top={top_pct:.2f} bottom={bottom_pct:.2f} → {img_filename}")
+                    crop.save(crop_buf, format="JPEG", quality=85, optimize=True)
+                    b64 = base64.standard_b64encode(crop_buf.getvalue()).decode()
+                    image_url = f"data:image/jpeg;base64,{b64}"
+                    logger.info(f"  Cropped q{idx+1}: top={top_pct:.2f} bottom={bottom_pct:.2f} size={len(b64)//1024}KB")
             except Exception as ce:
                 logger.warning(f"Crop failed page {page_num+1} q{idx+1}: {ce}")
 
