@@ -56,8 +56,103 @@ PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID',  'APP_ID_1774162201273')
 PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '3c3c6b0e-ccac-352d-acc9-de094ab2117c')
 EMAIL_USER      = os.environ.get('EMAIL_USER', '')
 EMAIL_PASS      = os.environ.get('EMAIL_PASS', '')
-UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', 'p0r_782hncvFkWs7zw7gxNjnJ-H3rmSuqymDCZ1DUho')
-ALGORITHM       = "HS256"
+UNSPLASH_API_KEY  = os.environ.get('UNSPLASH_API_KEY', 'p0r_782hncvFkWs7zw7gxNjnJ-H3rmSuqymDCZ1DUho')
+OBSIDIAN_API_KEY  = os.environ.get('OBSIDIAN_API_KEY', '')
+OBSIDIAN_HOST     = os.environ.get('OBSIDIAN_HOST', 'http://127.0.0.1:27123')
+ALGORITHM         = "HS256"
+
+# ─── Obsidian sync helpers ────────────────────────────────────────────────────
+async def _obsidian_put(path: str, content: str):
+    """PUT a note to Obsidian vault. Silently skips if not configured."""
+    if not OBSIDIAN_API_KEY:
+        return
+    encoded = path.replace(" ", "%20")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.put(
+                f"{OBSIDIAN_HOST}/vault/{encoded}",
+                headers={"Authorization": f"Bearer {OBSIDIAN_API_KEY}",
+                         "Content-Type": "text/markdown"},
+                content=content.encode("utf-8"),
+            )
+    except Exception:
+        pass  # Obsidian sync is best-effort — never block the main request
+
+async def _obsidian_get(path: str) -> str:
+    """GET note content from Obsidian vault. Returns empty string on failure."""
+    if not OBSIDIAN_API_KEY:
+        return ""
+    encoded = path.replace(" ", "%20")
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(
+                f"{OBSIDIAN_HOST}/vault/{encoded}",
+                headers={"Authorization": f"Bearer {OBSIDIAN_API_KEY}"},
+            )
+            return r.text if r.status_code == 200 else ""
+    except Exception:
+        return ""
+
+async def obsidian_sync_category(cat: dict):
+    """Create/update a category note under Game Project/Questions/{name}.md"""
+    name    = cat.get("name", "")
+    icon    = cat.get("icon", "")
+    desc    = cat.get("description", "")
+    color   = cat.get("color", "#5B0E14")
+    premium = "✅ مميزة" if cat.get("is_premium") else "مجانية"
+    path    = f"Game Project/Questions/{name}.md"
+    content = f"""# {icon} {name}
+
+**الوصف:** {desc}
+**اللون:** `{color}`
+**النوع:** {premium}
+**الكود:** `{cat.get('code', '')}`
+**تاريخ الإنشاء:** {cat.get('created_at', '')[:10]}
+
+---
+
+## الأسئلة
+"""
+    # Fetch existing note to preserve questions already listed
+    existing = await _obsidian_get(path)
+    if "## الأسئلة" in existing:
+        questions_section = existing.split("## الأسئلة", 1)[1]
+        content += questions_section
+    await _obsidian_put(path, content)
+
+async def obsidian_sync_question(q: dict, cat_name: str):
+    """Append a new question to its category note in Obsidian."""
+    difficulty_label = {300: "🟢 سهل", 600: "🟡 متوسط", 900: "🔴 صعب"}.get(q.get("difficulty"), str(q.get("difficulty")))
+    path    = f"Game Project/Questions/{cat_name}.md"
+    existing = await _obsidian_get(path)
+    new_entry = f"""
+### ❓ {q.get('text', '')}
+- **الإجابة:** {q.get('answer', '')}
+- **الصعوبة:** {difficulty_label}
+- **النوع:** {q.get('question_type', 'text')}
+- **ID:** `{q.get('id', '')}`
+"""
+    if existing:
+        content = existing + new_entry
+    else:
+        content = f"# {cat_name}\n\n## الأسئلة\n" + new_entry
+    await _obsidian_put(path, content)
+
+async def obsidian_update_memory(action: str, detail: str):
+    """Append a line to Memory.md under آخر التغييرات."""
+    path     = "Game Project/Memory.md"
+    existing = await _obsidian_get(path)
+    today    = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
+    new_line = f"\n- **{today}** — {action}: {detail}"
+    if "## 📅 آخر التغييرات" in existing:
+        content = existing.replace(
+            "## 📅 آخر التغييرات",
+            "## 📅 آخر التغييرات" + new_line,
+            1,
+        )
+    else:
+        content = existing + f"\n\n## 📅 آخر التغييرات\n{new_line}"
+    await _obsidian_put(path, content)
 
 # ─── MongoDB-backed rate limiter (works across all uvicorn workers) ─────────
 async def _rate_check(key: str, max_calls: int = 10, window_secs: int = 300):
@@ -871,12 +966,14 @@ async def _generate_unique_category_code() -> str:
             return code
 
 @api_router.post("/categories")
-async def create_category(body: CategoryCreate, admin: dict = Depends(get_admin)):
+async def create_category(body: CategoryCreate, background_tasks: BackgroundTasks, admin: dict = Depends(get_admin)):
     cat = Category(**body.model_dump())
     cat.code = await _generate_unique_category_code()
     await db.categories.insert_one(cat.model_dump())
     _invalidate_category_cache()
     await log_admin_action(admin, "إضافة", "فئة", cat.name)
+    background_tasks.add_task(obsidian_sync_category, cat.model_dump())
+    background_tasks.add_task(obsidian_update_memory, "إضافة فئة", cat.name)
     return cat
 
 @api_router.put("/categories/{cat_id}")
@@ -923,12 +1020,14 @@ async def get_question(q_id: str):
     return q
 
 @api_router.post("/questions")
-async def create_question(body: QuestionCreate, admin: dict = Depends(get_admin)):
+async def create_question(body: QuestionCreate, background_tasks: BackgroundTasks, admin: dict = Depends(get_admin)):
     q = Question(**body.model_dump())
     await db.questions.insert_one(q.model_dump())
     cat = await db.categories.find_one({"id": body.category_id}, {"_id": 0, "name": 1})
     cat_name = cat.get("name", body.category_id) if cat else body.category_id
     await log_admin_action(admin, "إضافة", "سؤال", q.text[:60], f"فئة: {cat_name} | صعوبة: {body.difficulty}")
+    background_tasks.add_task(obsidian_sync_question, q.model_dump(), cat_name)
+    background_tasks.add_task(obsidian_update_memory, "إضافة سؤال", f"{q.text[:50]} — فئة: {cat_name}")
     return q
 
 @api_router.put("/questions/{q_id}")
