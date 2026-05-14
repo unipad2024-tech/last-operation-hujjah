@@ -1192,12 +1192,14 @@ async def _parse_ai_response_to_questions(raw: str, category_id: str, ai_engine:
         # Skip answers that are just choice letters
         if ans.strip() in {"أ", "ب", "ج", "د", "A", "B", "C", "D", "1", "2", "3", "4"}:
             continue
+        choices = r.get("choices")
         questions.append({
             "id":               str(uuid.uuid4()),
             "category_id":      str(r.get("category_id") or category_id).strip() or category_id,
             "difficulty":       _parse_difficulty(r.get("difficulty", 300)),
             "text":             text,
             "answer":           ans,
+            "choices":          choices if isinstance(choices, list) else [],
             "image_url":        str(r.get("image_url") or "").strip(),
             "answer_image_url": "",
             "image_query":      str(r.get("image_query") or "").strip(),
@@ -1276,29 +1278,43 @@ async def _extract_docx_text(content: bytes) -> str:
 
 
 async def _extract_image_questions(content: bytes, mime: str, category_id: str) -> list:
-    """Use Gemini Vision to extract questions from an image."""
+    """Use Claude Vision to extract questions from an image."""
     import base64
-    img_b64 = base64.b64encode(content).decode()
-    GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
-    if not GEMINI_KEY:
+    img_b64 = base64.standard_b64encode(content).decode()
+    api_key = os.environ.get("CLAUDE_API_KEY", "")
+    if not api_key:
         return []
+
+    prompt = """أنت خبير في استخراج الأسئلة من صور المناهج الدراسية العربية.
+استخرج جميع الأسئلة من هذه الصورة.
+قواعد:
+1. استخرج نص كل سؤال كاملاً
+2. استخرج الخيارات (أ/ب/ج/د أو A/B/C/D) إن وُجدت
+3. استخرج الإجابة الصحيحة كنص كامل (لا تكتب الحرف فقط)
+4. قيّم الصعوبة: 300=سهل 600=متوسط 900=صعب
+
+أعد JSON array فقط بدون أي نص آخر:
+[{"text":"السؤال كاملاً؟","choices":["نص أ","نص ب","نص ج","نص د"],"answer":"نص الإجابة الصحيحة","difficulty":300}]"""
+
     payload = {
-        "contents": [{
-            "parts": [
-                {"text": "استخرج الأسئلة والإجابات من هذه الصورة. أعد JSON array فقط: [{\"text\":\"السؤال؟\",\"answer\":\"الإجابة\",\"difficulty\":300,\"image_query\":\"search term\"}]"},
-                {"inline_data": {"mime_type": mime, "data": img_b64}},
-            ]
-        }]
+        "model": "claude-opus-4-6",
+        "max_tokens": 4000,
+        "messages": [{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": mime, "data": img_b64}},
+            {"type": "text",  "text": prompt},
+        ]}],
     }
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}",
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(
+            "https://api.anthropic.com/v1/messages",
             json=payload,
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
         )
-    if resp.status_code != 200:
+    if r.status_code != 200:
+        logger.warning(f"Claude Vision image error: {r.text[:200]}")
         return []
-    raw = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-    m = re.search(r'\[.*?\]', raw, re.DOTALL)
+    raw = r.json()["content"][0]["text"]
+    m = re.search(r'\[.*\]', raw, re.DOTALL)
     if not m:
         return []
     try:
@@ -1308,25 +1324,127 @@ async def _extract_image_questions(content: bytes, mime: str, category_id: str) 
 
     ts = datetime.now(timezone.utc).isoformat()
     questions = []
-    for r in items:
-        text = str(r.get("text") or "").strip()
-        ans  = str(r.get("answer") or "").strip()
-        if text and ans:
-            questions.append({
+    for item in items:
+        text = str(item.get("text") or "").strip()
+        ans  = str(item.get("answer") or "").strip()
+        if not text or not ans:
+            continue
+        questions.append({
+            "id":               str(uuid.uuid4()),
+            "category_id":      category_id,
+            "difficulty":       _parse_difficulty(item.get("difficulty", 300)),
+            "text":             text,
+            "answer":           ans,
+            "choices":          item.get("choices") if isinstance(item.get("choices"), list) else [],
+            "image_url":        "",
+            "answer_image_url": "",
+            "image_query":      "",
+            "question_type":    "text",
+            "is_experimental":  False,
+            "status":           "pending",
+            "created_at":       ts,
+        })
+    return questions
+
+
+async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_prompt: str = "") -> list:
+    """Render each PDF page as image → send to Claude Vision → extract MCQ questions."""
+    api_key = os.environ.get("CLAUDE_API_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "CLAUDE_API_KEY غير مضبوط")
+    try:
+        import fitz  # pymupdf
+    except ImportError:
+        raise HTTPException(500, "pymupdf غير مثبّت")
+    import base64
+
+    doc      = fitz.open(file_path)
+    all_qs   = []
+    seen     = set()
+    ts       = datetime.now(timezone.utc).isoformat()
+    extra    = f"\nتعليمات إضافية: {extra_prompt}\n" if extra_prompt else ""
+
+    page_prompt = f"""أنت خبير في استخراج الأسئلة من تجميعات اختبار التحصيل الدراسي السعودي.
+
+هذه صفحة من ملف PDF. استخرج كل الأسئلة الموجودة في هذه الصفحة.
+
+قواعد صارمة:
+1. استخرج نص كل سؤال كاملاً كما هو دون تعديل
+2. استخرج نصوص الخيارات الأربعة كاملةً (لا تكتفِ بالحروف أ/ب/ج/د)
+3. الإجابة الصحيحة: اكتب نص الخيار الصحيح كاملاً — الإجابات غالباً في أسفل الصفحة أو في مفتاح منفصل
+4. إذا لم تجد الإجابة، اختر الأصح منطقياً
+5. الصعوبة: 300=حفظ مباشر | 600=فهم وربط | 900=تفكير عميق ومركّب
+6. لا تتجاهل أي سؤال حتى لو كان جزئياً
+{extra}
+أعد JSON array فقط بدون أي نص خارجه:
+[{{"text":"نص السؤال كاملاً؟","choices":["نص الخيار أ","نص الخيار ب","نص الخيار ج","نص الخيار د"],"answer":"نص الإجابة الصحيحة كاملاً","difficulty":300}}]"""
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        mat  = fitz.Matrix(150 / 72, 150 / 72)   # 150 DPI
+        pix  = page.get_pixmap(matrix=mat)
+        img_b64 = base64.standard_b64encode(pix.tobytes("png")).decode()
+
+        payload = {
+            "model":      "claude-opus-4-6",
+            "max_tokens": 4000,
+            "messages": [{"role": "user", "content": [
+                {"type": "image",  "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                {"type": "text",   "text": page_prompt},
+            ]}],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=90) as client:
+                r = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    json=payload,
+                    headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                )
+            if r.status_code != 200:
+                logger.warning(f"Claude PDF page {page_num+1} error: {r.text[:200]}")
+                continue
+            raw = r.json()["content"][0]["text"]
+        except Exception as e:
+            logger.warning(f"Claude PDF page {page_num+1} failed: {e}")
+            continue
+
+        m = re.search(r'\[.*\]', raw, re.DOTALL)
+        if not m:
+            continue
+        try:
+            items = json.loads(m.group())
+        except Exception:
+            try:
+                items = json.loads(m.group().replace("'", '"'))
+            except Exception:
+                continue
+
+        for item in items:
+            text = str(item.get("text") or "").strip()
+            ans  = str(item.get("answer") or "").strip()
+            if not text or not ans or text in seen:
+                continue
+            seen.add(text)
+            choices = item.get("choices")
+            all_qs.append({
                 "id":               str(uuid.uuid4()),
                 "category_id":      category_id,
-                "difficulty":       _parse_difficulty(r.get("difficulty", 300)),
+                "difficulty":       _parse_difficulty(item.get("difficulty", 300)),
                 "text":             text,
                 "answer":           ans,
+                "choices":          choices if isinstance(choices, list) else [],
                 "image_url":        "",
                 "answer_image_url": "",
-                "image_query":      str(r.get("image_query") or "").strip(),
+                "image_query":      "",
                 "question_type":    "text",
                 "is_experimental":  False,
                 "status":           "pending",
                 "created_at":       ts,
             })
-    return questions
+
+    doc.close()
+    logger.info(f"Claude PDF Vision extracted {len(all_qs)} questions from {len(doc)} pages")
+    return all_qs
 
 
 @api_router.post("/admin/questions/import")
@@ -1378,17 +1496,14 @@ async def import_questions(
             text_content = content.decode("utf-8", errors="replace")
             questions = await _extract_via_ai(text_content, category_id, extra_prompt, ai_engine)
         elif filename.endswith(".pdf"):
-            # Try Gemini file analysis first, fallback to text extraction
+            # Claude Vision: render each page as image → extract MCQ questions
             tmp_path = f"/tmp/upload_{uuid.uuid4().hex}.pdf"
             with open(tmp_path, "wb") as f:
                 f.write(content)
             try:
-                prompt = AI_EXTRACT_PROMPT + (f"\nتعليمات: {extra_prompt}\n" if extra_prompt else "")
-                prompt += "\nاستخرج جميع الأسئلة من هذا الملف — لا تتجاهل أي سؤال."
-                raw = await _gemini_analyze_file(tmp_path, "application/pdf", prompt)
-                questions = await _parse_ai_response_to_questions(raw, category_id, ai_engine, extra_prompt)
-            except Exception:
-                # Fallback: text extraction
+                questions = await _claude_analyze_pdf_vision(tmp_path, category_id, extra_prompt)
+            except Exception as e:
+                logger.warning(f"Claude PDF Vision failed ({e}), falling back to text extraction")
                 pdf_text = await _extract_pdf_text(content)
                 if not pdf_text.strip():
                     raise HTTPException(422, "لم يُمكن استخراج نص من الـ PDF")
@@ -3177,21 +3292,12 @@ async def _ai_generate(prompt: str, prefer: str = "claude") -> str:
     return await _gemini_generate(prompt)
 
 
-async def _gemini_analyze_file(file_path: str, mime_type: str, prompt: str) -> str:
-    """Use Gemini with file attachment (supports PDF, images, etc.)."""
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        raise HTTPException(500, "GEMINI_API_KEY غير مضبوط")
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"hujjah-file-{uuid.uuid4().hex[:8]}",
-        system_message="أنت مساعد ذكي لتحليل الملفات واستخراج الأسئلة."
-    ).with_model("gemini", "gemini-2.5-flash")
-    file_obj = FileContentWithMimeType(file_path=file_path, mime_type=mime_type)
-    msg = UserMessage(text=prompt, file_contents=[file_obj])
-    resp = await chat.send_message(msg)
-    return resp if isinstance(resp, str) else str(resp)
+async def _claude_analyze_file_text(file_path: str, prompt: str) -> str:
+    """Send a text-extracted file content to Claude for processing."""
+    with open(file_path, "rb") as f:
+        content = f.read()
+    text = content.decode("utf-8", errors="replace")
+    return await _claude_generate(prompt + "\n\n" + text[:15000])
 
 
 async def _fetch_unsplash_image(query: str) -> str:
