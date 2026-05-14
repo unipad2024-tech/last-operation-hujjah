@@ -1278,10 +1278,10 @@ async def _extract_docx_text(content: bytes) -> str:
 
 
 async def _extract_image_questions(content: bytes, mime: str, category_id: str) -> list:
-    """Use Claude Vision to extract questions from an image."""
+    """Use Gemini Vision to extract questions from an image."""
     import base64
     img_b64 = base64.standard_b64encode(content).decode()
-    api_key = os.environ.get("CLAUDE_API_KEY", "")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         return []
 
@@ -1297,23 +1297,20 @@ async def _extract_image_questions(content: bytes, mime: str, category_id: str) 
 [{"text":"السؤال كاملاً؟","choices":["نص أ","نص ب","نص ج","نص د"],"answer":"نص الإجابة الصحيحة","difficulty":300}]"""
 
     payload = {
-        "model": "claude-opus-4-6",
-        "max_tokens": 4000,
-        "messages": [{"role": "user", "content": [
-            {"type": "image", "source": {"type": "base64", "media_type": mime, "data": img_b64}},
-            {"type": "text",  "text": prompt},
-        ]}],
+        "contents": [{"parts": [
+            {"inline_data": {"mime_type": mime, "data": img_b64}},
+            {"text": prompt},
+        ]}]
     }
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(
-            "https://api.anthropic.com/v1/messages",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}",
             json=payload,
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
         )
     if r.status_code != 200:
-        logger.warning(f"Claude Vision image error: {r.text[:200]}")
+        logger.warning(f"Gemini Vision image error: {r.text[:200]}")
         return []
-    raw = r.json()["content"][0]["text"]
+    raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
     m = re.search(r'\[.*\]', raw, re.DOTALL)
     if not m:
         return []
@@ -1348,10 +1345,10 @@ async def _extract_image_questions(content: bytes, mime: str, category_id: str) 
 
 
 async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_prompt: str = "") -> list:
-    """Render each PDF page as image → send to Claude Vision → extract MCQ questions."""
-    api_key = os.environ.get("CLAUDE_API_KEY", "")
+    """Render each PDF page as image → send to Gemini Vision → extract MCQ questions."""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
-        raise HTTPException(500, "CLAUDE_API_KEY غير مضبوط")
+        raise HTTPException(500, "GEMINI_API_KEY غير مضبوط")
     try:
         import fitz  # pymupdf
     except ImportError:
@@ -1386,26 +1383,23 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
         img_b64 = base64.standard_b64encode(pix.tobytes("png")).decode()
 
         payload = {
-            "model":      "claude-opus-4-6",
-            "max_tokens": 4000,
-            "messages": [{"role": "user", "content": [
-                {"type": "image",  "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
-                {"type": "text",   "text": page_prompt},
-            ]}],
+            "contents": [{"parts": [
+                {"inline_data": {"mime_type": "image/png", "data": img_b64}},
+                {"text": page_prompt},
+            ]}]
         }
         try:
             async with httpx.AsyncClient(timeout=90) as client:
                 r = await client.post(
-                    "https://api.anthropic.com/v1/messages",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}",
                     json=payload,
-                    headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
                 )
             if r.status_code != 200:
-                logger.warning(f"Claude PDF page {page_num+1} error: {r.text[:200]}")
+                logger.warning(f"Gemini PDF page {page_num+1} error: {r.text[:200]}")
                 continue
-            raw = r.json()["content"][0]["text"]
+            raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
         except Exception as e:
-            logger.warning(f"Claude PDF page {page_num+1} failed: {e}")
+            logger.warning(f"Gemini PDF page {page_num+1} failed: {e}")
             continue
 
         m = re.search(r'\[.*\]', raw, re.DOTALL)
@@ -3282,14 +3276,14 @@ async def _gemini_generate(prompt: str) -> str:
         raise HTTPException(500, "لم يُرسل Gemini استجابة نصية")
 
 
-async def _ai_generate(prompt: str, prefer: str = "claude") -> str:
-    """Try Claude first, fall back to Gemini if unavailable."""
-    if prefer == "claude" and os.environ.get("CLAUDE_API_KEY"):
+async def _ai_generate(prompt: str, prefer: str = "gemini") -> str:
+    """Gemini primary · Claude fallback."""
+    if os.environ.get("GEMINI_API_KEY"):
         try:
-            return await _claude_generate(prompt)
-        except Exception as ce:
-            logger.warning(f"Claude failed, falling back to Gemini: {ce}")
-    return await _gemini_generate(prompt)
+            return await _gemini_generate(prompt)
+        except Exception as ge:
+            logger.warning(f"Gemini failed, falling back to Claude: {ge}")
+    return await _claude_generate(prompt)
 
 
 async def _claude_analyze_file_text(file_path: str, prompt: str) -> str:
