@@ -601,75 +601,122 @@ export default function HomePage() {
           accent
         >
           <p style={ST.body}>
-            حُجّة لعبة تنافسية تُلعب بين فريقين، كل فريق يختار فئات من اهتمامه، ويبدأون يتنافسون سؤال بسؤال.
+            لعبة تنافسية بين فريقين، تختار فئات، تجاوب، وتثبت إنك الأذكى
             <br/><br/>
-            الفريق اللي يجاوب أكثر ويجمع أعلى نقاط هو الفائز — بسيطة بالفكرة، لكن حماسها ما يوصف.
+            <span style={{ color:"rgba(241,225,148,0.55)", fontSize:"0.9em" }}>فريقين يتنافسان</span>
           </p>
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/736x/36/00/6c/36006c18d0ceba3b6484e719baf61ab4.jpg"
+          bg="https://i.pinimg.com/1200x/b2/84/70/b2847051be2fd729ff772802e96b6174.jpg"
           title="كيف تلعب؟"
           icon="🎮"
         >
-          <p style={ST.body}>
-            ١. كل فريق يختار ٣ فئات من قائمة الفئات المتاحة<br/><br/>
-            ٢. بعدها تبدأ اللعبة — كل فريق بالدور يختار سؤالاً بقيمة (٣٠٠ / ٦٠٠ / ٩٠٠)<br/><br/>
-            ٣. المضيف يقرأ السؤال والفريق يجاوب — إذا صح تضاف النقاط<br/><br/>
-            ٤. في النهاية، الفريق الأعلى نقاطاً يفوز
-          </p>
+          <div style={{ ...ST.body, display:"flex", flexDirection:"column", gap:14, alignItems:"center" }}>
+            {[
+              { n:"١", t:"كل فريق يختار 3 فئات" },
+              { n:"٢", t:"تختار سؤال (300 / 600 / 900)" },
+              { n:"٣", t:"تجاوب وتكسب نقاط" },
+              { n:"٤", t:"الفريق الأعلى يفوز" },
+            ].map(s => (
+              <div key={s.n} style={{ display:"flex", alignItems:"center", gap:14, direction:"rtl" }}>
+                <span style={{ color:"#F1E194", fontWeight:900, fontSize:"1.1em", minWidth:24 }}>{s.n}.</span>
+                <span>{s.t}</span>
+              </div>
+            ))}
+            <span style={{ color:"rgba(241,225,148,0.45)", fontSize:"0.85em", marginTop:8 }}>البورد 3×2</span>
+          </div>
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/736x/56/97/94/56979465960904af524d8f19895c2615.jpg"
+          bg="https://i.pinimg.com/1200x/fd/23/bc/fd23bc26a6a6b35c412b25441e947478.jpg"
           title="نظام النقاط"
           icon="🏅"
         >
-          <p style={ST.body}>
-            كل سؤال له قيمة من ٣ مستويات:<br/><br/>
-            <span style={{ color:"#6ee7b7", fontWeight:800 }}>٣٠٠ — سهل</span> &nbsp;|&nbsp;
-            <span style={{ color:"#fcd34d", fontWeight:800 }}>٦٠٠ — متوسط</span> &nbsp;|&nbsp;
-            <span style={{ color:"#f87171", fontWeight:800 }}>٩٠٠ — صعب</span>
-            <br/><br/>
-            كلما زادت القيمة، زادت الصعوبة — لكن المكافأة تستاهل. القرار لك: تلعبها آمن أو تخاطر وتحاول تقلب النتيجة؟
-          </p>
+          <div style={{ ...ST.body, display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
+            <p style={{ margin:0, fontStyle:"italic", color:"rgba(241,225,148,0.65)" }}>
+              "كل سؤال له قيمة، كل ما كانت أعلى كان أصعب… وأربح"
+            </p>
+            <div style={{ display:"flex", gap:24, justifyContent:"center" }}>
+              <div style={{ textAlign:"center" }}>
+                <div style={{ color:"#6ee7b7", fontWeight:900, fontSize:"1.6em" }}>300</div>
+                <div style={{ color:"rgba(241,225,148,0.5)", fontSize:"0.8em" }}>سهل</div>
+              </div>
+              <div style={{ textAlign:"center" }}>
+                <div style={{ color:"#fcd34d", fontWeight:900, fontSize:"1.6em" }}>600</div>
+                <div style={{ color:"rgba(241,225,148,0.5)", fontSize:"0.8em" }}>متوسط</div>
+              </div>
+              <div style={{ textAlign:"center" }}>
+                <div style={{ color:"#f87171", fontWeight:900, fontSize:"1.6em" }}>900</div>
+                <div style={{ color:"rgba(241,225,148,0.5)", fontSize:"0.8em" }}>صعب</div>
+              </div>
+            </div>
+          </div>
         </BgSection>
 
         <BgSection
           bg="https://i.pinimg.com/1200x/da/90/57/da9057e1d03b0ca70434ca358b2cf483.jpg"
           title="وسائل المساعدة"
-          icon="⚡"
+          icon="⚡️"
         >
-          <p style={ST.body}>
-            عندك ٣ وسائل مساعدة تقدر تستخدمها خلال اللعبة — كل وسيلة مرة وحدة بس:<br/><br/>
-            🔄 <span style={{ color:"#F1E194", fontWeight:700 }}>تغيير السؤال</span> — استبدل السؤال الحالي بسؤال جديد من نفس الفئة<br/><br/>
-            ⚡ <span style={{ color:"#F1E194", fontWeight:700 }}>مضاعفة النقاط</span> — إذا جاوبت صح، تاخذ ضعف النقاط<br/><br/>
-            ⏱️ <span style={{ color:"#F1E194", fontWeight:700 }}>زيادة الوقت</span> — ضاعف وقت الإجابة إذا احتجت تفكر أكثر
-          </p>
+          <div style={{ ...ST.body, display:"flex", flexDirection:"column", alignItems:"center", gap:16 }}>
+            {[
+              { icon:"🔄", label:"تغيير السؤال" },
+              { icon:"⚡️", label:"مضاعفة النقاط" },
+              { icon:"⏱️", label:"زيادة الوقت" },
+            ].map(l => (
+              <div key={l.label} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:"1.3em" }}>{l.icon}</span>
+                <span style={{ color:"#F1E194", fontWeight:700 }}>{l.label}</span>
+              </div>
+            ))}
+            <p style={{ margin:"8px 0 0", fontStyle:"italic", color:"rgba(241,225,148,0.55)", fontSize:"0.9em" }}>
+              "استخدمها بذكاء عشان تقلب النتيجة"
+            </p>
+          </div>
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/1200x/a0/c9/f1/a0c9f12d8bc8059f13e65282eeeba1c8.jpg"
+          bg="https://i.pinimg.com/1200x/8a/a3/a9/8aa3a927f9ef80ae6931f12c9397e851.jpg"
           title="مجتمع حُجّة"
-          icon="🏘️"
+          icon="🏘"
         >
-          <p style={ST.body}>
-            مو بس تلعب — تقدر تصنع المحتوى.<br/><br/>
-            أنشئ فئاتك الخاصة بأسئلتك، أضف صور وخيارات، وبعد ما تنشر تصير متاحة لكل اللاعبين.<br/><br/>
-            ومع الوقت، الفئات الناجحة ممكن تنتشر وتكسب منها — المجتمع هو اللي يحكم.
-          </p>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
+            <p style={{ ...ST.body, margin:0 }}>
+              تقدر تنشئ فئاتك الخاصة، وتخلي غيرك يلعبها
+              <br/><br/>
+              <span style={{ color:"rgba(241,225,148,0.55)" }}>ويمكن تكسب من فئاتك مستقبلاً ✦</span>
+            </p>
+            <NavBtn to="/community" label="إنشاء فئة مجتمع" />
+          </div>
         </BgSection>
 
         <BgSection
-          bg="https://i.pinimg.com/736x/8f/a5/47/8fa54727d5f690d8bd20cd5210155c84.jpg"
+          bg="https://i.pinimg.com/1200x/02/36/21/0236215869953025793b7c1914e48a00.jpg"
           title="احفظ فئاتك"
           icon="❤️"
         >
-          <p style={ST.body}>
-            لقيت فئة عجبتك وما تبي تضيعها؟<br/><br/>
-            اضغط إعجاب وتنحفظ في قائمة مفضلتك — ترجعلها بأي وقت بدون ما تدور عليها من جديد.<br/><br/>
-            سواء فئة من المجتمع أو من الفئات الرسمية، كلها تنحفظ في مكان واحد.
-          </p>
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
+            <p style={{ ...ST.body, margin:0 }}>
+              أي فئة تعجبك تقدر تحفظها وترجع لها بأي وقت
+            </p>
+            <NavBtn to="/community" label="قائمة المفضلة" />
+          </div>
+        </BgSection>
+
+        <BgSection
+          bg="https://i.pinimg.com/1200x/62/2c/61/622c61e55290e40789b6ac52221e1a28.jpg"
+          title="نظام البطولة"
+          icon="🏆"
+        >
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20 }}>
+            <p style={{ ...ST.body, margin:0 }}>
+              العب بنظام بطولة كامل وتحدى أكثر من فريق
+              <br/><br/>
+              <span style={{ color:"rgba(241,225,148,0.55)" }}>يفضل يكون الفريق شخصين لزيادة الحماس 🔥</span>
+            </p>
+            <NavBtn to="/mode" label="شجرة البطولة" />
+          </div>
         </BgSection>
 
         {/* ── Contact ── */}
@@ -714,32 +761,54 @@ function BgSection({ bg, title, icon, children, accent }) {
       {/* dark overlay */}
       <div style={{
         position: "absolute", inset: 0,
-        background: "rgba(0,0,0,0.60)",
+        background: "rgba(0,0,0,0.58)",
       }} />
-      {/* content */}
+      {/* content — no box, just text over image */}
       <div
         ref={ref}
         className="hj-fade"
         style={{
           position: "relative", zIndex: 1,
-          maxWidth: 680, width: "100%",
-          padding: "clamp(48px,8vw,80px) clamp(24px,5vw,48px)",
+          maxWidth: 640, width: "100%",
+          padding: "clamp(56px,9vw,96px) clamp(28px,6vw,56px)",
           textAlign: "center",
           direction: "rtl",
         }}
       >
-        <div style={{ fontSize: "2.4rem", marginBottom: 14, filter: "drop-shadow(0 0 12px rgba(241,225,148,0.4))" }}>{icon}</div>
+        <div style={{ fontSize: "2.6rem", marginBottom: 16, filter: "drop-shadow(0 0 16px rgba(241,225,148,0.5))" }}>{icon}</div>
         <h2 style={{
-          fontFamily: "Cairo, sans-serif", fontWeight: 900, margin: "0 0 20px",
-          fontSize: "clamp(1.6rem,3vw,2.2rem)",
+          fontFamily: "Cairo, sans-serif", fontWeight: 900, margin: "0 0 22px",
+          fontSize: "clamp(1.7rem,3.2vw,2.4rem)",
           color: "#F1E194",
-          textShadow: accent
-            ? "0 0 40px rgba(241,225,148,0.5), 0 2px 8px rgba(0,0,0,0.8)"
-            : "0 0 20px rgba(241,225,148,0.25), 0 2px 8px rgba(0,0,0,0.8)",
+          textShadow: "0 0 40px rgba(241,225,148,0.45), 0 2px 12px rgba(0,0,0,0.9)",
         }}>{title}</h2>
         {children}
       </div>
     </section>
+  );
+}
+
+function NavBtn({ to, label }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate(to)}
+      style={{
+        background: "rgba(241,225,148,0.10)",
+        border: "1.5px solid rgba(241,225,148,0.35)",
+        color: "#F1E194",
+        fontFamily: "Cairo, sans-serif",
+        fontWeight: 800,
+        fontSize: "clamp(0.85rem,1.5vw,1rem)",
+        padding: "10px 28px",
+        borderRadius: 9999,
+        cursor: "pointer",
+        transition: "all 0.2s",
+        backdropFilter: "blur(4px)",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background="rgba(241,225,148,0.2)"; e.currentTarget.style.borderColor="rgba(241,225,148,0.65)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background="rgba(241,225,148,0.10)"; e.currentTarget.style.borderColor="rgba(241,225,148,0.35)"; }}
+    >{label}</button>
   );
 }
 
@@ -752,55 +821,51 @@ function ContactSection() {
         minHeight: "50vh",
         display: "flex", alignItems: "center", justifyContent: "center",
         overflow: "hidden",
-        background: "#06000a",
       }}
     >
       <div style={{
         position: "absolute", inset: 0,
-        background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(91,14,20,0.25) 0%, transparent 70%)",
+        backgroundImage: `url("https://i.pinimg.com/1200x/26/07/c4/2607c45b88c624a06a54265fdbfaddb3.jpg")`,
+        backgroundSize: "cover", backgroundPosition: "center",
       }} />
+      <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.62)" }} />
       <div
         ref={ref}
         className="hj-fade"
         style={{
           position: "relative", zIndex: 1,
           maxWidth: 560, width: "100%",
-          padding: "clamp(48px,8vw,80px) clamp(24px,5vw,48px)",
+          padding: "clamp(56px,9vw,96px) clamp(28px,6vw,56px)",
           textAlign: "center", direction: "rtl",
         }}
       >
-        <div style={{ fontSize: "2.4rem", marginBottom: 14 }}>📬</div>
-        <h2 style={{ fontFamily:"Cairo,sans-serif", fontWeight:900, margin:"0 0 12px", fontSize:"clamp(1.6rem,3vw,2.2rem)", color:"#F1E194" }}>تواصل معنا</h2>
-        <p style={{ ...ST.body, marginBottom: 28 }}>عندك اقتراح أو فكرة؟ تواصل معنا</p>
-        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          {[
-            { icon:"✉️", label:"البريد الإلكتروني", value:"hujjahgame@gmail.com", href:"mailto:hujjahgame@gmail.com" },
-            { icon:"📸", label:"انستقرام",           value:"hujjah.game",          href:"https://instagram.com/hujjah.game" },
-            { icon:"🎵", label:"تيك توك",            value:"huajjh.game",          href:"https://tiktok.com/@huajjh.game" },
-          ].map(({ icon, label, value, href }) => (
-            <a
-              key={value} href={href} target="_blank" rel="noopener noreferrer"
-              style={{
-                display:"flex", alignItems:"center", gap:14,
-                padding:"14px 18px", borderRadius:14,
-                background:"rgba(241,225,148,0.05)",
-                border:"1px solid rgba(241,225,148,0.12)",
-                textDecoration:"none", transition:"border-color 0.2s, background 0.2s",
-              }}
-              onMouseEnter={e=>{ e.currentTarget.style.borderColor="rgba(241,225,148,0.32)"; e.currentTarget.style.background="rgba(241,225,148,0.09)"; }}
-              onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(241,225,148,0.12)"; e.currentTarget.style.background="rgba(241,225,148,0.05)"; }}
-            >
-              <span style={{ fontSize:"1.2rem" }}>{icon}</span>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ fontSize:"0.68rem", color:"rgba(241,225,148,0.38)", fontWeight:700, fontFamily:"Cairo,sans-serif", marginBottom:2 }}>{label}</div>
-                <div style={{ fontSize:"0.9rem", color:"rgba(241,225,148,0.82)", fontWeight:700, fontFamily:"Cairo,sans-serif" }}>{value}</div>
-              </div>
-            </a>
-          ))}
+        <div style={{ fontSize: "2.6rem", marginBottom: 16, filter: "drop-shadow(0 0 16px rgba(241,225,148,0.5))" }}>📬</div>
+        <h2 style={{
+          fontFamily:"Cairo,sans-serif", fontWeight:900, margin:"0 0 16px",
+          fontSize:"clamp(1.7rem,3.2vw,2.4rem)", color:"#F1E194",
+          textShadow:"0 0 40px rgba(241,225,148,0.45), 0 2px 12px rgba(0,0,0,0.9)",
+        }}>تواصل معنا</h2>
+        <p style={{ ...ST.body, marginBottom: 28 }}>
+          عندك اقتراح أو فكرة؟ تواصل معنا
+        </p>
+        <div style={{ display:"flex", flexDirection:"column", gap:20, alignItems:"center" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"center" }}>
+            <span style={{ color:"rgba(241,225,148,0.45)", fontSize:"0.8rem", fontFamily:"Cairo,sans-serif" }}>✉️ البريد الإلكتروني</span>
+            <a href="mailto:hujjahgame@gmail.com" style={{ color:"#F1E194", fontWeight:800, fontFamily:"Cairo,sans-serif", fontSize:"1rem", textDecoration:"none", textShadow:"0 1px 8px rgba(0,0,0,0.8)" }}>hujjahgame@gmail.com</a>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"center" }}>
+            <span style={{ color:"rgba(241,225,148,0.45)", fontSize:"0.8rem", fontFamily:"Cairo,sans-serif" }}>📸 انستقرام</span>
+            <a href="https://instagram.com/hujjah.game" target="_blank" rel="noopener noreferrer" style={{ color:"#F1E194", fontWeight:800, fontFamily:"Cairo,sans-serif", fontSize:"1rem", textDecoration:"none", textShadow:"0 1px 8px rgba(0,0,0,0.8)" }}>hujjah.game</a>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"center" }}>
+            <span style={{ color:"rgba(241,225,148,0.45)", fontSize:"0.8rem", fontFamily:"Cairo,sans-serif" }}>🎵 تيك توك</span>
+            <a href="https://tiktok.com/@huajjh.game" target="_blank" rel="noopener noreferrer" style={{ color:"#F1E194", fontWeight:800, fontFamily:"Cairo,sans-serif", fontSize:"1rem", textDecoration:"none", textShadow:"0 1px 8px rgba(0,0,0,0.8)" }}>huajjh.game</a>
+          </div>
         </div>
-        <p style={{ ...ST.body, marginTop:24, color:"rgba(241,225,148,0.35)", fontSize:"0.8rem" }}>
-        تابعنا عشان تشوف أحدث الفئات والتحديات
-      </p>
+        <p style={{ ...ST.body, marginTop: 32, color:"rgba(241,225,148,0.35)", fontSize:"0.78rem" }}>
+          تابعنا عشان تشوف أحدث الفئات والتحديات
+        </p>
+      </div>
     </section>
   );
 }
