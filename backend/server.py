@@ -1411,7 +1411,7 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
                             "Content-Type": "application/json",
                         },
                         json={
-                            "model": "claude-opus-4-5",
+                            "model": "claude-sonnet-4-6",
                             "max_tokens": 4096,
                             "messages": [{"role": "user", "content": [
                                 {"type": "image", "source": {
