@@ -256,14 +256,47 @@ export default function QuestionPage() {
           box-shadow: 0 8px 24px rgba(0,0,0,0.26);
         }
 
-        /* image */
-        .question-image-wrap { display: block; flex-shrink: 0; width: 380px; max-width: 100%; align-self: center; }
-        .question-image {
-          width: min(100%,380px); aspect-ratio: 16/10; object-fit: cover; border-radius: 18px;
-          background: rgba(255,255,255,0.04); border: 1px solid rgba(255,180,80,0.16);
-          box-shadow: 0 14px 44px rgba(0,0,0,0.40); cursor: zoom-in; transition: transform 0.25s;
+        /* image — full-width hero card */
+        .question-image-wrap {
+          position: relative; width: 100%; flex-shrink: 0;
+          border-radius: 20px; overflow: hidden;
+          box-shadow: 0 18px 56px rgba(0,0,0,0.55);
         }
-        .question-image:hover { transform: scale(1.015); }
+        .question-image {
+          display: block; width: 100%; max-height: 420px;
+          object-fit: cover; object-position: center;
+          cursor: zoom-in;
+        }
+        .question-image-overlay {
+          position: absolute; inset: 0;
+          background: rgba(0,0,0,0.30);
+          pointer-events: none;
+        }
+        /* choices grid over image */
+        .question-choices-grid {
+          position: absolute; bottom: 0; left: 0; right: 0;
+          display: grid; grid-template-columns: 1fr 1fr;
+          gap: 8px; padding: 12px;
+          background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
+        }
+        .choice-card {
+          background: rgba(255,255,255,0.12);
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
+          border: 1px solid rgba(255,255,255,0.22);
+          border-radius: 12px;
+          padding: 10px 14px;
+          color: #fff;
+          font-weight: 700;
+          font-size: clamp(0.72rem, 1.4vw, 0.95rem);
+          font-family: Cairo, sans-serif;
+          text-align: right;
+          direction: rtl;
+          line-height: 1.4;
+          cursor: default;
+          transition: background 0.15s;
+        }
+        .choice-card:hover { background: rgba(255,255,255,0.22); }
 
         /* text */
         .question-text {
@@ -584,32 +617,69 @@ export default function QuestionPage() {
                     </div>
                   </div>
 
-                  {/* Question image */}
-                  {question.image_url && (
+                  {/* Question image — full-width with choices overlay */}
+                  {question.image_url ? (
                     <div className="question-image-wrap" data-testid="question-image-container">
                       {!imgLoaded && (
-                        <div style={{ width:"min(100%,380px)", aspectRatio:"16/10", borderRadius:"18px", background:"rgba(255,255,255,0.04)", border:"1.5px dashed rgba(255,180,80,0.14)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <div style={{ width:"100%", height:"260px", background:"rgba(255,255,255,0.04)", border:"1.5px dashed rgba(255,180,80,0.14)", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:"20px" }}>
                           <span style={{ color:"rgba(247,241,232,0.22)", fontSize:"0.85rem" }}>تحميل الصورة...</span>
                         </div>
                       )}
-                      <div style={{ position:"relative", display:imgLoaded?"block":"none" }}>
-                        <img src={question.image_url} alt="question" data-testid="question-image" className="question-image"
-                          onLoad={() => setImgLoaded(true)} onError={e => { e.target.style.display="none"; setImgLoaded(true); }}
-                          onClick={() => setZoomedImage(question.image_url)} />
-                        <div style={{ position:"absolute", inset:0, borderRadius:"18px", opacity:0, background:"rgba(0,0,0,0.30)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"zoom-in", transition:"opacity 0.2s" }}
-                          onMouseEnter={e => e.currentTarget.style.opacity="1"} onMouseLeave={e => e.currentTarget.style.opacity="0"}
+                      <div style={{ display: imgLoaded ? "block" : "none", position:"relative" }}>
+                        <img
+                          src={question.image_url}
+                          alt="question"
+                          data-testid="question-image"
+                          className="question-image"
+                          onLoad={() => setImgLoaded(true)}
+                          onError={e => { e.target.style.display="none"; setImgLoaded(true); }}
+                          onClick={() => setZoomedImage(question.image_url)}
+                        />
+                        {/* dim overlay */}
+                        <div className="question-image-overlay" />
+
+                        {/* Question text over image */}
+                        <div style={{
+                          position:"absolute", top:0, left:0, right:0,
+                          padding:"16px 18px",
+                          background:"linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%)",
+                        }}>
+                          <p data-testid="question-text" style={{
+                            margin:0, color:"#fff", fontWeight:900, direction:"rtl", textAlign:"right",
+                            fontSize:"clamp(0.95rem,1.8vw,1.35rem)",
+                            textShadow:"0 2px 8px rgba(0,0,0,0.7)",
+                            lineHeight:1.45,
+                          }}>{question.text}</p>
+                        </div>
+
+                        {/* Choices grid */}
+                        {question.choices && question.choices.length > 0 && (
+                          <div className="question-choices-grid">
+                            {question.choices.map((c, ci) => (
+                              <div key={ci} className="choice-card">
+                                <span style={{ color:"rgba(255,220,100,0.9)", marginLeft:"6px", fontWeight:900 }}>
+                                  {["أ","ب","ج","د"][ci] || ci+1}—
+                                </span>
+                                {c}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* zoom hint */}
+                        <div style={{ position:"absolute", top:"10px", left:"10px", cursor:"zoom-in" }}
                           onClick={() => setZoomedImage(question.image_url)}>
-                          <ZoomIn size={28} style={{ color:"#fff" }} />
+                          <ZoomIn size={20} style={{ color:"rgba(255,255,255,0.6)" }} />
                         </div>
                       </div>
                     </div>
+                  ) : (
+                    /* No image — plain text */
+                    <p data-testid="question-text" className="question-text"
+                      style={{ fontSize:"clamp(1.5rem,2.8vw,3rem)" }}>
+                      {question.text}
+                    </p>
                   )}
-
-                  {/* Question text — centered */}
-                  <p data-testid="question-text" className="question-text"
-                    style={{ fontSize: question.image_url ? "clamp(1.2rem,2.3vw,2.3rem)" : "clamp(1.5rem,2.8vw,3rem)" }}>
-                    {question.text}
-                  </p>
 
                   {/* Reveal button */}
                   {!showAnswer && (
