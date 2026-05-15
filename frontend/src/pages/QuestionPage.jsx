@@ -652,20 +652,6 @@ export default function QuestionPage() {
                           }}>{question.text}</p>
                         </div>
 
-                        {/* Choices grid */}
-                        {question.choices && question.choices.length > 0 && (
-                          <div className="question-choices-grid">
-                            {question.choices.map((c, ci) => (
-                              <div key={ci} className="choice-card">
-                                <span style={{ color:"rgba(255,220,100,0.9)", marginLeft:"6px", fontWeight:900 }}>
-                                  {["أ","ب","ج","د"][ci] || ci+1}—
-                                </span>
-                                {c}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
                         {/* zoom hint */}
                         <div style={{ position:"absolute", top:"10px", left:"10px", cursor:"zoom-in" }}
                           onClick={() => setZoomedImage(question.image_url)}>
