@@ -1351,10 +1351,11 @@ async def _extract_image_questions(content: bytes, mime: str, category_id: str) 
 
 async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_prompt: str = "") -> list:
     """Render each PDF page as JPEG → Vision AI → extract MCQ questions with cropped images."""
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
-    gemini_key     = os.environ.get("GEMINI_API_KEY", "")
-    if not openrouter_key and not gemini_key:
-        raise HTTPException(500, "لا يوجد AI API key — أضف OPENROUTER_API_KEY أو GEMINI_API_KEY")
+    openrouter_key  = os.environ.get("OPENROUTER_API_KEY", "")
+    gemini_key      = os.environ.get("GEMINI_API_KEY", "")
+    anthropic_key   = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not openrouter_key and not gemini_key and not anthropic_key:
+        raise HTTPException(500, "لا يوجد AI API key — أضف ANTHROPIC_API_KEY أو OPENROUTER_API_KEY أو GEMINI_API_KEY")
     try:
         import fitz
     except ImportError:
@@ -1383,7 +1384,7 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
         return None
 
     async def _vision_call(img_b64: str) -> str:
-        """Call Vision API: OpenRouter primary → Gemini direct fallback."""
+        """Call Vision API: Claude primary → OpenRouter → Gemini direct fallback."""
         prompt = f"""أنت خبير في استخراج الأسئلة من تجميعات اختبار التحصيل الدراسي السعودي.
 
 هذه صورة صفحة من PDF. استخرج كل الأسئلة منها.
@@ -1397,7 +1398,39 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
 أعد JSON array فقط، بدون أي نص أو markdown حوله:
 [{{"text":"...","choices":["...","...","...","..."],"answer":"...","difficulty":300,"bbox":{{"top":0.10,"bottom":0.35}}}}]"""
 
-        # Try OpenRouter with two models
+        # 1. Claude Vision (primary — has balance)
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if anthropic_key:
+            try:
+                async with httpx.AsyncClient(timeout=120) as client:
+                    r = await client.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={
+                            "x-api-key": anthropic_key,
+                            "anthropic-version": "2023-06-01",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "claude-opus-4-5",
+                            "max_tokens": 4096,
+                            "messages": [{"role": "user", "content": [
+                                {"type": "image", "source": {
+                                    "type": "base64", "media_type": "image/jpeg", "data": img_b64
+                                }},
+                                {"type": "text", "text": prompt},
+                            ]}],
+                        },
+                    )
+                if r.status_code == 200:
+                    content = r.json()["content"][0]["text"]
+                    logger.info("  Claude Vision OK")
+                    return content
+                else:
+                    logger.warning(f"  Claude Vision → {r.status_code}: {r.text[:200]}")
+            except Exception as e:
+                logger.warning(f"  Claude Vision exception: {e}")
+
+        # 2. OpenRouter fallback
         if openrouter_key:
             for model in ("google/gemini-2.5-flash", "google/gemini-1.5-flash"):
                 try:
@@ -1421,7 +1454,7 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
                 except Exception as e:
                     logger.warning(f"  OpenRouter {model} exception: {e}")
 
-        # Gemini direct fallback
+        # 3. Gemini direct fallback
         if gemini_key:
             try:
                 payload = {"contents": [{"parts": [
