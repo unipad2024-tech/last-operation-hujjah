@@ -1121,15 +1121,14 @@ export default function AdminDashboard() {
     toast.success(`تم رفض ${done} سؤال`);
   };
 
+  const [debugAIResult, setDebugAIResult] = useState(null);
   const handleDebugAI = async () => {
+    setDebugAIResult("loading");
     try {
       const { data } = await axios.get(`${API}/admin/debug/ai`, { headers });
-      const lines = Object.entries(data).map(([k, v]) =>
-        `${k}:\n${typeof v === "object" ? JSON.stringify(v, null, 2) : v}`
-      ).join("\n\n");
-      alert("🔍 تشخيص AI:\n\n" + lines);
+      setDebugAIResult(JSON.stringify(data, null, 2));
     } catch (e) {
-      alert("خطأ: " + (e?.response?.data?.detail || e.message));
+      setDebugAIResult("خطأ: " + (e?.response?.data?.detail || e.message));
     }
   };
 
@@ -1836,6 +1835,40 @@ export default function AdminDashboard() {
                 >
                   🔍 تشخيص AI
                 </button>
+
+                {/* Debug AI Result Modal */}
+                {debugAIResult && debugAIResult !== "loading" && (
+                  <div style={{
+                    position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+                    zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
+                  }} onClick={() => setDebugAIResult(null)}>
+                    <div style={{
+                      background: "#1a1a2e", border: "1.5px solid rgba(99,102,241,0.4)",
+                      borderRadius: "16px", padding: "24px", maxWidth: "700px", width: "100%",
+                      maxHeight: "80vh", overflow: "auto"
+                    }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                        <span style={{ color: "#a5b4fc", fontWeight: 900, fontSize: "1rem" }}>🔍 تشخيص AI Keys</span>
+                        <button onClick={() => setDebugAIResult(null)} style={{ color: "#6b7280", background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer" }}>✕</button>
+                      </div>
+                      <textarea
+                        readOnly
+                        value={debugAIResult}
+                        style={{
+                          width: "100%", minHeight: "300px", background: "#0f0f1a",
+                          color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.1)",
+                          borderRadius: "10px", padding: "12px", fontSize: "0.78rem",
+                          fontFamily: "monospace", resize: "vertical", outline: "none"
+                        }}
+                        onClick={e => e.target.select()}
+                      />
+                      <p style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: "8px" }}>انقر على النص لتحديده كله ثم انسخه</p>
+                    </div>
+                  </div>
+                )}
+                {debugAIResult === "loading" && (
+                  <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>⏳ جاري التشخيص...</span>
+                )}
                 <button
                   data-testid="add-question-btn"
                   onClick={() => {
