@@ -1121,6 +1121,18 @@ export default function AdminDashboard() {
     toast.success(`تم رفض ${done} سؤال`);
   };
 
+  const handleDebugAI = async () => {
+    try {
+      const { data } = await axios.get(`${API}/admin/debug/ai`, { headers });
+      const lines = Object.entries(data).map(([k, v]) =>
+        `${k}:\n${typeof v === "object" ? JSON.stringify(v, null, 2) : v}`
+      ).join("\n\n");
+      alert("🔍 تشخيص AI:\n\n" + lines);
+    } catch (e) {
+      alert("خطأ: " + (e?.response?.data?.detail || e.message));
+    }
+  };
+
   const handleBulkFetchImages = async () => {
     const limit = parseInt(window.prompt("كم سؤال تريد تحديث صوره؟ (الحد الأقصى 200)", "50") || "50");
     if (!limit || isNaN(limit)) return;
@@ -1816,6 +1828,13 @@ export default function AdminDashboard() {
                   title="جلب صور Unsplash لجميع الأسئلة التي لديها image_query بدون صورة"
                 >
                   🖼️ جلب صور
+                </button>
+                <button
+                  onClick={handleDebugAI}
+                  className="text-sm text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition-all font-bold"
+                  title="تشخيص مفاتيح AI"
+                >
+                  🔍 تشخيص AI
                 </button>
                 <button
                   data-testid="add-question-btn"
