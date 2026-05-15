@@ -1399,7 +1399,7 @@ async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_pro
 
         # Try OpenRouter with two models
         if openrouter_key:
-            for model in ("google/gemini-2.5-flash-preview", "google/gemini-flash-1.5"):
+            for model in ("google/gemini-2.5-flash", "google/gemini-1.5-flash"):
                 try:
                     async with httpx.AsyncClient(timeout=120) as client:
                         r = await client.post(
@@ -3768,7 +3768,7 @@ async def debug_ai_keys(admin: dict = Depends(get_admin)):
 
     # 2. Test OpenRouter text
     if openrouter_key:
-        for model in ("google/gemini-2.5-flash-preview", "google/gemini-flash-1.5"):
+        for model in ("google/gemini-2.5-flash", "google/gemini-1.5-flash"):
             try:
                 async with httpx.AsyncClient(timeout=30) as client:
                     r = await client.post(
