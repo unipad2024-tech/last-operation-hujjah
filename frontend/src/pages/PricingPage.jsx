@@ -9,6 +9,34 @@ const DARK_BG = { background: "radial-gradient(ellipse at top, #3D0810 0%, #1a02
 
 const PLANS = [
   {
+    id: "weekly",
+    name: "أسبوع واحد",
+    price: "8.99",
+    period: "/ 7 أيام",
+    badge: "الأوفر",
+    highlight: true,
+    features: [
+      "وصول كامل لجميع الفئات",
+      "تحديث مستمر للأسئلة",
+      "أسئلة لا تتكرر",
+      "حرية كاملة في اللعب",
+    ],
+  },
+  {
+    id: "biweekly",
+    name: "أسبوعان",
+    price: "16.99",
+    period: "/ 14 يوم",
+    badge: "الأكثر طلباً",
+    highlight: true,
+    features: [
+      "وصول كامل لجميع الفئات",
+      "تحديث مستمر للأسئلة",
+      "أسئلة لا تتكرر",
+      "حرية كاملة في اللعب",
+    ],
+  },
+  {
     id: "monthly",
     name: "المميز الشهري",
     price: "29.99",
@@ -139,8 +167,44 @@ export default function PricingPage() {
           </div>
         ) : (
           <>
+            {/* Weekly plans — highlighted */}
+            <div className="mb-4">
+              <p className="text-secondary/40 text-xs font-bold text-center mb-3 tracking-widest uppercase">خطط أسبوعية ✦ جديد</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in-up">
+                {PLANS.filter(p => p.highlight).map((plan) => (
+                  <div key={plan.id} className="relative rounded-2xl p-6 transition-all duration-300 hover:scale-[1.02]"
+                    style={{ background: "linear-gradient(135deg, rgba(91,14,20,0.85), rgba(61,8,16,0.95))", border: "1.5px solid rgba(241,225,148,0.45)", boxShadow: "0 0 30px rgba(241,225,148,0.12), 0 4px 30px rgba(0,0,0,0.4)" }}>
+                    {plan.badge && (
+                      <span className="absolute -top-3 right-4 bg-secondary text-primary text-xs font-black px-3 py-1 rounded-full">{plan.badge}</span>
+                    )}
+                    <h3 className="text-secondary font-black text-xl mb-1">{plan.name}</h3>
+                    <div className="flex items-end gap-1 mb-4">
+                      <span className="text-secondary text-3xl font-black">{plan.price} ريال</span>
+                      <span className="text-secondary/50 text-sm mb-1">{plan.period}</span>
+                    </div>
+                    <ul className="space-y-2 mb-6">
+                      {plan.features.map((f, i) => (
+                        <li key={i} className="flex items-center gap-2 text-sm text-secondary/80">
+                          <span className="text-secondary">✓</span> {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      data-testid={`upgrade-${plan.id}-btn`}
+                      onClick={() => openForm(plan.id)}
+                      className="w-full bg-secondary text-primary font-black py-3 rounded-full hover:scale-105 transition-all"
+                      style={{ boxShadow: "0 0 20px rgba(241,225,148,0.3)" }}
+                    >
+                      اشترك الحين
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Monthly / Annual plans */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in-up">
-              {PLANS.map((plan) => (
+              {PLANS.filter(p => !p.highlight).map((plan) => (
                 <div key={plan.id} className="relative bg-primary/70 border border-secondary/30 rounded-2xl p-6 hover:border-secondary/60 transition-all duration-300"
                   style={{ boxShadow: "0 4px 30px rgba(0,0,0,0.3)" }}>
                   {plan.badge && (

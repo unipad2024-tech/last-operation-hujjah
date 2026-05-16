@@ -181,8 +181,10 @@ logger = logging.getLogger(__name__)
 
 # ─── Subscription Plans (server-side only – never from frontend) ────────────
 SUBSCRIPTION_PLANS = {
-    "monthly": {"name": "Premium شهري",   "amount": 29.99, "currency": "sar", "days": 30},
-    "annual":  {"name": "Premium سنوي",   "amount": 239.99,"currency": "sar", "days": 365},
+    "weekly":    {"name": "Premium أسبوعي",    "amount": 8.99,  "currency": "sar", "days": 7},
+    "biweekly":  {"name": "Premium أسبوعان",   "amount": 16.99, "currency": "sar", "days": 14},
+    "monthly":   {"name": "Premium شهري",      "amount": 29.99, "currency": "sar", "days": 30},
+    "annual":    {"name": "Premium سنوي",      "amount": 239.99,"currency": "sar", "days": 365},
 }
 
 FREE_CATEGORIES = ["cat_word", "cat_islamic", "cat_music", "cat_flags", "cat_easy", "cat_science"]
