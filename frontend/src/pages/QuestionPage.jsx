@@ -263,7 +263,7 @@ export default function QuestionPage() {
           box-shadow: 0 18px 56px rgba(0,0,0,0.55);
         }
         .question-image {
-          display: block; width: 100%; max-height: 420px;
+          display: block; width: 100%; max-height: 340px;
           object-fit: cover; object-position: center;
           cursor: zoom-in;
         }
