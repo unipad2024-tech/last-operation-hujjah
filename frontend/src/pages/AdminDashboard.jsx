@@ -1576,7 +1576,7 @@ export default function AdminDashboard() {
             { key: "pending", label: `مراجعة الأسئلة${pendingTotal > 0 ? ` (${pendingTotal})` : ""}`, forAll: true },
             { key: "users", label: "المستخدمون", superOnly: true },
             { key: "security", label: "🛡 الأمان", superOnly: true },
-            { key: "analytics", label: "الإحصاءات", superOnly: true },
+            { key: "analytics", label: "الإحصاءات", forAll: true },
             { key: "settings", label: "الإعدادات", forAll: true },
             { key: "ai", label: "توليد AI", forAll: true },
             { key: "experimental", label: "وضع التجربة", forAll: true },

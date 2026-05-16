@@ -358,7 +358,7 @@ export default function CategorySelectPage() {
           ].map(({ key, label, icon }) => (
             <button
               key={key}
-              onClick={() => { setSource(key); setActiveGroupId("all"); }}
+              onClick={() => { setSource(key); }}
               className="px-4 py-2 rounded-xl text-sm font-black transition-all border"
               style={{
                 background: source === key
