@@ -1577,12 +1577,12 @@ export default function AdminDashboard() {
             { key: "users", label: "المستخدمون", superOnly: true },
             { key: "security", label: "🛡 الأمان", superOnly: true },
             { key: "analytics", label: "الإحصاءات", superOnly: true },
-            { key: "settings", label: "الإعدادات", superOnly: true },
+            { key: "settings", label: "الإعدادات", forAll: true },
             { key: "ai", label: "توليد AI", forAll: true },
             { key: "experimental", label: "وضع التجربة", forAll: true },
-            { key: "logs", label: "سجل النشاط", superOnly: true },
+            { key: "logs", label: "سجل النشاط", forAll: true },
             { key: "staff", label: "الموظفون", superOnly: true },
-            { key: "community", label: "🏘 المجتمع", superOnly: true },
+            { key: "community", label: "🏘 المجتمع", forAll: true },
           ]
             .filter(t => t.forAll || (t.superOnly && isSuperAdmin))
             .map((tab) => (

@@ -21,10 +21,6 @@ export default function CategorySelectPage() {
 
   // Source: "regular" | "community"
   const [source, setSource]         = useState("regular");
-  const [activeGroupId, setActiveGroupId] = useState("all");
-
-  // Regular categories – client-side virtual scroll
-  const [regVisible, setRegVisible] = useState(PAGE_SIZE);
 
   // Community categories – server-side infinite scroll
   const [commCats, setCommCats]         = useState([]);
@@ -87,7 +83,7 @@ export default function CategorySelectPage() {
     }
   }, [source]); // eslint-disable-line
 
-  // ── IntersectionObserver for infinite scroll ──────────────────────────────
+  // ── IntersectionObserver for community infinite scroll ───────────────────
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect();
     observerRef.current = new IntersectionObserver(
@@ -95,25 +91,13 @@ export default function CategorySelectPage() {
         if (!entries[0].isIntersecting) return;
         if (source === "community" && commHasMore && !commLoading) {
           loadCommunity(commPage);
-        } else if (source === "regular") {
-          const filtered = categories.filter(
-            cat => activeGroupId === "all" || cat.group_id === activeGroupId
-          );
-          if (regVisible < filtered.length) {
-            setRegVisible(v => Math.min(v + PAGE_SIZE, filtered.length));
-          }
         }
       },
       { threshold: 0.1 }
     );
     if (sentinelRef.current) observerRef.current.observe(sentinelRef.current);
     return () => observerRef.current?.disconnect();
-  }, [source, commHasMore, commLoading, commPage, regVisible, categories, activeGroupId, loadCommunity]);
-
-  // Reset visible count when group filter changes
-  useEffect(() => {
-    setRegVisible(PAGE_SIZE);
-  }, [activeGroupId]);
+  }, [source, commHasMore, commLoading, commPage, loadCommunity]);
 
   // ── Category click ────────────────────────────────────────────────────────
   const handleCategoryClick = (cat) => {
@@ -179,10 +163,26 @@ export default function CategorySelectPage() {
   const textMain = darkMode ? "#C7D3A4" : "#2C3A1A";
   const textSub  = darkMode ? "#8AAA68" : "#5A6A3A";
 
-  const filteredReg = categories.filter(
-    cat => activeGroupId === "all" || cat.group_id === activeGroupId
+  // قياس section special ordering
+  const QIYAS_ORDER = ["قدرات", "تحصيلي أحياء", "تحصيلي كيمياء", "تحصيلي فيزياء"];
+  const getGroupCats = (groupId) => {
+    const cats = categories.filter(c => c.group_id === groupId);
+    const group = categoryGroups.find(g => g.id === groupId);
+    if (group?.name?.includes("قياس") || group?.name?.includes("تحصيل")) {
+      return [...cats].sort((a, b) => {
+        const ai = QIYAS_ORDER.findIndex(k => a.name?.includes(k));
+        const bi = QIYAS_ORDER.findIndex(k => b.name?.includes(k));
+        if (ai === -1 && bi === -1) return 0;
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      });
+    }
+    return cats;
+  };
+  const ungroupedCats = categories.filter(
+    c => !c.group_id || !categoryGroups.find(g => g.id === c.group_id)
   );
-  const visibleReg = filteredReg.slice(0, regVisible);
 
   if (!session) return null;
 
@@ -373,50 +373,74 @@ export default function CategorySelectPage() {
           ))}
         </div>
 
-        {/* Group filter (only for regular) */}
+        {/* Scroll Navigation (only for regular) */}
         {source === "regular" && categoryGroups.length > 0 && (
-          <div className="flex gap-2 flex-wrap mb-4 px-1">
-            <button
-              data-testid="group-filter-all"
-              onClick={() => setActiveGroupId("all")}
-              className={`px-3 py-1.5 rounded-full text-sm font-bold transition-all border ${
-                activeGroupId === "all"
-                  ? "bg-primary text-secondary border-primary"
-                  : "bg-white/10 text-secondary/70 border-secondary/20 hover:border-secondary/50"
-              }`}
-            >
-              الكل ({categories.length})
-            </button>
-            {categoryGroups.map(g => {
-              const count = categories.filter(c => c.group_id === g.id).length;
-              if (count === 0) return null;
-              return (
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch", scrollbarWidth: "none", msOverflowStyle: "none" }}
+            className="mb-4 -mx-1 px-1">
+            <div style={{ display: "inline-flex", gap: "8px", paddingBottom: "4px" }}>
+              {categoryGroups.filter(g => categories.some(c => c.group_id === g.id)).map(g => (
                 <button
                   key={g.id}
-                  data-testid={`group-filter-${g.id}`}
-                  onClick={() => setActiveGroupId(g.id)}
-                  className={`px-3 py-1.5 rounded-full text-sm font-bold transition-all border ${
-                    activeGroupId === g.id
-                      ? "text-white border-transparent"
-                      : "bg-white/10 text-secondary/70 border-secondary/20 hover:border-secondary/50"
-                  }`}
-                  style={activeGroupId === g.id ? { background: g.color, borderColor: g.color } : {}}
+                  onClick={() => document.getElementById(`section-${g.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  className="shrink-0 px-3 py-1.5 rounded-full text-sm font-bold transition-all"
+                  style={{
+                    background: darkMode ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.6)",
+                    color: textSub,
+                    border: `2px solid ${darkMode ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"}`,
+                    whiteSpace: "nowrap",
+                  }}
                 >
-                  {g.icon} {g.name} ({count})
+                  {g.icon} {g.name}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Grid */}
-        <div className="grid gap-4"
-          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(clamp(160px, 20vw, 240px), 1fr))" }}>
-          {source === "regular"
-            ? visibleReg.map(cat => renderCard(cat))
-            : commCats.map(cat => renderCard(cat))
-          }
-        </div>
+        {/* Grid — regular: sectioned by group | community: flat */}
+        {source === "regular" ? (
+          <>
+            {categoryGroups.map(g => {
+              const groupCats = getGroupCats(g.id);
+              if (groupCats.length === 0) return null;
+              return (
+                <div key={g.id} id={`section-${g.id}`} className="mb-8">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div style={{ width: "4px", height: "20px", borderRadius: "2px", background: g.color || "#5B0E14", flexShrink: 0 }} />
+                    <h2 className="font-black" style={{ color: textMain, fontFamily: "Cairo, sans-serif", fontSize: "clamp(0.95rem, 2vw, 1.1rem)" }}>
+                      {g.icon} قسم {g.name}
+                    </h2>
+                    <span style={{ color: textSub, fontSize: "0.72rem", fontWeight: 700 }}>({groupCats.length})</span>
+                  </div>
+                  <div className="grid gap-4"
+                    style={{ gridTemplateColumns: "repeat(auto-fill, minmax(clamp(160px, 20vw, 240px), 1fr))" }}>
+                    {groupCats.map(cat => renderCard(cat))}
+                  </div>
+                </div>
+              );
+            })}
+            {ungroupedCats.length > 0 && (
+              <div id="section-general" className="mb-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <div style={{ width: "4px", height: "20px", borderRadius: "2px", background: "#5B0E14", flexShrink: 0 }} />
+                  <h2 className="font-black" style={{ color: textMain, fontFamily: "Cairo, sans-serif", fontSize: "clamp(0.95rem, 2vw, 1.1rem)" }}>
+                    🌐 عام
+                  </h2>
+                  <span style={{ color: textSub, fontSize: "0.72rem", fontWeight: 700 }}>({ungroupedCats.length})</span>
+                </div>
+                <div className="grid gap-4"
+                  style={{ gridTemplateColumns: "repeat(auto-fill, minmax(clamp(160px, 20vw, 240px), 1fr))" }}>
+                  {ungroupedCats.map(cat => renderCard(cat))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="grid gap-4"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(clamp(160px, 20vw, 240px), 1fr))" }}>
+            {commCats.map(cat => renderCard(cat))}
+          </div>
+        )}
 
         {/* Community loading skeleton */}
         {source === "community" && commLoading && (
@@ -440,12 +464,6 @@ export default function CategorySelectPage() {
           </div>
         )}
 
-        {/* Regular end */}
-        {source === "regular" && regVisible >= filteredReg.length && filteredReg.length > 0 && (
-          <div className="text-center py-4 text-xs font-bold" style={{ color: textSub }}>
-            تم عرض جميع الفئات ({filteredReg.length})
-          </div>
-        )}
 
         {/* Sentinel for IntersectionObserver */}
         <div ref={sentinelRef} style={{ height: 1 }} />

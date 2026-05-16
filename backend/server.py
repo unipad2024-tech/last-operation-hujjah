@@ -221,6 +221,7 @@ class StaffCreate(BaseModel):
     username: str
     password: str
     display_name: str = ""
+    email: Optional[str] = None
 
 class GiftSubscription(BaseModel):
     plan_id: str = "monthly"
@@ -3922,6 +3923,7 @@ async def create_staff(body: StaffCreate, admin: dict = Depends(get_super_admin)
         "username": body.username.strip(),
         "password_hash": hash_pw(body.password),
         "display_name": (body.display_name or body.username).strip(),
+        "email": body.email.strip() if body.email else None,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.admin_accounts.insert_one(staff)
