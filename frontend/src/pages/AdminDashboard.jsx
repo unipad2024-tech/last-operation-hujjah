@@ -719,6 +719,43 @@ function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, o
               </div>
             )}
 
+            {/* Choices — shown when question has MCQ options (from AI extraction) */}
+            {q.choices && Object.keys(q.choices).length > 0 && (
+              <div style={{ marginBottom: "10px" }}>
+                <div style={{ color: MUTED, fontSize: "0.68rem", fontWeight: 700, marginBottom: "6px" }}>
+                  الخيارات — انقر على الصحيح ليصبح الإجابة
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  {Object.entries(q.choices).map(([key, val]) => {
+                    const isSelected = q.answer === val;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => saveField("answer", val)}
+                        disabled={saving}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "8px", textAlign: "right",
+                          background: isSelected ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.04)",
+                          border: `1.5px solid ${isSelected ? "rgba(52,211,153,0.55)" : "rgba(255,255,255,0.1)"}`,
+                          borderRadius: "8px", padding: "6px 12px", cursor: "pointer",
+                          color: isSelected ? "#34d399" : TEXT, fontSize: "0.83rem",
+                          fontFamily: "Cairo,sans-serif", transition: "all 0.15s", width: "100%",
+                        }}
+                      >
+                        <span style={{
+                          background: isSelected ? "rgba(52,211,153,0.25)" : "rgba(255,255,255,0.08)",
+                          borderRadius: "6px", padding: "1px 7px", fontWeight: 900, fontSize: "0.78rem",
+                          color: isSelected ? "#34d399" : MUTED, flexShrink: 0,
+                        }}>{key}</span>
+                        {val}
+                        {isSelected && <span style={{ marginRight: "auto", fontSize: "0.75rem" }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Images row */}
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               {/* Question image */}
@@ -922,6 +959,10 @@ export default function AdminDashboard() {
   const [aiQuestions, setAiQuestions] = useState([]);
   const [aiSaving, setAiSaving] = useState(false);
   const [aiFetchingImages, setAiFetchingImages] = useState(false);
+
+  // Tournament history
+  const [tournaments, setTournaments]       = useState([]);
+  const [tournamentsLoading, setTournamentsLoading] = useState(false);
 
   // Category groups
   const [categoryGroups, setCategoryGroups] = useState([]);
@@ -1187,6 +1228,13 @@ export default function AdminDashboard() {
     if (activeTab === "staff") loadStaff();
     if (activeTab === "pending") loadPendingQuestions();
     if (activeTab === "community") loadCommunity();
+    if (activeTab === "tournaments") {
+      setTournamentsLoading(true);
+      axios.get(`${API}/admin/tournaments`, { headers })
+        .then(({ data }) => setTournaments(data.items || []))
+        .catch(() => {})
+        .finally(() => setTournamentsLoading(false));
+    }
   }, [activeTab]);
 
   // ── Auto-save state ──
@@ -1583,6 +1631,7 @@ export default function AdminDashboard() {
             { key: "logs", label: "سجل النشاط", forAll: true },
             { key: "staff", label: "الموظفون", superOnly: true },
             { key: "community", label: "🏘 المجتمع", forAll: true },
+            { key: "tournaments", label: "🏆 البطولات", forAll: true },
           ]
             .filter(t => t.forAll || (t.superOnly && isSuperAdmin))
             .map((tab) => (
@@ -3238,6 +3287,72 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {activeTab === "tournaments" && (
+        <div className="p-6 max-w-4xl mx-auto">
+          <div className="flex items-center gap-3 mb-6">
+            <span className="text-3xl">🏆</span>
+            <div>
+              <h2 className="text-2xl font-black">سجل البطولات</h2>
+              <p className="text-primary/50 text-sm">جميع البطولات المُنجزة من المستخدمين</p>
+            </div>
+          </div>
+
+          {tournamentsLoading ? (
+            <div className="text-center py-16 text-primary/40">
+              <div className="text-4xl mb-3 animate-spin">⏳</div>
+              <div>جاري التحميل...</div>
+            </div>
+          ) : tournaments.length === 0 ? (
+            <div className="text-center py-16 text-primary/30">
+              <div className="text-5xl mb-3">🏅</div>
+              <div className="font-bold">لا توجد بطولات بعد</div>
+              <div className="text-sm mt-1">ستظهر هنا عند اكتمال أول بطولة</div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {tournaments.map((t, idx) => (
+                <div key={t.id} style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.09)",
+                  borderRadius: "14px",
+                  padding: "16px 20px",
+                  display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap",
+                }}>
+                  <div style={{
+                    width: "36px", height: "36px", borderRadius: "50%",
+                    background: "rgba(241,225,148,0.12)", border: "1.5px solid rgba(241,225,148,0.3)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "#F1E194", fontWeight: 900, fontSize: "0.85rem", flexShrink: 0,
+                  }}>{idx + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <span style={{ color: "#F1E194", fontWeight: 900, fontSize: "1rem", fontFamily: "Cairo,sans-serif" }}>
+                        🥇 {t.champion}
+                      </span>
+                      <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.75rem" }}>•</span>
+                      <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.8rem" }}>
+                        {t.team_count} فرق · {t.total_matches} مباراة
+                      </span>
+                    </div>
+                    <div style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.75rem", marginTop: "4px", fontFamily: "Cairo,sans-serif" }}>
+                      {t.teams?.join(" · ")}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "left", flexShrink: 0 }}>
+                    <div style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.72rem" }}>
+                      {t.username}
+                    </div>
+                    <div style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.68rem" }}>
+                      {t.created_at?.slice(0, 10)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

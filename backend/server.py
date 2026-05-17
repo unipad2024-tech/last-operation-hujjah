@@ -15,6 +15,8 @@ from passlib.context import CryptContext
 import aiosmtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest, CheckoutSessionResponse, CheckoutStatusResponse
 )
@@ -1616,15 +1618,19 @@ async def import_questions(
             raw_list = raw if isinstance(raw, list) else raw.get("questions", [])
             ts = datetime.now(timezone.utc).isoformat()
             for r in raw_list:
-                text = str(r.get("text") or r.get("question") or "").strip()
-                ans  = str(r.get("answer") or "").strip()
-                if not text or not ans: continue
+                text    = str(r.get("text") or r.get("question") or "").strip()
+                ans     = str(r.get("answer") or "").strip()
+                choices = r.get("choices") or {}
+                if not text: continue
+                # Allow questions with choices but no answer yet (extracted via AI — admin picks answer)
+                if not ans and not choices: continue
                 questions.append({
                     "id":               str(uuid.uuid4()),
                     "category_id":      str(r.get("category_id") or category_id or "").strip() or category_id,
                     "difficulty":       _parse_difficulty(r.get("difficulty", 300)),
                     "text":             text,
                     "answer":           ans,
+                    "choices":          choices if isinstance(choices, dict) else {},
                     "image_url":        str(r.get("image_url") or "").strip(),
                     "answer_image_url": "",
                     "image_query":      str(r.get("image_query") or "").strip(),
@@ -1715,7 +1721,7 @@ async def get_pending_questions(
 @api_router.patch("/admin/questions/pending/{q_id}")
 async def patch_pending_question(q_id: str, body: dict, admin: dict = Depends(get_admin)):
     """Update specific fields of a pending question (e.g., image_url, answer_image_url)."""
-    allowed = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id"}
+    allowed = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id", "choices"}
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
         raise HTTPException(400, "لا توجد حقول صالحة للتحديث")
@@ -2363,6 +2369,22 @@ async def paylink_verify(transaction_no: str, user: dict = Depends(require_user)
         )
         if result.modified_count > 0:
             logger.info(f"Premium activated for user {user['id']} via txn {transaction_no}")
+            # Send confirmation invoice email (fire-and-forget — never block the response)
+            if user.get("email"):
+                invoice_no = f"HJH-{transaction_no[:8].upper()}"
+                html = build_invoice_html(
+                    username=user.get("username", ""),
+                    plan_name=plan["name"],
+                    amount=plan["amount"],
+                    transaction_no=transaction_no,
+                    expires_at=expires,
+                    invoice_no=invoice_no,
+                )
+                asyncio.create_task(send_email_notification(
+                    user["email"],
+                    f"✅ تم تفعيل اشتراكك في حُجّة — {plan['name']}",
+                    html,
+                ))
         await db.payment_transactions.update_one(
             {"transaction_no": transaction_no, "payment_status": {"$ne": "paid"}},
             {"$set": {"payment_status": "paid", "status": "complete", "updated_at": now}}
@@ -3996,6 +4018,102 @@ async def gift_subscription(user_id: str, body: GiftSubscription, admin: dict = 
 # EMAIL NOTIFICATION SYSTEM
 # ══════════════════════════════════════════════════════════════════════════════
 
+def build_invoice_html(username: str, plan_name: str, amount: float, transaction_no: str,
+                       expires_at: str, invoice_no: str) -> str:
+    exp_date  = expires_at[:10] if expires_at else ""
+    paid_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return f"""
+    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:580px;margin:auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.13)">
+
+      <!-- Header -->
+      <div style="background:linear-gradient(135deg,#5B0E14 0%,#8B1520 60%,#A01C26 100%);padding:36px 32px;text-align:center">
+        <div style="font-size:2.8rem;margin-bottom:4px">🏆</div>
+        <h1 style="color:#F1E194;margin:0;font-size:2.2rem;letter-spacing:0.05em">حُجّة</h1>
+        <p style="color:rgba(241,225,148,0.65);margin:6px 0 0;font-size:0.9rem">لعبة المعلومات العربية</p>
+      </div>
+
+      <!-- Confirmation banner -->
+      <div style="background:#f0fdf4;border-bottom:2px solid #bbf7d0;padding:18px 32px;display:flex;align-items:center;gap:14px">
+        <span style="font-size:1.8rem">✅</span>
+        <div>
+          <div style="color:#166534;font-weight:900;font-size:1.05rem">تم تفعيل اشتراكك بنجاح!</div>
+          <div style="color:#16a34a;font-size:0.85rem">مرحباً {username}، أنت الآن عضو مميز في حُجّة.</div>
+        </div>
+      </div>
+
+      <!-- Invoice box -->
+      <div style="padding:28px 32px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <div>
+            <div style="color:#5B0E14;font-weight:900;font-size:1.15rem">فاتورة اشتراك</div>
+            <div style="color:#888;font-size:0.8rem;margin-top:2px">رقم الفاتورة: {invoice_no}</div>
+          </div>
+          <div style="text-align:left">
+            <div style="color:#888;font-size:0.8rem">تاريخ الدفع</div>
+            <div style="color:#222;font-weight:700;font-size:0.92rem">{paid_date}</div>
+          </div>
+        </div>
+
+        <!-- Line items -->
+        <table style="width:100%;border-collapse:collapse;font-size:0.92rem">
+          <thead>
+            <tr style="background:#fdf6e3">
+              <th style="padding:10px 14px;text-align:right;color:#5B0E14;font-weight:900;border-radius:8px 0 0 0">الخدمة</th>
+              <th style="padding:10px 14px;text-align:center;color:#5B0E14;font-weight:900">المدة</th>
+              <th style="padding:10px 14px;text-align:left;color:#5B0E14;font-weight:900;border-radius:0 8px 0 0">المبلغ</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #f0e8d0">
+              <td style="padding:12px 14px;color:#333;font-weight:700">{plan_name}</td>
+              <td style="padding:12px 14px;text-align:center;color:#666">حتى {exp_date}</td>
+              <td style="padding:12px 14px;text-align:left;color:#5B0E14;font-weight:900;font-size:1.05rem">{amount:.2f} ر.س</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr style="background:#fdf6e3">
+              <td colspan="2" style="padding:12px 14px;text-align:right;font-weight:900;color:#5B0E14">المجموع المدفوع</td>
+              <td style="padding:12px 14px;text-align:left;font-weight:900;color:#5B0E14;font-size:1.1rem">{amount:.2f} ر.س</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        <!-- Transaction ref -->
+        <div style="margin-top:18px;background:#f8f8f8;border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;font-size:0.82rem">
+          <span style="color:#888">رقم المرجع</span>
+          <span style="color:#444;font-family:monospace;font-weight:700">{transaction_no}</span>
+        </div>
+
+        <!-- What you get -->
+        <div style="margin-top:24px;background:#fdf6e3;border-right:4px solid #F1E194;border-radius:10px;padding:16px 20px">
+          <div style="color:#5B0E14;font-weight:900;margin-bottom:10px">🎯 ما حصلت عليه:</div>
+          <ul style="margin:0;padding:0;list-style:none;color:#555;font-size:0.88rem;line-height:2">
+            <li>✅ وصول كامل لجميع الفئات المميزة</li>
+            <li>✅ أسئلة حصرية غير متاحة مجاناً</li>
+            <li>✅ دعم أولوي</li>
+            <li>✅ تحديثات مستمرة بمحتوى جديد</li>
+          </ul>
+        </div>
+
+        <!-- CTA -->
+        <div style="text-align:center;margin-top:28px">
+          <a href="https://al-amaliya-al-akhira.vercel.app"
+             style="background:linear-gradient(135deg,#5B0E14,#8B1520);color:#F1E194;padding:14px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1rem;display:inline-block">
+            🎮 ابدأ اللعب الآن
+          </a>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="background:#fdf6e3;padding:18px 32px;text-align:center;border-top:1px solid #f0e8d0">
+        <p style="color:#999;font-size:0.78rem;margin:0">
+          إذا واجهت أي مشكلة تواصل معنا · هذه الفاتورة تُثبت اشتراكك
+        </p>
+      </div>
+    </div>
+    """
+
+
 async def send_email_notification(to_email: str, subject: str, html_body: str) -> bool:
     """Send email via Gmail SMTP. Returns True on success."""
     if not EMAIL_USER or not EMAIL_PASS:
@@ -5077,6 +5195,107 @@ async def get_profile_categories(username: str, skip: int = 0, limit: int = 20):
     for c in cats:
         c.setdefault("likes_count", 0)
     return cats
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TOURNAMENT — save results to DB
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.post("/tournament/save")
+async def save_tournament(body: dict, user: dict = Depends(require_user)):
+    """Save completed tournament result to DB for history/stats."""
+    champion   = body.get("champion")        # team name (string)
+    teams      = body.get("teams", [])       # list of {name, color}
+    rounds     = body.get("rounds", [])      # bracket rounds
+    total_matches = sum(
+        1 for r in rounds for m in r.get("matches", []) if m.get("winner") and not m.get("isBye")
+    )
+    doc = {
+        "id":            str(uuid.uuid4()),
+        "user_id":       user["id"],
+        "username":      user.get("username", ""),
+        "champion":      champion,
+        "teams":         [t.get("name") for t in teams if t.get("name")],
+        "team_count":    len(teams),
+        "total_matches": total_matches,
+        "rounds_count":  len(rounds),
+        "created_at":    datetime.now(timezone.utc).isoformat(),
+    }
+    await db.tournaments.insert_one(doc)
+    return {"id": doc["id"], "message": "تم حفظ نتيجة البطولة"}
+
+
+@api_router.get("/admin/tournaments")
+async def list_tournaments(
+    limit: int = 50,
+    admin: dict = Depends(get_admin),
+):
+    """Admin: list all saved tournament results."""
+    items = await db.tournaments.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    total = await db.tournaments.count_documents({})
+    return {"items": items, "total": total}
+
+
+@api_router.post("/admin/send-test-email")
+async def send_test_email_all(admin: dict = Depends(get_super_admin)):
+    """Send a test welcome email to all registered users with an email address."""
+    users_list = await db.users.find(
+        {"email": {"$exists": True, "$ne": None, "$ne": ""}},
+        {"_id": 0, "email": 1, "username": 1}
+    ).to_list(1000)
+
+    html_template = """
+    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:560px;margin:auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.12)">
+      <div style="background:linear-gradient(135deg,#5B0E14 0%,#8B1520 60%,#A01C26 100%);padding:36px 32px;text-align:center">
+        <div style="font-size:2.8rem;margin-bottom:4px">🏆</div>
+        <h1 style="color:#F1E194;margin:0;font-size:2.2rem;letter-spacing:0.05em">حُجّة</h1>
+        <p style="color:rgba(241,225,148,0.65);margin:6px 0 0;font-size:0.9rem">لعبة المعلومات العربية</p>
+      </div>
+      <div style="padding:32px">
+        <h2 style="color:#5B0E14;margin:0 0 14px">مرحباً {username} 👋</h2>
+        <p style="color:#444;line-height:1.8;font-size:1rem">
+          شكراً لتسجيلك في <strong>حُجّة</strong> — منصة تريفيا عربية تجمع أصدقاءك وزملاءك في تحدي مثير للمعلومات.
+        </p>
+        <p style="color:#444;line-height:1.8">
+          نشتاق لحضورك! اللعبة جاهزة، والأسئلة بانتظارك.
+        </p>
+        <div style="text-align:center;margin:28px 0">
+          <a href="https://al-amaliya-al-akhira.vercel.app"
+             style="background:linear-gradient(135deg,#5B0E14,#8B1520);color:#F1E194;padding:14px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1rem;display:inline-block">
+            🎮 العب الآن
+          </a>
+        </div>
+        <div style="background:#fdf6e3;border-radius:12px;padding:16px 20px;border-right:4px solid #F1E194">
+          <div style="color:#5B0E14;font-weight:900;margin-bottom:8px">🎯 ماذا ستجد في حُجّة؟</div>
+          <ul style="margin:0;padding:0;list-style:none;color:#555;font-size:0.88rem;line-height:2">
+            <li>✅ أسئلة متنوعة: ثقافة · رياضة · علوم · إسلاميات</li>
+            <li>✅ مود البطولة للفرق المتعددة</li>
+            <li>✅ لوحة Jeopardy بمستويات صعوبة مختلفة</li>
+            <li>✅ أسئلة الكلمة السرية بـ QR code</li>
+          </ul>
+        </div>
+      </div>
+      <div style="background:#fdf6e3;padding:16px 32px;text-align:center;border-top:1px solid #f0e8d0">
+        <p style="color:#999;font-size:0.78rem;margin:0">حُجّة · لعبة المعلومات العربية</p>
+      </div>
+    </div>
+    """
+
+    sent = 0
+    failed = 0
+    for u in users_list:
+        email   = u.get("email", "")
+        uname   = u.get("username", "صديق")
+        if not email:
+            continue
+        html = html_template.replace("{username}", uname)
+        ok = await send_email_notification(email, "🎮 حُجّة بتنتظرك — لعبة المعلومات العربية", html)
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+
+    return {"sent": sent, "failed": failed, "total": len(users_list)}
+
 
 app.include_router(api_router)
 
