@@ -58,6 +58,7 @@ PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID',  'APP_ID_1774162201273')
 PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '3c3c6b0e-ccac-352d-acc9-de094ab2117c')
 EMAIL_USER      = os.environ.get('EMAIL_USER', '')
 EMAIL_PASS      = os.environ.get('EMAIL_PASS', '')
+RESEND_API_KEY  = os.environ.get('RESEND_API_KEY', '')
 UNSPLASH_API_KEY  = os.environ.get('UNSPLASH_API_KEY', 'p0r_782hncvFkWs7zw7gxNjnJ-H3rmSuqymDCZ1DUho')
 OBSIDIAN_API_KEY  = os.environ.get('OBSIDIAN_API_KEY', '')
 OBSIDIAN_HOST     = os.environ.get('OBSIDIAN_HOST', 'http://127.0.0.1:27123')
@@ -4115,26 +4116,23 @@ def build_invoice_html(username: str, plan_name: str, amount: float, transaction
 
 
 async def send_email_notification(to_email: str, subject: str, html_body: str) -> bool:
-    """Send email via Gmail SMTP. Returns True on success."""
-    if not EMAIL_USER or not EMAIL_PASS:
-        logger.warning("Email credentials not configured — skipping email send")
+    """Send email via Resend API. Returns True on success."""
+    if not RESEND_API_KEY:
+        logger.warning("RESEND_API_KEY not configured — skipping email send")
         return False
     try:
-        msg = MIMEMultipart("alternative")
-        msg["From"]    = f"Hujjah Game <{EMAIL_USER}>"
-        msg["To"]      = to_email
-        msg["Subject"] = subject
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-        await aiosmtplib.send(
-            msg,
-            hostname="smtp.gmail.com",
-            port=587,
-            start_tls=True,
-            username=EMAIL_USER,
-            password=EMAIL_PASS.replace(" ", ""),  # strip spaces from app password
-        )
-        logger.info(f"Email sent to {to_email}: {subject}")
-        return True
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+                json={"from": "حُجّة <onboarding@resend.dev>", "to": [to_email],
+                      "subject": subject, "html": html_body},
+            )
+        if r.status_code == 200 or r.status_code == 201:
+            logger.info(f"Email sent to {to_email}: {subject}")
+            return True
+        logger.error(f"Resend error {r.status_code}: {r.text[:200]}")
+        return False
     except Exception as e:
         logger.error(f"Failed to send email to {to_email}: {e}")
         return False
