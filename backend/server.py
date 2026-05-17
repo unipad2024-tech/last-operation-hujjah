@@ -5235,15 +5235,7 @@ async def list_tournaments(
     return {"items": items, "total": total}
 
 
-@api_router.post("/admin/send-test-email")
-async def send_test_email_all(admin: dict = Depends(get_super_admin)):
-    """Send a test welcome email to all registered users with an email address."""
-    users_list = await db.users.find(
-        {"email": {"$exists": True, "$ne": None, "$ne": ""}},
-        {"_id": 0, "email": 1, "username": 1}
-    ).to_list(1000)
-
-    html_template = """
+HTML_TEST_EMAIL = """
     <div dir="rtl" style="font-family:Arial,sans-serif;max-width:560px;margin:auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.12)">
       <div style="background:linear-gradient(135deg,#5B0E14 0%,#8B1520 60%,#A01C26 100%);padding:36px 32px;text-align:center">
         <div style="font-size:2.8rem;margin-bottom:4px">🏆</div>
@@ -5255,9 +5247,7 @@ async def send_test_email_all(admin: dict = Depends(get_super_admin)):
         <p style="color:#444;line-height:1.8;font-size:1rem">
           شكراً لتسجيلك في <strong>حُجّة</strong> — منصة تريفيا عربية تجمع أصدقاءك وزملاءك في تحدي مثير للمعلومات.
         </p>
-        <p style="color:#444;line-height:1.8">
-          نشتاق لحضورك! اللعبة جاهزة، والأسئلة بانتظارك.
-        </p>
+        <p style="color:#444;line-height:1.8">نشتاق لحضورك! اللعبة جاهزة، والأسئلة بانتظارك.</p>
         <div style="text-align:center;margin:28px 0">
           <a href="https://al-amaliya-al-akhira.vercel.app"
              style="background:linear-gradient(135deg,#5B0E14,#8B1520);color:#F1E194;padding:14px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1rem;display:inline-block">
@@ -5278,23 +5268,29 @@ async def send_test_email_all(admin: dict = Depends(get_super_admin)):
         <p style="color:#999;font-size:0.78rem;margin:0">حُجّة · لعبة المعلومات العربية</p>
       </div>
     </div>
-    """
+"""
 
-    sent = 0
-    failed = 0
+async def _bulk_send(users_list: list):
+    """Background task: send welcome email to each user sequentially."""
     for u in users_list:
-        email   = u.get("email", "")
-        uname   = u.get("username", "صديق")
+        email = u.get("email", "")
         if not email:
             continue
-        html = html_template.replace("{username}", uname)
-        ok = await send_email_notification(email, "🎮 حُجّة بتنتظرك — لعبة المعلومات العربية", html)
-        if ok:
-            sent += 1
-        else:
-            failed += 1
+        html = HTML_TEST_EMAIL.replace("{username}", u.get("username", "صديق"))
+        await send_email_notification(email, "🎮 حُجّة بتنتظرك — لعبة المعلومات العربية", html)
+        await asyncio.sleep(0.5)   # gentle rate-limit
 
-    return {"sent": sent, "failed": failed, "total": len(users_list)}
+
+@api_router.post("/admin/send-test-email")
+async def send_test_email_all(background_tasks: BackgroundTasks, admin: dict = Depends(get_super_admin)):
+    """Fire-and-forget: send a welcome email to all registered users."""
+    users_list = await db.users.find(
+        {"email": {"$exists": True, "$ne": None, "$ne": ""}},
+        {"_id": 0, "email": 1, "username": 1}
+    ).to_list(1000)
+    users_list = [u for u in users_list if u.get("email")]
+    background_tasks.add_task(_bulk_send, users_list)
+    return {"queued": len(users_list), "message": "جاري الإرسال في الخلفية"}
 
 
 app.include_router(api_router)
