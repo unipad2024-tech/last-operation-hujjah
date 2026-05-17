@@ -371,6 +371,26 @@ export default function CategorySelectPage() {
               {icon} {label}
             </button>
           ))}
+          <button
+            onClick={() => {
+              setSource("regular");
+              setTimeout(() => {
+                const qiyasGroup = categoryGroups.find(g => g.name?.includes("قياس"));
+                if (qiyasGroup) {
+                  document.getElementById(`section-${qiyasGroup.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              }, 100);
+            }}
+            className="px-4 py-2 rounded-xl text-sm font-black transition-all border"
+            style={{
+              background: darkMode ? "rgba(99,102,241,0.15)" : "rgba(99,102,241,0.1)",
+              color: "#6366f1",
+              border: "2px solid rgba(99,102,241,0.35)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            📐 قياس
+          </button>
         </div>
 
         {/* Scroll Navigation (only for regular) */}
