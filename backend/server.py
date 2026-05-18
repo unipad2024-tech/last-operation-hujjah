@@ -3515,21 +3515,32 @@ async def _claude_analyze_file_text(file_path: str, prompt: str) -> str:
 
 
 async def _fetch_unsplash_image(query: str) -> str:
-    """Fetch a single Unsplash image URL for a query. Returns URL or empty string."""
+    """Fetch a single Unsplash image URL for a query using search (more reliable than random)."""
     if not query:
         return ""
     key = os.environ.get("UNSPLASH_API_KEY", "")
     if not key:
         return ""
     try:
-        async with httpx.AsyncClient(timeout=8) as c:
+        async with httpx.AsyncClient(timeout=10) as c:
+            # Use /search/photos for more reliable results on specific queries
             r = await c.get(
+                "https://api.unsplash.com/search/photos",
+                params={"query": query, "orientation": "landscape", "per_page": 5},
+                headers={"Authorization": f"Client-ID {key}"},
+            )
+            if r.status_code == 200:
+                results = r.json().get("results", [])
+                if results:
+                    return results[0].get("urls", {}).get("regular", "")
+            # Fallback to random if search returns nothing
+            r2 = await c.get(
                 "https://api.unsplash.com/photos/random",
                 params={"query": query, "orientation": "landscape"},
                 headers={"Authorization": f"Client-ID {key}"},
             )
-            if r.status_code == 200:
-                return r.json().get("urls", {}).get("regular", "")
+            if r2.status_code == 200:
+                return r2.json().get("urls", {}).get("regular", "")
     except Exception:
         pass
     return ""
@@ -3718,6 +3729,8 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
     # Look up category template for rich context + examples
     template = _get_category_template(cat_name)
 
+    is_english_template = (template or {}).get("lang") == "en"
+
     existing_qs = await db.questions.find(
         {"category_id": category_id, "deleted_at": None},
         {"_id": 0, "text": 1}
@@ -3725,11 +3738,15 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
     existing_hint = ""
     if existing_qs:
         lines = "\n".join(f"- {q['text']}" for q in existing_qs[-20:])
-        existing_hint = f"\n⚠️ لا تكرر هذه الأسئلة الموجودة:\n{lines}\n\n"
+        if is_english_template:
+            existing_hint = f"\n⚠️ Do NOT repeat these existing questions:\n{lines}\n\n"
+        else:
+            existing_hint = f"\n⚠️ لا تكرر هذه الأسئلة الموجودة:\n{lines}\n\n"
 
-    custom = f"\nتعليمات المشرف: {extra_prompt}\n" if extra_prompt else ""
-
-    is_english_template = (template or {}).get("lang") == "en"
+    if extra_prompt:
+        custom = f"\nAdmin instructions: {extra_prompt}\n" if is_english_template else f"\nتعليمات المشرف: {extra_prompt}\n"
+    else:
+        custom = ""
 
     async def _gen(count: int, diff: int) -> list:
         lvl_data   = (template.get("levels", {}) if template else {}).get(diff, {})
