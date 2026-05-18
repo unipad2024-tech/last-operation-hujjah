@@ -270,7 +270,7 @@ export default function QuestionPage() {
         .question-inner {
           position: relative; z-index: 1;
           min-height: calc(68vh - 56px);
-          display: flex; flex-direction: column; gap: 14px; align-items: stretch;
+          display: flex; flex-direction: column; gap: 8px; align-items: stretch;
         }
 
         /* meta row */
@@ -327,9 +327,10 @@ export default function QuestionPage() {
         /* text */
         .question-text {
           margin: 0 auto; max-width: 900px;
-          font-size: clamp(1.4rem,2.8vw,3rem); line-height: 1.2; font-weight: 900;
+          font-size: clamp(1.2rem,2.2vw,2.4rem); line-height: 1.25; font-weight: 900;
           text-align: center; color: var(--text); text-shadow: 0 2px 18px rgba(0,0,0,0.50);
-          flex: 1; display: flex; align-items: center; justify-content: center;
+          flex: 0; display: flex; align-items: center; justify-content: center;
+          padding-top: 4px;
         }
 
         /* reveal btn */
@@ -693,13 +694,13 @@ export default function QuestionPage() {
 
                   {/* Question image — centered, below question text */}
                   {question.image_url && (
-                    <div data-testid="question-image-container" style={{ display:"flex", justifyContent:"center" }}>
+                    <div data-testid="question-image-container" style={{ display:"flex", justifyContent:"center", marginTop:"2px" }}>
                       {!imgLoaded && (
-                        <div style={{ width:"85%", height:"140px", background:"rgba(255,255,255,0.04)", border:"1.5px dashed rgba(255,180,80,0.14)", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:"16px" }}>
+                        <div style={{ width:"92%", height:"200px", background:"rgba(255,255,255,0.04)", border:"1.5px dashed rgba(255,180,80,0.14)", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:"16px" }}>
                           <span style={{ color:"rgba(247,241,232,0.22)", fontSize:"0.85rem" }}>تحميل الصورة...</span>
                         </div>
                       )}
-                      <div style={{ display: imgLoaded ? "flex" : "none", flexDirection:"column", alignItems:"center", position:"relative", width:"85%" }}>
+                      <div style={{ display: imgLoaded ? "flex" : "none", flexDirection:"column", alignItems:"center", position:"relative", width:"92%" }}>
                         <img
                           src={question.image_url}
                           alt="question"
@@ -708,7 +709,7 @@ export default function QuestionPage() {
                           onLoad={() => setImgLoaded(true)}
                           onError={e => { e.target.style.display="none"; setImgLoaded(true); }}
                           onClick={() => setZoomedImage(question.image_url)}
-                          style={{ width:"100%", maxHeight:"160px", objectFit:"contain", borderRadius:"16px", cursor:"zoom-in" }}
+                          style={{ width:"100%", maxHeight:"240px", objectFit:"contain", borderRadius:"16px", cursor:"zoom-in" }}
                         />
                         <div style={{ position:"absolute", top:"8px", left:"8px", cursor:"zoom-in" }}
                           onClick={() => setZoomedImage(question.image_url)}>
