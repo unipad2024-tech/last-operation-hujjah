@@ -1085,7 +1085,7 @@ async def restore_question(q_id: str, admin: dict = Depends(get_admin)):
 @api_router.patch("/questions/{q_id}/autosave")
 async def autosave_question(q_id: str, body: dict, admin: dict = Depends(get_admin)):
     """Quick auto-save for question field changes — no full validation required."""
-    allowed_fields = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id"}
+    allowed_fields = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id", "translation"}
     updates = {k: v for k, v in body.items() if k in allowed_fields}
     if not updates:
         return {"saved": False, "reason": "no valid fields"}
@@ -1722,7 +1722,7 @@ async def get_pending_questions(
 @api_router.patch("/admin/questions/pending/{q_id}")
 async def patch_pending_question(q_id: str, body: dict, admin: dict = Depends(get_admin)):
     """Update specific fields of a pending question (e.g., image_url, answer_image_url)."""
-    allowed = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id", "choices"}
+    allowed = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id", "choices", "translation"}
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
         raise HTTPException(400, "لا توجد حقول صالحة للتحديث")
@@ -3535,17 +3535,188 @@ async def _fetch_unsplash_image(query: str) -> str:
     return ""
 
 
+# ─── Category Generation Templates ───────────────────────────────────────────
+# Each template provides: persona, context, MCQ preference, and level examples.
+# Matched by keyword in category name.
+CATEGORY_TEMPLATES: dict = {
+    "أحياء": {
+        "persona": "خبير في الأحياء والعلوم الحياتية للمناهج السعودية",
+        "context": "أسئلة اختبار التحصيل الدراسي — الأحياء — المنهج السعودي",
+        "levels": {
+            300: {
+                "desc": "حقائق ومصطلحات أساسية، تعريفات مباشرة يعرفها طالب متوسط",
+                "example": '{"text":"ما الجزء المسؤول عن إنتاج الطاقة في الخلية؟","answer":"الميتوكوندريا","image_query":"mitochondria cell diagram","answer_image_query":"mitochondria ATP energy production"}',
+            },
+            600: {
+                "desc": "عمليات حيوية وأنظمة متكاملة، تحتاج فهماً لا مجرد حفظ",
+                "example": '{"text":"ما الناتج النهائي للتنفس اللاهوائي في خلايا العضلات؟","answer":"حمض اللاكتيك","image_query":"anaerobic respiration muscle cells","answer_image_query":"lactic acid fermentation biology"}',
+            },
+            900: {
+                "desc": "تحليل تجارب، وراثة متقدمة، تفسير بيانات — مستوى طالب متميز",
+                "example": '{"text":"في تجربة التورث المرتبط بالجنس، إذا كان تردد الجين X في الذكور 0.08 — ما نسبة ظهوره في الإناث؟","answer":"0.0064","image_query":"sex-linked inheritance genetics chart","answer_image_query":"X-linked gene frequency females calculation"}',
+            },
+        },
+    },
+    "كيمياء": {
+        "persona": "خبير في الكيمياء للمناهج السعودية",
+        "context": "أسئلة اختبار التحصيل الدراسي — الكيمياء — المنهج السعودي",
+        "levels": {
+            300: {
+                "desc": "خصائص عناصر، جدول دوري، تفاعلات بسيطة ومعادلات مباشرة",
+                "example": '{"text":"ما عدد الإلكترونات في الغلاف الخارجي لذرة الكلور (العدد الذري 17)؟","answer":"7","image_query":"chlorine periodic table element","answer_image_query":"chlorine electron configuration shells"}',
+            },
+            600: {
+                "desc": "حسابات ستويكيومترية، موازنة معادلات، كيمياء عضوية مبدئية",
+                "example": '{"text":"ما حجم CO2 المنتج عند الظروف القياسية من احتراق 24g كربون كاملاً؟","answer":"44.8 لتر","image_query":"carbon combustion CO2 production chemistry","answer_image_query":"stoichiometry mole volume calculation"}',
+            },
+            900: {
+                "desc": "آليات تفاعل عضوي، ترمودينامكا، حركية كيميائية، تحليل متقدم",
+                "example": '{"text":"في تفاعل إضافة HBr على البروبين وفق قاعدة ماركوفنيكوف، على أي كربون يرتبط البروم؟","answer":"الكربون الثاني","image_query":"Markovnikov rule propene HBr addition","answer_image_query":"organic chemistry addition reaction mechanism"}',
+            },
+        },
+    },
+    "فيزياء": {
+        "persona": "خبير في الفيزياء للمناهج السعودية",
+        "context": "أسئلة اختبار التحصيل الدراسي — الفيزياء — المنهج السعودي",
+        "levels": {
+            300: {
+                "desc": "قوانين وصيغ أساسية، تطبيقات مباشرة، مسائل ذات خطوة واحدة",
+                "example": '{"text":"جسم كتلته 10 kg يتسارع بمقدار 5 m/s² — ما القوة المؤثرة عليه؟","answer":"50 نيوتن","image_query":"Newton second law force mass diagram","answer_image_query":"force acceleration physics 50N calculation"}',
+            },
+            600: {
+                "desc": "تحليل دوائر كهربائية، موجات، ضوء، مسائل متعددة الخطوات",
+                "example": '{"text":"مقاومتان 6Ω و3Ω موصولتان على التوازي مع بطارية 12V — ما التيار الكلي؟","answer":"6 أمبير","image_query":"parallel circuit two resistors physics","answer_image_query":"Ohm law parallel resistors total current"}',
+            },
+            900: {
+                "desc": "ميكانيكا متقدمة، فيزياء حديثة، تحليل بيانات تجريبية معقدة",
+                "example": '{"text":"في التجربة الكهروضوئية، إذا تضاعفت شدة الضوء مع ثبات تردده — ماذا يحدث للطاقة الحركية القصوى للإلكترونات؟","answer":"تبقى ثابتة","image_query":"photoelectric effect light intensity electrons","answer_image_query":"photoelectric effect kinetic energy graph"}',
+            },
+        },
+    },
+    "رياضيات": {
+        "persona": "خبير في الرياضيات للمناهج السعودية",
+        "context": "أسئلة اختبار التحصيل الدراسي — الرياضيات — المنهج السعودي",
+        "levels": {
+            300: {
+                "desc": "معادلات بسيطة، هندسة مبدئية، نسب مباشرة، عمليات أساسية",
+                "example": '{"text":"ما قيمة س إذا كان 3س - 7 = 11؟","answer":"6","image_query":"algebra linear equation solving","answer_image_query":"equation 3x-7=11 solution x=6"}',
+            },
+            600: {
+                "desc": "دوال، مثلثات، احتمالات، إحصاء، مسائل متعددة المراحل",
+                "example": '{"text":"ما مشتقة الدالة f(x) = x³ - 4x² + 7 عند x = 2؟","answer":"-4","image_query":"polynomial derivative calculus graph","answer_image_query":"derivative calculation f prime 2 result"}',
+            },
+            900: {
+                "desc": "تفاضل وتكامل متقدم، مصفوفات، برهان منطقي، مسائل مركبة",
+                "example": '{"text":"ما قيمة التكامل المحدود ∫₀¹ x·eˣ dx؟","answer":"1","image_query":"integration by parts calculus definite integral","answer_image_query":"xe^x integral from 0 to 1 result"}',
+            },
+        },
+    },
+    "كمي": {
+        "persona": "خبير في القدرات الكمية واختبار قياس السعودي",
+        "context": "أسئلة القدرات العامة — القسم الكمي — اختبار قياس",
+        "levels": {
+            300: {
+                "desc": "عمليات حسابية مباشرة، نسب بسيطة، متتاليات عددية واضحة",
+                "example": '{"text":"ما العدد الناقص في المتتالية: 2، 6، 18، __، 162؟","answer":"54","image_query":"number sequence geometric pattern","answer_image_query":"geometric sequence multiplication factor 3"}',
+            },
+            600: {
+                "desc": "مسائل لفظية تحتاج تحليلاً، نسب مئوية، مقارنات كمية",
+                "example": '{"text":"إذا كان ثمن الكتاب بعد خصم 20% هو 160 ريالاً — ما ثمنه الأصلي؟","answer":"200 ريال","image_query":"percentage discount original price calculation","answer_image_query":"reverse percentage 20 off 160 equals 200"}',
+            },
+            900: {
+                "desc": "استدلال رياضي معقد، تحليل بيانات متعددة، مسائل مركبة متعددة الخطوات",
+                "example": '{"text":"إذا كان متوسط 7 أعداد 15 وحذفنا أصغرها وهو 3 — ما متوسط الأعداد المتبقية؟","answer":"17","image_query":"arithmetic mean calculation statistics","answer_image_query":"average after removing minimum value 6 numbers"}',
+            },
+        },
+    },
+    "لفظي": {
+        "persona": "خبير في اللغة العربية وقدرات التحليل اللغوي — اختبار قياس",
+        "context": "أسئلة القدرات العامة — القسم اللفظي — اختبار قياس السعودي",
+        "levels": {
+            300: {
+                "desc": "مرادفات وأضداد واضحة، إكمال الجمل البسيط، فهم لغوي مباشر",
+                "example": '{"text":"ما مرادف كلمة (فصيح)؟","answer":"بليغ","image_query":"Arabic language eloquence calligraphy","answer_image_query":"Arabic word baligha fasih meaning"}',
+            },
+            600: {
+                "desc": "تناظر لفظي، قراءة نص واستنتاج، علاقات معنوية متقدمة",
+                "example": '{"text":"البياض للثلج ما الخضرة لـ___؟","answer":"الشجر","image_query":"Arabic verbal analogy reasoning test","answer_image_query":"green tree color analogy"}',
+            },
+            900: {
+                "desc": "استدلال لفظي معقد، تحليل نصوص، علاقات منطقية متعددة المستويات",
+                "example": '{"text":"إذا كان كل طبيب حكيم وبعض الحكماء شعراء — ما الاستنتاج الصحيح؟","answer":"بعض الأطباء قد يكونون شعراء","image_query":"logical reasoning syllogism Arabic language","answer_image_query":"Venn diagram logical inference"}',
+            },
+        },
+    },
+    "Block": {
+        "persona": "A medical doctor and professor specializing in Basic Year medical science questions",
+        "context": "Basic Year medical trivia questions — anatomy, physiology, pathology — written in ENGLISH",
+        "lang": "en",
+        "levels": {
+            300: {
+                "desc": "Basic anatomy, direct organ functions, medical definitions and terminology",
+                "example": '{"text":"Which organ is responsible for producing bile?","answer":"The liver","image_query":"liver bile production anatomy","answer_image_query":"liver hepatocytes bile canaliculi"}',
+            },
+            600: {
+                "desc": "Applied physiology, disease mechanisms, clinical-basic science correlations",
+                "example": '{"text":"Which hormone is responsible for sodium reabsorption in the distal convoluted tubule of the kidney?","answer":"Aldosterone","image_query":"aldosterone distal tubule kidney sodium","answer_image_query":"aldosterone renin angiotensin system diagram"}',
+            },
+            900: {
+                "desc": "Multi-system integration, clinical scenarios, lab data interpretation",
+                "example": '{"text":"A patient presents with elevated TSH and low free T4 — what is the most likely site of dysfunction in the HPT axis?","answer":"The thyroid gland itself (primary hypothyroidism)","image_query":"HPT axis thyroid TSH T4 feedback loop","answer_image_query":"primary hypothyroidism elevated TSH low T4 diagram"}',
+            },
+        },
+    },
+    "إسلاميات": {
+        "persona": "عالم متخصص في الفقه الإسلامي والقرآن والسيرة النبوية",
+        "context": "أسئلة تريفيا إسلامية — السياق سعودي/خليجي",
+        "levels": {
+            300: {"desc": "أركان الإسلام والإيمان، سور قصيرة معروفة، أحداث السيرة الشهيرة", "example": ""},
+            600: {"desc": "أحكام فقهية، آيات قرآنية وتفسيرها، غزوات وأحداث إسلامية", "example": ""},
+            900: {"desc": "فقه دقيق، أحاديث نبوية نصوص، تاريخ الفقهاء والمذاهب", "example": ""},
+        },
+    },
+    "تاريخ": {
+        "persona": "مؤرخ متخصص في التاريخ العربي والإسلامي والعالمي",
+        "context": "أسئلة تريفيا تاريخية — الجمهور سعودي/عربي",
+        "levels": {
+            300: {"desc": "أحداث تاريخية شهيرة، شخصيات معروفة، تواريخ مهمة", "example": ""},
+            600: {"desc": "حضارات، معارك، اتفاقيات، أسباب ونتائج أحداث تاريخية", "example": ""},
+            900: {"desc": "تاريخ دبلوماسي وثقافي دقيق، شخصيات غير شهيرة، مقارنات حضارية", "example": ""},
+        },
+    },
+    "كرة القدم": {
+        "persona": "خبير في كرة القدم المحلية والعالمية",
+        "context": "أسئلة تريفيا كرة قدم — الجمهور سعودي/خليجي",
+        "levels": {
+            300: {"desc": "أندية شهيرة، نجوم معروفون، بطولات عالمية رئيسية", "example": ""},
+            600: {"desc": "إحصاءات، بطولات محلية خليجية وسعودية، نتائج مباريات تاريخية", "example": ""},
+            900: {"desc": "أرقام قياسية دقيقة، تاريخ أندية محلية، نتائج وأهداف تفصيلية", "example": ""},
+        },
+    },
+}
+
+def _get_category_template(cat_name: str) -> dict | None:
+    """Find the best matching template for a category by name keyword."""
+    for key, template in CATEGORY_TEMPLATES.items():
+        if key in cat_name:
+            return template
+    return None
+
+
 @api_router.post("/ai/generate-questions")
 async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
-    category_id      = body.get("category_id", "")
-    mode             = body.get("mode", "single")
-    ai_engine        = body.get("ai_engine", "claude")      # "claude" | "gemini"
-    fetch_images     = body.get("fetch_images", True)        # auto-fetch Unsplash
-    extra_prompt     = (body.get("prompt_description") or body.get("extra_prompt") or "").strip()
+    category_id  = body.get("category_id", "")
+    mode         = body.get("mode", "single")
+    ai_engine    = body.get("ai_engine", "claude")
+    fetch_images = body.get("fetch_images", True)
+    extra_prompt = (body.get("prompt_description") or body.get("extra_prompt") or "").strip()
 
     cat      = await db.categories.find_one({"id": category_id}, {"_id": 0})
     cat_name = cat.get("name", "عامة") if cat else "عامة"
     cat_desc = (cat.get("description") or cat_name) if cat else cat_name
+
+    # Look up category template for rich context + examples
+    template = _get_category_template(cat_name)
 
     existing_qs = await db.questions.find(
         {"category_id": category_id, "deleted_at": None},
@@ -3553,32 +3724,67 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
     ).to_list(300)
     existing_hint = ""
     if existing_qs:
-        lines = "\n".join(f"- {q['text']}" for q in existing_qs[-30:])
+        lines = "\n".join(f"- {q['text']}" for q in existing_qs[-20:])
         existing_hint = f"\n⚠️ لا تكرر هذه الأسئلة الموجودة:\n{lines}\n\n"
 
     custom = f"\nتعليمات المشرف: {extra_prompt}\n" if extra_prompt else ""
 
-    base_rules = (
-        "قواعد صارمة يجب اتباعها:\n"
-        "1. اكتب الأسئلة والإجابات باللغة العربية الفصيحة\n"
-        "2. الأسئلة متنوعة، حماسية، وغير متكررة — كل سؤال يختبر شيئاً مختلفاً\n"
-        "3. الإجابة نص قصير جداً (كلمة إلى 3 كلمات) — لا تكتب 'أ' أو 'ب' أو 'ج' أبداً\n"
-        "4. ⚠️ لا تذكر الإجابة داخل نص السؤال أبداً — السؤال يجب أن يختبر المعرفة لا يكشفها\n"
-        "5. السؤال يكون بصيغة سؤال (؟) — وضّح وصف دقيق يتطلب إجابة محددة\n"
-        "6. image_query: جملة إنجليزية قصيرة واصفة للصورة المناسبة\n"
-        "7. difficulty: استخدم القيمة المطلوبة فقط لكل سؤال\n"
-        "8. أرجع JSON array فقط بدون أي شرح إضافي:\n"
-        '[{"text":"...؟","answer":"...","image_query":"...","difficulty":300}]'
-    )
+    is_english_template = (template or {}).get("lang") == "en"
 
     async def _gen(count: int, diff: int) -> list:
-        diff_label = {300: "سهلة (معروفة للعموم)", 600: "متوسطة (تحتاج معرفة معقولة)", 900: "صعبة (تحتاج خبرة عالية)"}.get(diff, "متوسطة")
-        prompt = (
-            f"أنشئ بالضبط {count} سؤال تريفيا لفئة \"{cat_name}\" بمستوى {diff_label} — {diff} نقطة.\n"
-            f"وصف الفئة: {cat_desc}\n"
-            f"السياق: هذه أسئلة لعبة تريفيا عربية ترفيهية — الجمهور سعودي/خليجي.\n"
-            f"{custom}{existing_hint}{base_rules}"
-        )
+        lvl_data   = (template.get("levels", {}) if template else {}).get(diff, {})
+        diff_desc  = lvl_data.get("desc", "")
+        example    = lvl_data.get("example", "")
+        persona    = (template.get("persona") if template else None) or "خبير في صياغة أسئلة التريفيا العربية"
+        ctx        = (template.get("context") if template else None) or f"أسئلة تريفيا عربية — فئة {cat_name}"
+        diff_label = {300: "Easy (300)", 600: "Medium (600)", 900: "Hard (900)"}.get(diff, "Medium (600)") \
+                     if is_english_template else \
+                     {300: "سهل (300)", 600: "متوسط (600)", 900: "صعب (900)"}.get(diff, "متوسط (600)")
+
+        if is_english_template:
+            prompt = (
+                f"You are {persona}.\n"
+                f"Context: {ctx}\n\n"
+                f"Task: Generate exactly {count} questions at {diff_label} level.\n"
+                + (f"Level description: {diff_desc}\n" if diff_desc else "")
+                + (f"\nExample of required quality:\n{example}\n" if example else "")
+                + f"\n{custom}{existing_hint}"
+                "Strict rules:\n"
+                "1. Write questions and answers in ENGLISH only\n"
+                "2. Also provide 'translation' — an accurate Arabic translation of the question text\n"
+                "3. Also provide 'answer_ar' — the Arabic translation of the answer\n"
+                "4. ⚠️ Never include the answer inside the question text\n"
+                "5. Answer must be concise and precise (1-6 words)\n"
+                "6. image_query: short English phrase describing the best illustration for the question\n"
+                "7. answer_image_query: short English phrase describing an illustration of the answer\n"
+                f"8. difficulty: {diff} for every question\n\n"
+                "Return ONLY a JSON array, no extra text:\n"
+                '[{"text":"Question in English?","answer":"Answer","translation":"السؤال بالعربي؟",'
+                '"answer_ar":"الإجابة بالعربي","image_query":"image","answer_image_query":"image",'
+                f'"difficulty":{diff}' + "}]"
+            )
+        else:
+            prompt = (
+                f"أنت {persona}.\n"
+                f"السياق: {ctx}\n\n"
+                f"المطلوب: أنشئ بالضبط {count} سؤال بمستوى {diff_label}.\n"
+                + (f"وصف المستوى: {diff_desc}\n" if diff_desc else "")
+                + (f"\nمثال على الجودة المطلوبة:\n{example}\n" if example else "")
+                + f"\n{custom}{existing_hint}"
+                "قواعد صارمة:\n"
+                "1. اكتب كل شيء بالعربية الفصيحة الواضحة\n"
+                "2. كل سؤال يختبر جانباً مختلفاً — تنوع تام في الموضوعات والصياغة\n"
+                "3. ⚠️ لا تضع الإجابة داخل نص السؤال — السؤال يختبر المعرفة لا يكشفها\n"
+                "4. الإجابة نص قصير ودقيق (1-5 كلمات) — لا حروف مثل أ/ب/ج\n"
+                "5. image_query: جملة إنجليزية تصف أفضل صورة توضيحية للسؤال\n"
+                "6. answer_image_query: جملة إنجليزية تصف صورة توضيحية للإجابة تحديداً\n"
+                f"7. difficulty: {diff} لكل سؤال\n\n"
+                "أرجع JSON array فقط بدون أي نص إضافي:\n"
+                '[{"text":"السؤال؟","answer":"الإجابة",'
+                '"image_query":"english question image","answer_image_query":"english answer image",'
+                f'"difficulty":{diff}' + "}]"
+            )
+
         raw = await _ai_generate(prompt, prefer=ai_engine)
         m = re.search(r'\[.*?\]', raw, re.DOTALL) or re.search(r'\[.*\]', raw, re.DOTALL)
         if not m:
@@ -3587,31 +3793,49 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
             items = json.loads(m.group())
         except json.JSONDecodeError:
             return []
+
         ts = datetime.now(timezone.utc).isoformat()
         result = []
-        for q in items[:count]:
+        for q in items[:count + 3]:
             txt = (q.get("text") or "").strip()
             ans = (q.get("answer") or "").strip()
-            # Skip if answer looks like a choice letter
-            if not txt or not ans or ans in {"أ", "ب", "ج", "د", "A", "B", "C", "D"}:
+            if not txt or not ans:
                 continue
-            # Skip if the answer is literally contained in the question text (quality guard)
-            if ans and len(ans) > 2 and ans.lower() in txt.lower():
-                logger.warning(f"AI quality: answer '{ans}' found in question text — skipping")
+            if ans in {"أ", "ب", "ج", "د", "A", "B", "C", "D"}:
                 continue
+            if ans and len(ans) > 3 and ans in txt:
+                logger.warning(f"Quality guard: answer in question — skipping")
+                continue
+            # Build translation field: "Q: <translation> | A: <answer_ar>"
+            translation = ""
+            if is_english_template:
+                t_q = (q.get("translation") or "").strip()
+                t_a = (q.get("answer_ar") or "").strip()
+                if t_q or t_a:
+                    translation = json.dumps({"q": t_q, "a": t_a}, ensure_ascii=False)
             result.append({
-                "id": str(uuid.uuid4()), "category_id": category_id, "difficulty": diff,
-                "text": txt, "answer": ans,
-                "image_query": (q.get("image_query") or "").strip(),
-                "image_url": "", "answer_image_url": "",
-                "question_type": "text", "is_experimental": True, "created_at": ts,
+                "id":                 str(uuid.uuid4()),
+                "category_id":        category_id,
+                "difficulty":         diff,
+                "text":               txt,
+                "answer":             ans,
+                "translation":        translation,
+                "image_query":        (q.get("image_query") or "").strip(),
+                "answer_image_query": (q.get("answer_image_query") or "").strip(),
+                "image_url":          "",
+                "answer_image_url":   "",
+                "question_type":      "text",
+                "is_experimental":    True,
+                "created_at":         ts,
             })
+            if len(result) >= count:
+                break
         return result
 
     if mode == "full18":
         all_questions = []
-        for diff, count in [(300, 6), (600, 6), (900, 6)]:
-            all_questions.extend(await _gen(count, diff))
+        for diff, cnt in [(300, 6), (600, 6), (900, 6)]:
+            all_questions.extend(await _gen(cnt, diff))
     else:
         raw_diff = body.get("difficulty", 300)
         diff_map = {"easy": 300, "medium": 600, "hard": 900, "سهل": 300, "متوسط": 600, "صعب": 900}
@@ -3619,17 +3843,55 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
         count      = min(int(body.get("count", 10)), 30)
         all_questions = await _gen(count, difficulty)
 
-    # Auto-fetch Unsplash images in parallel
+    # Fetch question image + answer image in parallel
     if fetch_images and all_questions:
-        image_results = await asyncio.gather(
-            *[_fetch_unsplash_image(q["image_query"]) for q in all_questions],
-            return_exceptions=True,
+        q_queries = [q.get("image_query", "") for q in all_questions]
+        a_queries = [q.get("answer_image_query", "") for q in all_questions]
+        q_results, a_results = await asyncio.gather(
+            asyncio.gather(*[_fetch_unsplash_image(qr) for qr in q_queries], return_exceptions=True),
+            asyncio.gather(*[_fetch_unsplash_image(ar) for ar in a_queries], return_exceptions=True),
         )
-        for i, url in enumerate(image_results):
-            if isinstance(url, str) and url:
-                all_questions[i]["image_url"] = url
+        for i, q in enumerate(all_questions):
+            if isinstance(q_results[i], str) and q_results[i]:
+                q["image_url"] = q_results[i]
+            if isinstance(a_results[i], str) and a_results[i]:
+                q["answer_image_url"] = a_results[i]
 
-    return {"questions": all_questions, "count": len(all_questions)}
+    return {
+        "questions":    all_questions,
+        "count":        len(all_questions),
+        "template_used": (template.get("context", "")[:50] if template else None),
+    }
+
+
+@api_router.post("/ai/translate")
+async def ai_translate(body: dict, admin=Depends(get_admin)):
+    """Translate question text and/or answer to Arabic."""
+    text   = (body.get("text") or "").strip()
+    answer = (body.get("answer") or "").strip()
+    if not text and not answer:
+        raise HTTPException(400, "أرسل text أو answer للترجمة")
+    parts = []
+    if text:   parts.append(f'Q: {text}')
+    if answer: parts.append(f'A: {answer}')
+    prompt = (
+        "Translate the following medical question and/or answer from English to Arabic. "
+        "Use clear, formal Arabic (فصحى). Keep medical terms accurate. "
+        "Return ONLY a JSON object with keys 'text_ar' and 'answer_ar' (include only the keys that were provided):\n\n"
+        + "\n".join(parts)
+    )
+    raw = await _ai_generate(prompt, prefer="claude")
+    m = re.search(r'\{.*?\}', raw, re.DOTALL) or re.search(r'\{.*\}', raw, re.DOTALL)
+    if not m:
+        raise HTTPException(500, "فشل استخراج الترجمة")
+    try:
+        result = json.loads(m.group())
+    except json.JSONDecodeError:
+        raise HTTPException(500, "فشل تحويل الترجمة")
+    return {
+        "text_ar":   result.get("text_ar", ""),
+        "answer_ar": result.get("answer_ar", ""),
+    }
 
 
 @api_router.post("/ai/save-questions")

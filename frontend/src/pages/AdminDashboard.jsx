@@ -531,6 +531,31 @@ function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, o
   const [tmpImg, setTmpImg]           = useState(q.image_url || "");
   const [tmpAnsImg, setTmpAnsImg]     = useState(q.answer_image_url || "");
   const [saving, setSaving]           = useState(false);
+  const [translating, setTranslating] = useState(false);
+
+  // Parse stored translation {q, a}
+  const parsedTr = (() => { try { return q.translation ? JSON.parse(q.translation) : null; } catch { return null; } })();
+  const [tmpTrQ, setTmpTrQ] = useState(parsedTr?.q || "");
+  const [tmpTrA, setTmpTrA] = useState(parsedTr?.a || "");
+
+  const saveTranslation = async (trQ, trA) => {
+    const val = JSON.stringify({ q: trQ, a: trA });
+    await saveField("translation", val);
+    onUpdate(q.id, { translation: val });
+  };
+
+  const handleAutoTranslate = async () => {
+    setTranslating(true);
+    try {
+      const r = await axios.post(`${API}/ai/translate`, { text: q.text, answer: q.answer }, { headers });
+      const newQ = r.data.text_ar || "";
+      const newA = r.data.answer_ar || "";
+      setTmpTrQ(newQ); setTmpTrA(newA);
+      await saveTranslation(newQ, newA);
+      toast.success("تمت الترجمة");
+    } catch { toast.error("فشل الترجمة"); }
+    finally { setTranslating(false); }
+  };
 
   const diffColors = {
     300: { bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.4)", text: "#34d399", label: "سهل" },
@@ -756,6 +781,41 @@ function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, o
               </div>
             )}
 
+            {/* Translation section — shown for English questions */}
+            {(q.translation || q.text?.match(/^[A-Za-z]/)) && (
+              <div style={{ marginBottom: "10px", padding: "10px 12px", background: "rgba(234,179,8,0.07)", borderRadius: "10px", border: "1px solid rgba(234,179,8,0.2)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <span style={{ color: "#fbbf24", fontSize: "0.7rem", fontWeight: 800 }}>🇸🇦 الترجمة العربية</span>
+                  <button
+                    onClick={handleAutoTranslate}
+                    disabled={translating}
+                    style={{ background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.4)", color: "#fbbf24",
+                             fontSize: "0.68rem", fontWeight: 700, padding: "2px 10px", borderRadius: "6px", cursor: "pointer" }}
+                  >
+                    {translating ? "⏳..." : "✨ ترجم تلقائياً"}
+                  </button>
+                </div>
+                <input
+                  value={tmpTrQ}
+                  onChange={e => setTmpTrQ(e.target.value)}
+                  onBlur={() => saveTranslation(tmpTrQ, tmpTrA)}
+                  placeholder="ترجمة نص السؤال بالعربي..."
+                  style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(234,179,8,0.25)",
+                           borderRadius: "8px", color: "#fef3c7", padding: "6px 10px", fontSize: "0.82rem",
+                           fontFamily: "Cairo,sans-serif", outline: "none", marginBottom: "5px", boxSizing: "border-box" }}
+                />
+                <input
+                  value={tmpTrA}
+                  onChange={e => setTmpTrA(e.target.value)}
+                  onBlur={() => saveTranslation(tmpTrQ, tmpTrA)}
+                  placeholder="ترجمة الإجابة بالعربي..."
+                  style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(234,179,8,0.25)",
+                           borderRadius: "8px", color: "#fef9c3", padding: "6px 10px", fontSize: "0.82rem",
+                           fontFamily: "Cairo,sans-serif", outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+            )}
+
             {/* Images row */}
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
               {/* Question image */}
@@ -955,6 +1015,14 @@ export default function AdminDashboard() {
   const [aiDiff, setAiDiff] = useState(300);
   const [aiCount, setAiCount] = useState(12);
   const [aiPrompt, setAiPrompt] = useState("");
+
+  // Template detection keywords (mirrors backend CATEGORY_TEMPLATES keys)
+  const TEMPLATE_KEYS = ["أحياء","كيمياء","فيزياء","رياضيات","كمي","لفظي","Block","إسلاميات","تاريخ","كرة القدم"];
+  const getTemplateLabel = (catId) => {
+    const cat = categories.find(c => c.id === catId);
+    if (!cat) return null;
+    return TEMPLATE_KEYS.find(k => cat.name?.includes(k)) || null;
+  };
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiQuestions, setAiQuestions] = useState([]);
   const [aiSaving, setAiSaving] = useState(false);
@@ -1417,23 +1485,26 @@ export default function AdminDashboard() {
         prompt_description: aiPrompt.trim() || undefined,
       }, { headers });
       setAiQuestions(data.questions);
-      toast.success(`تم توليد ${data.count} سؤال! جاري جلب الصور...`);
-      // Fetch Unsplash images in parallel — collect ALL results before updating state
-      setAiFetchingImages(true);
-      const imageResults = await Promise.allSettled(
-        data.questions.map((q) => fetchUnsplashForQuestion(q.image_query))
-      );
-      // Apply all results at once to avoid race conditions
-      setAiQuestions(prev =>
-        prev.map((q, i) => {
-          const res = imageResults[i];
-          if (res?.status === "fulfilled" && res.value) {
-            return { ...q, ...res.value };
-          }
-          return q;
-        })
-      );
-      setAiFetchingImages(false);
+      const templateMsg = data.template_used ? ` (قالب: ${data.template_used.slice(0, 25)})` : "";
+      toast.success(`تم توليد ${data.count} سؤال${templateMsg}`);
+      // Images already fetched server-side — but do a client-side pass for any missing
+      const missing = data.questions.filter(q => !q.image_url && q.image_query);
+      if (missing.length > 0) {
+        setAiFetchingImages(true);
+        const imageResults = await Promise.allSettled(
+          data.questions.map((q) => q.image_url ? null : fetchUnsplashForQuestion(q.image_query))
+        );
+        setAiQuestions(prev =>
+          prev.map((q, i) => {
+            const res = imageResults[i];
+            if (res?.status === "fulfilled" && res.value && !q.image_url) {
+              return { ...q, image_url: res.value.url, _img_thumb: res.value.url };
+            }
+            return q;
+          })
+        );
+        setAiFetchingImages(false);
+      }
       toast.success("جاهز! راجع الأسئلة والصور");
     } catch (e) {
       toast.error(e?.response?.data?.detail || "خطأ في التوليد");
@@ -2897,8 +2968,16 @@ export default function AdminDashboard() {
                   className="w-full border-2 border-primary/20 focus:border-primary rounded-xl px-3 py-2.5 text-sm font-bold outline-none bg-white"
                 >
                   <option value="">اختر فئة...</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.icon || ""} {c.name}{c.is_premium ? " ⭐" : ""}</option>)}
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.icon || ""} {c.name}</option>)}
                 </select>
+                {aiCatId && (
+                  <div className="mt-1.5 text-[11px] font-bold">
+                    {getTemplateLabel(aiCatId)
+                      ? <span className="text-emerald-600">✓ قالب متخصص: {getTemplateLabel(aiCatId)}</span>
+                      : <span className="text-primary/40">قالب عام</span>
+                    }
+                  </div>
+                )}
               </div>
               <div>
                 <label className="text-sm font-bold text-primary/70 mb-2 block">الصعوبة</label>
@@ -3006,96 +3085,99 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </div>
-              <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                {aiQuestions.map((q, i) => (
-                  <div key={q.id} data-testid={`ai-question-${i}`}
-                    className={`rounded-xl border overflow-hidden ${q.difficulty === 300 ? "border-green-200 bg-green-50" : q.difficulty === 600 ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"}`}>
-                    <div className="flex">
-                      {/* Image Preview */}
-                      <div className="w-28 shrink-0 bg-black/10 relative overflow-hidden">
-                        {q._img_thumb || q.image_url ? (
-                          <img
-                            src={q._img_thumb || q.image_url}
-                            alt=""
-                            className="w-full h-full object-cover"
-                            style={{ minHeight: "100px" }}
-                            onError={e => e.target.style.display = "none"}
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-full min-h-[100px] text-primary/20 text-xs text-center p-2">
-                            {q.image_query ? "⏳" : "لا صورة"}
-                          </div>
-                        )}
-                        {q._img_credit && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 py-0.5 truncate">
-                            © {q._img_credit}
-                          </div>
-                        )}
+              <div className="space-y-3 max-h-[700px] overflow-y-auto pr-1">
+                {aiQuestions.map((q, i) => {
+                  const diffColor = q.difficulty === 300
+                    ? { border: "#bbf7d0", bg: "#f0fdf4", badge: "#dcfce7", badgeText: "#166534" }
+                    : q.difficulty === 600
+                    ? { border: "#fde68a", bg: "#fffbeb", badge: "#fef3c7", badgeText: "#92400e" }
+                    : { border: "#fecaca", bg: "#fff5f5", badge: "#fee2e2", badgeText: "#991b1b" };
+                  return (
+                    <div key={q.id} data-testid={`ai-question-${i}`}
+                      style={{ border: `1.5px solid ${diffColor.border}`, background: diffColor.bg, borderRadius: 14 }}
+                      className="overflow-hidden">
+                      {/* Header row */}
+                      <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
+                        <span style={{ background: diffColor.badge, color: diffColor.badgeText }}
+                          className="text-[10px] font-black px-2 py-0.5 rounded-full">
+                          {q.difficulty === 300 ? "سهل" : q.difficulty === 600 ? "متوسط" : "صعب"} · {q.difficulty}
+                        </span>
+                        <button onClick={() => setAiQuestions(aiQuestions.filter((_, idx) => idx !== i))}
+                          className="text-red-400/50 hover:text-red-500 text-lg font-black leading-none px-1">×</button>
                       </div>
-                      {/* Content */}
-                      <div className="flex-1 p-3 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${q.difficulty === 300 ? "bg-green-200 text-green-800" : q.difficulty === 600 ? "bg-amber-200 text-amber-800" : "bg-red-200 text-red-800"}`}>
-                            {q.difficulty === 300 ? "سهل" : q.difficulty === 600 ? "متوسط" : "صعب"} • {q.difficulty}
-                          </span>
-                          <button
-                            onClick={() => setAiQuestions(aiQuestions.filter((_, idx) => idx !== i))}
-                            className="text-red-400/60 hover:text-red-500 text-xl font-black leading-none"
-                            title="حذف هذا السؤال"
-                          >
-                            ×
-                          </button>
+
+                      {/* Images row */}
+                      <div className="flex gap-2 px-3 pb-2">
+                        {/* Question image */}
+                        <div className="relative w-24 h-16 rounded-lg overflow-hidden bg-black/8 shrink-0 flex items-center justify-center">
+                          {q.image_url ? (
+                            <img src={q.image_url} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display = "none"} />
+                          ) : (
+                            <span className="text-[9px] text-black/25 text-center">{aiFetchingImages ? "⏳" : "صورة السؤال"}</span>
+                          )}
+                          <span className="absolute bottom-0 left-0 right-0 text-center text-[7px] bg-black/40 text-white py-0.5">سؤال</span>
                         </div>
+                        {/* Answer image */}
+                        <div className="relative w-24 h-16 rounded-lg overflow-hidden bg-black/8 shrink-0 flex items-center justify-center">
+                          {q.answer_image_url ? (
+                            <img src={q.answer_image_url} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display = "none"} />
+                          ) : (
+                            <span className="text-[9px] text-black/25 text-center">{aiFetchingImages ? "⏳" : "صورة الإجابة"}</span>
+                          )}
+                          <span className="absolute bottom-0 left-0 right-0 text-center text-[7px] bg-black/40 text-white py-0.5">إجابة</span>
+                        </div>
+                        {/* Question text */}
                         <textarea
                           value={q.text}
-                          onChange={(e) => {
-                            const updated = [...aiQuestions];
-                            updated[i] = { ...q, text: e.target.value };
-                            setAiQuestions(updated);
-                          }}
-                          rows={2}
-                          className="w-full bg-white border border-primary/10 rounded-lg px-3 py-2 text-sm font-bold outline-none resize-none"
+                          onChange={(e) => { const u = [...aiQuestions]; u[i] = { ...q, text: e.target.value }; setAiQuestions(u); }}
+                          rows={3}
+                          className="flex-1 bg-white border border-black/10 rounded-lg px-2.5 py-2 text-sm font-bold outline-none resize-none"
+                          style={{ fontFamily: "Cairo, sans-serif" }}
                           placeholder="نص السؤال"
                         />
-                        <div className="flex gap-2">
-                          <input
-                            value={q.answer}
-                            onChange={(e) => {
-                              const updated = [...aiQuestions];
-                              updated[i] = { ...q, answer: e.target.value };
-                              setAiQuestions(updated);
-                            }}
-                            className="flex-1 bg-white border border-primary/10 rounded-lg px-3 py-2 text-sm outline-none"
-                            placeholder="الإجابة"
-                          />
-                          <input
-                            value={q.image_query || ""}
-                            onChange={(e) => {
-                              const updated = [...aiQuestions];
-                              updated[i] = { ...q, image_query: e.target.value };
-                              setAiQuestions(updated);
-                            }}
-                            className="flex-1 bg-white border border-primary/10 rounded-lg px-3 py-2 text-xs outline-none"
-                            placeholder="كلمة بحث الصورة (انجليزي)"
-                          />
-                          <button
-                            onClick={async () => {
-                              const result = await fetchUnsplashForQuestion(q.image_query);
-                              if (result) {
-                                setAiQuestions(prev => prev.map((item, idx) => idx === i ? { ...item, ...result } : item));
-                              }
-                            }}
-                            disabled={!q.image_query}
-                            title="جلب صورة جديدة"
-                            className="bg-primary/10 hover:bg-primary/20 text-primary px-2 py-1 rounded-lg text-xs font-bold disabled:opacity-30 transition-all"
-                          >
-                            🖼️
-                          </button>
-                        </div>
+                      </div>
+
+                      {/* Answer + image queries row */}
+                      <div className="flex gap-2 px-3 pb-3">
+                        <input
+                          value={q.answer}
+                          onChange={(e) => { const u = [...aiQuestions]; u[i] = { ...q, answer: e.target.value }; setAiQuestions(u); }}
+                          className="w-32 bg-white border-2 border-green-300 rounded-lg px-2.5 py-1.5 text-sm font-black outline-none text-green-800"
+                          placeholder="الإجابة"
+                        />
+                        <input
+                          value={q.image_query || ""}
+                          onChange={(e) => { const u = [...aiQuestions]; u[i] = { ...q, image_query: e.target.value }; setAiQuestions(u); }}
+                          className="flex-1 bg-white border border-black/10 rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                          placeholder="🔍 بحث صورة السؤال (EN)"
+                        />
+                        <input
+                          value={q.answer_image_query || ""}
+                          onChange={(e) => { const u = [...aiQuestions]; u[i] = { ...q, answer_image_query: e.target.value }; setAiQuestions(u); }}
+                          className="flex-1 bg-white border border-black/10 rounded-lg px-2.5 py-1.5 text-xs outline-none"
+                          placeholder="🔍 بحث صورة الإجابة (EN)"
+                        />
+                        <button
+                          onClick={async () => {
+                            const [qRes, aRes] = await Promise.all([
+                              fetchUnsplashForQuestion(q.image_query),
+                              fetchUnsplashForQuestion(q.answer_image_query),
+                            ]);
+                            setAiQuestions(prev => prev.map((item, idx) => idx !== i ? item : {
+                              ...item,
+                              ...(qRes ? { image_url: qRes.url, _img_thumb: qRes.url } : {}),
+                              ...(aRes ? { answer_image_url: aRes.url } : {}),
+                            }));
+                          }}
+                          title="جلب صورتين جديدتين"
+                          className="bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1.5 rounded-lg text-sm font-bold disabled:opacity-30 transition-all shrink-0"
+                        >
+                          🖼️
+                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

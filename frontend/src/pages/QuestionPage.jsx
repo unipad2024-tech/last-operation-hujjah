@@ -37,6 +37,32 @@ export default function QuestionPage() {
   const timerRef = useRef(null);
   const [lifelines, setLifelines]     = useState({ change: true, double: true, time: true });
   const [doubleActive, setDoubleActive] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
+  const [translating, setTranslating]   = useState(false);
+  const [translationData, setTranslationData] = useState(null); // {q, a}
+
+  // Parse stored translation from question.translation (JSON string)
+  const parsedTranslation = (() => {
+    if (!question?.translation) return null;
+    try { return JSON.parse(question.translation); } catch { return null; }
+  })();
+
+  const handleTranslate = async () => {
+    if (parsedTranslation || translationData) { setShowTranslation(v => !v); return; }
+    setTranslating(true);
+    try {
+      const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
+      const res = await fetch(`${API}/ai/translate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: question.text, answer: question.answer }),
+      });
+      const data = await res.json();
+      setTranslationData({ q: data.text_ar || "", a: data.answer_ar || "" });
+      setShowTranslation(true);
+    } catch { /* silent */ }
+    finally { setTranslating(false); }
+  };
 
   useEffect(() => {
     if (!timerOn || timeLeft <= 0) return;
@@ -211,17 +237,17 @@ export default function QuestionPage() {
           box-shadow: var(--shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
         }
         .helper-title { font-weight: 800; font-size: 0.68rem; color: var(--muted); letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 8px; }
-        .hbtn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(255,180,80,0.14); background: rgba(255,255,255,0.05); color: var(--text); display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: background 0.2s, transform 0.13s; }
-        .hbtn:hover { background: rgba(255,180,80,0.10); transform: scale(1.1); }
+        .hbtn { width: auto; height: auto; border-radius: 12px; border: 1px solid rgba(255,180,80,0.20); background: rgba(255,255,255,0.06); color: var(--text); display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: background 0.2s, transform 0.13s, border-color 0.2s; }
+        .hbtn:hover:not(:disabled) { background: rgba(255,180,80,0.13); border-color: rgba(255,180,80,0.38); transform: scale(1.02); }
         .hbtn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; }
-        .lifeline-wrap { position: relative; display: flex; flex-direction: column; align-items: center; }
+        .lifeline-wrap { position: relative; display: flex; flex-direction: column; align-items: stretch; }
         .lifeline-tip {
-          position: absolute; top: calc(100% + 5px); left: 50%; transform: translateX(-50%);
+          position: absolute; top: calc(100% + 4px); right: 0;
           background: rgba(8,4,16,0.94); border: 1px solid rgba(255,180,80,0.22);
-          color: rgba(247,241,232,0.82); font-size: 0.60rem; font-weight: 600;
-          padding: 4px 8px; border-radius: 7px; white-space: nowrap;
+          color: rgba(247,241,232,0.82); font-size: 0.65rem; font-weight: 600;
+          padding: 5px 10px; border-radius: 8px;
           pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 20;
-          direction: rtl; text-align: center; line-height: 1.4; max-width: 140px; white-space: normal;
+          direction: rtl; text-align: right; line-height: 1.4; white-space: nowrap;
         }
         .lifeline-wrap:hover .lifeline-tip { opacity: 1; }
 
@@ -617,15 +643,63 @@ export default function QuestionPage() {
                     </div>
                   </div>
 
-                  {/* Question image — full-width with choices overlay */}
-                  {question.image_url ? (
-                    <div className="question-image-wrap" data-testid="question-image-container">
+                  {/* Question text — always above image */}
+                  <p data-testid="question-text" className="question-text"
+                    style={{ fontSize:"clamp(1.5rem,2.8vw,3rem)" }}>
+                    {question.text}
+                  </p>
+
+                  {/* Translation — small corner button, only for English questions */}
+                  {(parsedTranslation || question?.translation || question?.text?.match(/^[A-Za-z]/)) && !showAnswer && (
+                    <div style={{ position: "relative" }}>
+                      <button
+                        onClick={handleTranslate}
+                        disabled={translating}
+                        style={{
+                          position: "absolute", top: "-28px", left: "6px",
+                          background: "rgba(0,0,0,0.35)",
+                          border: "1px solid rgba(234,179,8,0.4)",
+                          color: "#fbbf24",
+                          padding: "2px 9px",
+                          borderRadius: "999px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          fontFamily: "Cairo, sans-serif",
+                          backdropFilter: "blur(4px)",
+                          zIndex: 10,
+                        }}
+                      >
+                        {translating ? "⏳" : showTranslation ? "🔼" : "🇸🇦 ترجم"}
+                      </button>
+                      {showTranslation && (parsedTranslation || translationData) && (
+                        <div style={{
+                          background: "rgba(0,0,0,0.5)",
+                          borderRadius: "8px",
+                          padding: "7px 12px",
+                          textAlign: "right",
+                          backdropFilter: "blur(4px)",
+                          border: "1px solid rgba(234,179,8,0.25)",
+                          fontSize: "0.82rem",
+                          marginBottom: "6px",
+                        }}>
+                          <span style={{ color: "#fef3c7", fontWeight: 600, fontFamily: "Cairo, sans-serif" }}>
+                            {(parsedTranslation || translationData).q}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Question image — centered, below question text */}
+                  {question.image_url && (
+                    <div data-testid="question-image-container" style={{ display:"flex", justifyContent:"center" }}>
                       {!imgLoaded && (
-                        <div style={{ width:"100%", height:"260px", background:"rgba(255,255,255,0.04)", border:"1.5px dashed rgba(255,180,80,0.14)", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:"20px" }}>
+                        <div style={{ width:"85%", height:"140px", background:"rgba(255,255,255,0.04)", border:"1.5px dashed rgba(255,180,80,0.14)", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:"16px" }}>
                           <span style={{ color:"rgba(247,241,232,0.22)", fontSize:"0.85rem" }}>تحميل الصورة...</span>
                         </div>
                       )}
-                      <div style={{ display: imgLoaded ? "block" : "none", position:"relative" }}>
+                      <div style={{ display: imgLoaded ? "flex" : "none", flexDirection:"column", alignItems:"center", position:"relative", width:"85%" }}>
                         <img
                           src={question.image_url}
                           alt="question"
@@ -634,40 +708,17 @@ export default function QuestionPage() {
                           onLoad={() => setImgLoaded(true)}
                           onError={e => { e.target.style.display="none"; setImgLoaded(true); }}
                           onClick={() => setZoomedImage(question.image_url)}
+                          style={{ width:"100%", maxHeight:"160px", objectFit:"contain", borderRadius:"16px", cursor:"zoom-in" }}
                         />
-                        {/* dim overlay */}
-                        <div className="question-image-overlay" />
-
-                        {/* Question text over image */}
-                        <div style={{
-                          position:"absolute", top:0, left:0, right:0,
-                          padding:"16px 18px",
-                          background:"linear-gradient(to bottom, rgba(0,0,0,0.65) 0%, transparent 100%)",
-                        }}>
-                          <p data-testid="question-text" style={{
-                            margin:0, color:"#fff", fontWeight:900, direction:"rtl", textAlign:"right",
-                            fontSize:"clamp(0.95rem,1.8vw,1.35rem)",
-                            textShadow:"0 2px 8px rgba(0,0,0,0.7)",
-                            lineHeight:1.45,
-                          }}>{question.text}</p>
-                        </div>
-
-                        {/* zoom hint */}
-                        <div style={{ position:"absolute", top:"10px", left:"10px", cursor:"zoom-in" }}
+                        <div style={{ position:"absolute", top:"8px", left:"8px", cursor:"zoom-in" }}
                           onClick={() => setZoomedImage(question.image_url)}>
-                          <ZoomIn size={20} style={{ color:"rgba(255,255,255,0.6)" }} />
+                          <ZoomIn size={18} style={{ color:"rgba(255,255,255,0.55)" }} />
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    /* No image — plain text */
-                    <p data-testid="question-text" className="question-text"
-                      style={{ fontSize:"clamp(1.5rem,2.8vw,3rem)" }}>
-                      {question.text}
-                    </p>
                   )}
 
-                  {/* Reveal button */}
+                  {/* Reveal button — below image */}
                   {!showAnswer && (
                     <button data-testid="reveal-answer-btn" className="reveal-btn" onClick={handleReveal}>
                       ◆ كشف الإجابة ◆
@@ -683,25 +734,27 @@ export default function QuestionPage() {
         <div className="sidebar">
           <div className="helper-card">
             <div className="helper-title">وسائل المساعدة</div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:"7px" }}>
-              <div className="lifeline-wrap">
-                <button className="hbtn" disabled={!lifelines.change} onClick={handleChangeQuestion}>
-                  <RefreshCw size={16}/>
+            <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+              <div className="lifeline-wrap" title="يغير لك السؤال الحالي">
+                <button className="hbtn" disabled={!lifelines.change} onClick={handleChangeQuestion}
+                  style={{ width:"100%", padding:"10px 12px", display:"flex", alignItems:"center", gap:"8px", fontSize:"0.82rem", justifyContent:"center", opacity: lifelines.change ? 1 : 0.4, cursor: lifelines.change ? "pointer" : "not-allowed" }}>
+                  <RefreshCw size={20}/> <span>تغيير السؤال</span>
                 </button>
-                <div className="lifeline-tip">تغيير السؤال بسؤال جديد</div>
+                <div className="lifeline-tip">يغير لك السؤال الحالي</div>
               </div>
-              <div className="lifeline-wrap">
+              <div className="lifeline-wrap" title="يضاعف النقاط">
                 <button className="hbtn" disabled={!lifelines.double} onClick={handleDoublePoints}
-                  style={doubleActive ? { borderColor:"rgba(251,191,36,0.55)", background:"rgba(251,191,36,0.12)" } : {}}>
-                  <Zap size={16}/>
+                  style={{ width:"100%", padding:"10px 12px", display:"flex", alignItems:"center", gap:"8px", fontSize:"0.82rem", justifyContent:"center", opacity: lifelines.double ? 1 : 0.4, cursor: lifelines.double ? "pointer" : "not-allowed", ...(doubleActive ? { borderColor:"rgba(251,191,36,0.55)", background:"rgba(251,191,36,0.12)" } : {}) }}>
+                  <Zap size={20}/> <span>مضاعفة النقاط</span>
                 </button>
-                <div className="lifeline-tip">مضاعفة النقاط إذا كانت الإجابة صحيحة</div>
+                <div className="lifeline-tip">يضاعف النقاط إذا أجبت صح</div>
               </div>
-              <div className="lifeline-wrap">
-                <button className="hbtn" disabled={!lifelines.time} onClick={handleExtraTime}>
-                  <Clock size={16}/>
+              <div className="lifeline-wrap" title="يزيد الوقت المتبقي">
+                <button className="hbtn" disabled={!lifelines.time} onClick={handleExtraTime}
+                  style={{ width:"100%", padding:"10px 12px", display:"flex", alignItems:"center", gap:"8px", fontSize:"0.82rem", justifyContent:"center", opacity: lifelines.time ? 1 : 0.4, cursor: lifelines.time ? "pointer" : "not-allowed" }}>
+                  <Clock size={20}/> <span>وقت إضافي</span>
                 </button>
-                <div className="lifeline-tip">مضاعفة وقت الإجابة</div>
+                <div className="lifeline-tip">يزيد الوقت المتبقي</div>
               </div>
             </div>
           </div>
