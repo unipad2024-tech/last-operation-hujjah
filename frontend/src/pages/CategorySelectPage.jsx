@@ -391,6 +391,26 @@ export default function CategorySelectPage() {
           >
             📐 قياس
           </button>
+          <button
+            onClick={() => {
+              setSource("regular");
+              setTimeout(() => {
+                const basicGroup = categoryGroups.find(g => g.name?.includes("بيسك") || g.name?.includes("Basic"));
+                if (basicGroup) {
+                  document.getElementById(`section-${basicGroup.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              }, 100);
+            }}
+            className="px-4 py-2 rounded-xl text-sm font-black transition-all border"
+            style={{
+              background: darkMode ? "rgba(8,145,178,0.15)" : "rgba(8,145,178,0.1)",
+              color: "#0891b2",
+              border: "2px solid rgba(8,145,178,0.35)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            🏥 البيسك
+          </button>
         </div>
 
         {/* Scroll Navigation (only for regular) */}
