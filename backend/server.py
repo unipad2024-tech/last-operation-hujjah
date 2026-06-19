@@ -1,10 +1,11 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid, random, shutil, re, json, httpx, asyncio, io, time, string
+import os, logging, uuid, random, shutil, re, json, httpx, asyncio, io, time
 from collections import defaultdict
 from pathlib import Path
 from pydantic import BaseModel, EmailStr, Field
@@ -12,11 +13,15 @@ from typing import List, Optional, Dict
 from datetime import datetime, timezone, timedelta
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-import aiosmtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
+from services.email.service import (
+    send_email,
+    build_welcome_email,
+    build_password_reset_email,
+    build_subscription_confirmation_email,
+    build_subscription_expiry_warning_email,
+    build_subscription_expired_email,
+    build_promo_email,
+)
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest, CheckoutSessionResponse, CheckoutStatusResponse
 )
@@ -33,131 +38,33 @@ db = client[os.environ['DB_NAME']]
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
-# ─── In-memory cache ──────────────────────────────────────────────────────────
-_cache: Dict[str, dict] = {}
-
-def _cache_get(key: str):
-    entry = _cache.get(key)
-    if entry and time.monotonic() < entry["exp"]:
-        return entry["val"]
-    _cache.pop(key, None)
-    return None
-
-def _cache_set(key: str, val, ttl: int = 30):
-    _cache[key] = {"val": val, "exp": time.monotonic() + ttl}
-
 # ─── Static files for uploaded images ────────────────────────────────────────
 UPLOAD_DIR = ROOT_DIR / "static" / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/api/static", StaticFiles(directory=str(ROOT_DIR / "static")), name="static")
 
+# ─── In-memory cache ─────────────────────────────────────────────────────────
+_cache: Dict[str, dict] = {}
+
+def _cache_get(key: str):
+    entry = _cache.get(key)
+    if entry and time.time() < entry["exp"]:
+        return entry["val"]
+    _cache.pop(key, None)
+    return None
+
+def _cache_set(key: str, val, ttl: int = 60):
+    _cache[key] = {"val": val, "exp": time.time() + ttl}
+
 SECRET_KEY      = os.environ['JWT_SECRET_KEY']          # No fallback — must be set
 ADMIN_PASSWORD  = os.environ['ADMIN_PASSWORD']          # No fallback — must be set
 STRIPE_API_KEY  = os.environ.get('STRIPE_API_KEY', '')
-PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID',  'APP_ID_1774162201273')
-PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '3c3c6b0e-ccac-352d-acc9-de094ab2117c')
-EMAIL_USER      = os.environ.get('EMAIL_USER', '')
-EMAIL_PASS      = os.environ.get('EMAIL_PASS', '')
+PAYMENT_API_ID  = os.environ.get('PAYMENT_API_ID', '')
+PAYMENT_API_KEY = os.environ.get('PAYMENT_API_KEY', '')
 RESEND_API_KEY  = os.environ.get('RESEND_API_KEY', '')
-UNSPLASH_API_KEY  = os.environ.get('UNSPLASH_API_KEY', 'p0r_782hncvFkWs7zw7gxNjnJ-H3rmSuqymDCZ1DUho')
-OBSIDIAN_API_KEY  = os.environ.get('OBSIDIAN_API_KEY', '')
-OBSIDIAN_HOST     = os.environ.get('OBSIDIAN_HOST', 'http://127.0.0.1:27123')
-ALGORITHM         = "HS256"
-
-# ─── Obsidian sync helpers ────────────────────────────────────────────────────
-async def _obsidian_put(path: str, content: str):
-    """PUT a note to Obsidian vault. Silently skips if not configured."""
-    if not OBSIDIAN_API_KEY:
-        return
-    encoded = path.replace(" ", "%20")
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            await client.put(
-                f"{OBSIDIAN_HOST}/vault/{encoded}",
-                headers={"Authorization": f"Bearer {OBSIDIAN_API_KEY}",
-                         "Content-Type": "text/markdown; charset=utf-8",
-                         "ngrok-skip-browser-warning": "true"},
-                content=content.encode("utf-8"),
-            )
-    except Exception:
-        pass  # Obsidian sync is best-effort — never block the main request
-
-async def _obsidian_get(path: str) -> str:
-    """GET note content from Obsidian vault. Returns empty string on failure."""
-    if not OBSIDIAN_API_KEY:
-        return ""
-    encoded = path.replace(" ", "%20")
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(
-                f"{OBSIDIAN_HOST}/vault/{encoded}",
-                headers={"Authorization": f"Bearer {OBSIDIAN_API_KEY}",
-                         "ngrok-skip-browser-warning": "true"},
-            )
-            return r.text if r.status_code == 200 else ""
-    except Exception:
-        return ""
-
-async def obsidian_sync_category(cat: dict):
-    """Create/update a category note under Game Project/Questions/{name}.md"""
-    name    = cat.get("name", "")
-    icon    = cat.get("icon", "")
-    desc    = cat.get("description", "")
-    color   = cat.get("color", "#5B0E14")
-    premium = "✅ مميزة" if cat.get("is_premium") else "مجانية"
-    path    = f"Game Project/Questions/{name}.md"
-    content = f"""# {icon} {name}
-
-**الوصف:** {desc}
-**اللون:** `{color}`
-**النوع:** {premium}
-**الكود:** `{cat.get('code', '')}`
-**تاريخ الإنشاء:** {cat.get('created_at', '')[:10]}
-
----
-
-## الأسئلة
-"""
-    # Fetch existing note to preserve questions already listed
-    existing = await _obsidian_get(path)
-    if "## الأسئلة" in existing:
-        questions_section = existing.split("## الأسئلة", 1)[1]
-        content += questions_section
-    await _obsidian_put(path, content)
-
-async def obsidian_sync_question(q: dict, cat_name: str):
-    """Append a new question to its category note in Obsidian."""
-    difficulty_label = {300: "🟢 سهل", 600: "🟡 متوسط", 900: "🔴 صعب"}.get(q.get("difficulty"), str(q.get("difficulty")))
-    path    = f"Game Project/Questions/{cat_name}.md"
-    existing = await _obsidian_get(path)
-    new_entry = f"""
-### ❓ {q.get('text', '')}
-- **الإجابة:** {q.get('answer', '')}
-- **الصعوبة:** {difficulty_label}
-- **النوع:** {q.get('question_type', 'text')}
-- **ID:** `{q.get('id', '')}`
-"""
-    if existing:
-        content = existing + new_entry
-    else:
-        content = f"# {cat_name}\n\n## الأسئلة\n" + new_entry
-    await _obsidian_put(path, content)
-
-async def obsidian_update_memory(action: str, detail: str):
-    """Append a line to Memory.md under آخر التغييرات."""
-    path     = "Game Project/Memory.md"
-    existing = await _obsidian_get(path)
-    today    = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
-    new_line = f"\n- **{today}** — {action}: {detail}"
-    if "## 📅 آخر التغييرات" in existing:
-        content = existing.replace(
-            "## 📅 آخر التغييرات",
-            "## 📅 آخر التغييرات" + new_line,
-            1,
-        )
-    else:
-        content = existing + f"\n\n## 📅 آخر التغييرات\n{new_line}"
-    await _obsidian_put(path, content)
+EMAIL_FROM      = os.environ.get('EMAIL_FROM', 'noreply@hujjahgames.com')
+UNSPLASH_API_KEY = os.environ.get('UNSPLASH_API_KEY', '')
+ALGORITHM       = "HS256"
 
 # ─── MongoDB-backed rate limiter (works across all uvicorn workers) ─────────
 async def _rate_check(key: str, max_calls: int = 10, window_secs: int = 300):
@@ -184,13 +91,25 @@ logger = logging.getLogger(__name__)
 
 # ─── Subscription Plans (server-side only – never from frontend) ────────────
 SUBSCRIPTION_PLANS = {
-    "weekly":    {"name": "Premium أسبوعي",    "amount": 8.99,  "currency": "sar", "days": 7},
-    "biweekly":  {"name": "Premium أسبوعان",   "amount": 16.99, "currency": "sar", "days": 14},
-    "monthly":   {"name": "Premium شهري",      "amount": 29.99, "currency": "sar", "days": 30},
-    "annual":    {"name": "Premium سنوي",      "amount": 239.99,"currency": "sar", "days": 365},
+    "biweekly":    {"name": "أسبوعان",     "amount": 16.99, "currency": "sar", "days": 14},
+    "monthly":     {"name": "شهري",        "amount": 29.99, "currency": "sar", "days": 30},
+    "single_game": {"name": "لعبة واحدة", "amount": 2.99,  "currency": "sar", "days": 1},
 }
 
 FREE_CATEGORIES = ["cat_word", "cat_islamic", "cat_music", "cat_flags", "cat_easy", "cat_science"]
+
+# ─── Category code helpers ────────────────────────────────────────────────────
+_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # exclude 0/O/1/I for clarity
+
+def _generate_category_code() -> str:
+    return "".join(random.choices(_CODE_CHARS, k=6))
+
+async def _unique_category_code() -> str:
+    for _ in range(20):
+        code = _generate_category_code()
+        if not await db.community_categories.find_one({"code": code}):
+            return code
+    raise HTTPException(500, "تعذّر إنشاء كود فريد للفئة")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MODELS
@@ -212,7 +131,7 @@ class UserUpdate(BaseModel):
     avatar_url: Optional[str] = None
     banner_url: Optional[str] = None
     accent_color: Optional[str] = None
-    interests: Optional[list] = None
+    interests: Optional[List[str]] = None
 
 class AdminLogin(BaseModel):
     username: str = "admin"
@@ -226,7 +145,6 @@ class StaffCreate(BaseModel):
     username: str
     password: str
     display_name: str = ""
-    email: Optional[str] = None
 
 class GiftSubscription(BaseModel):
     plan_id: str = "monthly"
@@ -258,7 +176,6 @@ class Category(BaseModel):
     color: str = "#5B0E14"
     order: int = 0
     group_id: Optional[str] = None
-    code: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 class CategoryCreate(BaseModel):
@@ -292,6 +209,31 @@ class QuestionCreate(BaseModel):
     image_url: str = ""
     answer_image_url: str = ""
     question_type: str = "text"
+
+class CommunityCategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    image_url: Optional[str] = ""
+    group: Optional[str] = "general"
+
+class FavoriteAdd(BaseModel):
+    category_id: str
+    category_type: str = "community"  # "community" or "standard"
+
+class FavoriteRemove(BaseModel):
+    category_id: str
+
+class CommunityQuestionCreate(BaseModel):
+    text: str
+    answer: str
+    difficulty: int = 300  # 300/600/900
+    image_url: Optional[str] = ""
+    answer_image_url: Optional[str] = ""
+
+class PayoutRequestCreate(BaseModel):
+    amount: float
+    iban: str
+    account_name: str
 
 class GameSessionCreate(BaseModel):
     team1_name: str
@@ -591,11 +533,11 @@ async def get_suspicious_logs(limit: int = 100, admin: dict = Depends(get_admin)
 async def revoke_session(session_id: str, admin: dict = Depends(get_admin)):
     now = datetime.now(timezone.utc)
     r = await db.auth_sessions.update_one(
-        {"session_id": session_id, "is_active": True},
+        {"session_id": session_id},
         {"$set": {"is_active": False, "ended_at": now.isoformat(), "ended_reason": "admin_revoke"}}
     )
     if r.matched_count == 0:
-        raise HTTPException(404, "الجلسة غير موجودة أو مُلغاة مسبقاً")
+        raise HTTPException(404, "الجلسة غير موجودة")
     return {"message": "تم إلغاء الجلسة"}
 
 @api_router.delete("/admin/security/devices/{device_id}")
@@ -612,9 +554,7 @@ async def remove_device(device_id: str, admin: dict = Depends(get_admin)):
 
 @api_router.post("/admin/security/lock/{user_id}")
 async def lock_user(user_id: str, admin: dict = Depends(get_super_admin)):
-    r = await db.users.update_one({"id": user_id}, {"$set": {"is_locked": True}})
-    if r.matched_count == 0:
-        raise HTTPException(404, "المستخدم غير موجود")
+    await db.users.update_one({"id": user_id}, {"$set": {"is_locked": True}})
     await db.auth_sessions.update_many(
         {"user_id": user_id},
         {"$set": {"is_active": False, "ended_reason": "account_locked"}}
@@ -623,9 +563,7 @@ async def lock_user(user_id: str, admin: dict = Depends(get_super_admin)):
 
 @api_router.post("/admin/security/unlock/{user_id}")
 async def unlock_user(user_id: str, admin: dict = Depends(get_super_admin)):
-    r = await db.users.update_one({"id": user_id}, {"$set": {"is_locked": False}})
-    if r.matched_count == 0:
-        raise HTTPException(404, "المستخدم غير موجود")
+    await db.users.update_one({"id": user_id}, {"$set": {"is_locked": False}})
     return {"message": "تم فتح الحساب"}
 
 @api_router.delete("/admin/security/logs/{user_id}")
@@ -669,8 +607,256 @@ async def register(body: UserCreate, request: Request):
     await _register_device(user["id"], device_id, ua, ip)
     session_id = await _create_auth_session(user["id"], device_id, ip, ua)
     token = create_token({"sub": user["id"], "role": "user", "email": user["email"]})
+    subject, html = build_welcome_email(user["username"])
+    await send_email(user["email"], subject, html)
     safe = {k: v for k, v in user.items() if k not in ("_id", "password_hash", "answered_question_ids")}
     return {"token": token, "user": safe, "session_id": session_id, "device_id": device_id}
+
+
+class GoogleAuthBody(BaseModel):
+    credential: Optional[str] = None  # ID token (implicit flow sends access_token instead)
+    access_token: Optional[str] = None
+
+@api_router.post("/auth/google")
+async def auth_google(body: GoogleAuthBody, request: Request):
+    """Sign in / register via Google OAuth."""
+    ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    await _rate_check(f"google_auth:{ip}", max_calls=10, window_secs=300)
+    # Use access_token to fetch user info (implicit flow)
+    token = body.access_token or body.credential
+    if not token:
+        raise HTTPException(400, "لم يتم استلام رمز Google")
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+        if resp.status_code != 200:
+            raise HTTPException(401, "فشل التحقق من حساب Google")
+        info = resp.json()
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"خطأ في التواصل مع Google: {str(e)[:100]}")
+
+    google_email = info.get("email", "").lower().strip()
+    google_name  = info.get("name", "")
+    google_sub   = info.get("sub", "")
+
+    if not google_email:
+        raise HTTPException(400, "لم يتم استلام البريد الإلكتروني من Google")
+
+    # Check if user exists
+    user = await db.users.find_one({"email": google_email}, {"_id": 0})
+    is_new = False
+
+    if not user:
+        # Auto-register
+        base_username = re.sub(r"[^a-zA-Z0-9_\u0600-\u06FF]", "", google_name or google_email.split("@")[0])[:20] or "user"
+        username = base_username
+        suffix = 1
+        while await db.users.find_one({"username": username}):
+            username = f"{base_username}{suffix}"
+            suffix += 1
+
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": google_email,
+            "username": username,
+            "password_hash": "",
+            "google_sub": google_sub,
+            "auth_provider": "google",
+            "subscription_type": "free",
+            "subscription_expires_at": None,
+            "answered_question_ids": [],
+            "game_count": 0,
+            "is_locked": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_active": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(user)
+        is_new = True
+        subject, html = build_welcome_email(user["username"])
+        await send_email(user["email"], subject, html)
+    else:
+        await db.users.update_one(
+            {"email": google_email},
+            {"$set": {"last_active": datetime.now(timezone.utc).isoformat(), "google_sub": google_sub}}
+        )
+        user = await db.users.find_one({"email": google_email}, {"_id": 0})
+
+    ip        = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    device_id = request.headers.get("x-device-id", str(uuid.uuid4()))
+    ua        = request.headers.get("user-agent", "")
+    await _register_device(user["id"], device_id, ua, ip)
+    session_id = await _create_auth_session(user["id"], device_id, ip, ua)
+    token_jwt  = create_token({"sub": user["id"], "role": "user", "email": user["email"]})
+    safe = {k: v for k, v in user.items() if k not in ("_id", "password_hash", "answered_question_ids")}
+    return {"token": token_jwt, "user": safe, "session_id": session_id, "device_id": device_id, "is_new": is_new}
+
+
+class AppleAuthBody(BaseModel):
+    id_token: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+@api_router.post("/auth/apple")
+async def auth_apple(body: AppleAuthBody, request: Request):
+    """Sign in / register via Apple Sign In. Verifies id_token using Apple's public keys."""
+    ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    await _rate_check(f"apple_auth:{ip}", max_calls=10, window_secs=300)
+    if not body.id_token:
+        raise HTTPException(400, "لم يتم استلام رمز Apple")
+
+    # Fetch Apple's public keys
+    try:
+        async with httpx.AsyncClient() as client:
+            keys_resp = await client.get("https://appleid.apple.com/auth/keys", timeout=10)
+        if keys_resp.status_code != 200:
+            raise HTTPException(502, "فشل جلب مفاتيح Apple")
+        apple_keys = keys_resp.json().get("keys", [])
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"خطأ في التواصل مع Apple: {str(e)[:100]}")
+
+    # Decode token header to find the right key
+    import base64 as _b64, json as _json
+    try:
+        header_segment = body.id_token.split(".")[0]
+        # Add padding
+        header_segment += "=" * (4 - len(header_segment) % 4)
+        header = _json.loads(_b64.urlsafe_b64decode(header_segment))
+        kid = header.get("kid")
+    except Exception:
+        raise HTTPException(400, "رمز Apple غير صالح")
+
+    # Find matching key
+    matching_key = next((k for k in apple_keys if k.get("kid") == kid), None)
+    if not matching_key:
+        raise HTTPException(401, "مفتاح Apple غير موجود")
+
+    # Verify JWT using python-jose
+    from jose import jwk as jose_jwk, jwt as jose_jwt
+    try:
+        public_key = jose_jwk.construct(matching_key)
+        claims = jose_jwt.decode(
+            body.id_token,
+            public_key.to_dict(),
+            algorithms=["RS256"],
+            audience=os.environ.get("APPLE_CLIENT_ID", ""),
+            options={"verify_aud": bool(os.environ.get("APPLE_CLIENT_ID"))},
+        )
+    except Exception as e:
+        raise HTTPException(401, f"فشل التحقق من رمز Apple: {str(e)[:100]}")
+
+    apple_sub   = claims.get("sub", "")
+    apple_email = claims.get("email", "").lower().strip()
+
+    # Apple may provide a private relay email — accept it as-is
+    if not apple_email and not apple_sub:
+        raise HTTPException(400, "لم يتم استلام بيانات كافية من Apple")
+
+    # Build display name from request (only sent on first sign-in by Apple)
+    given  = (body.first_name or "").strip()
+    family = (body.last_name  or "").strip()
+    full_name = f"{given} {family}".strip() or "مستخدم Apple"
+
+    # Look up user by apple_sub first, then by email
+    user = await db.users.find_one({"apple_sub": apple_sub}, {"_id": 0}) if apple_sub else None
+    if not user and apple_email:
+        user = await db.users.find_one({"email": apple_email}, {"_id": 0})
+
+    is_new = False
+    if not user:
+        # Auto-register
+        base_username = re.sub(r"[^a-zA-Z0-9_\u0600-\u06FF]", "", full_name)[:20] or "appleuser"
+        username = base_username
+        suffix = 1
+        while await db.users.find_one({"username": username}):
+            username = f"{base_username}{suffix}"
+            suffix += 1
+
+        user = {
+            "id": str(uuid.uuid4()),
+            "email": apple_email or f"apple_{apple_sub}@privaterelay.appleid.com",
+            "username": username,
+            "password_hash": "",
+            "apple_sub": apple_sub,
+            "auth_provider": "apple",
+            "subscription_type": "free",
+            "subscription_expires_at": None,
+            "answered_question_ids": [],
+            "game_count": 0,
+            "is_locked": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "last_active": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(user)
+        is_new = True
+        if apple_email:
+            subject, html = build_welcome_email(user["username"])
+            await send_email(user["email"], subject, html)
+    else:
+        updates = {"last_active": datetime.now(timezone.utc).isoformat()}
+        if apple_sub:
+            updates["apple_sub"] = apple_sub
+        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        user = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+
+    ip        = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    device_id = request.headers.get("x-device-id", str(uuid.uuid4()))
+    ua        = request.headers.get("user-agent", "")
+    await _register_device(user["id"], device_id, ua, ip)
+    session_id = await _create_auth_session(user["id"], device_id, ip, ua)
+    token_jwt  = create_token({"sub": user["id"], "role": "user", "email": user["email"]})
+    safe = {k: v for k, v in user.items() if k not in ("_id", "password_hash", "answered_question_ids")}
+    return {"token": token_jwt, "user": safe, "session_id": session_id, "device_id": device_id, "is_new": is_new}
+
+
+class ForgotPasswordBody(BaseModel):
+    email: str
+
+class ResetPasswordBody(BaseModel):
+    token: str
+    new_password: str
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordBody, request: Request):
+    """Send password reset email. Always returns 200 to prevent email enumeration."""
+    await _rate_check(f"forgot:{request.headers.get('x-forwarded-for', request.client.host).split(',')[0].strip()}", max_calls=3, window_secs=300)
+    email = body.email.lower().strip()
+    user = await db.users.find_one({"email": email}, {"_id": 0, "id": 1, "username": 1, "email": 1})
+    if user:
+        # Create a short-lived JWT reset token (30 min)
+        reset_token = create_token({"sub": user["id"], "purpose": "password_reset"}, expires_hours=0.5)
+        app_url = os.environ.get("APP_URL", "https://hujjahgames.com")
+        reset_url = f"{app_url}/reset-password?token={reset_token}"
+        subject, html = build_password_reset_email(user["username"], reset_url, expires_minutes=30)
+        ok = await send_email(user["email"], subject, html)
+        logger.info(f"Password reset email {'sent' if ok else 'failed'} | user={user['id']}")
+    return {"message": "إذا كان البريد مسجلاً، ستصلك رسالة إعادة تعيين كلمة المرور"}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordBody):
+    """Verify reset token and update password."""
+    if len(body.new_password) < 6:
+        raise HTTPException(400, "كلمة المرور يجب أن تكون 6 أحرف على الأقل")
+    try:
+        payload = jwt.decode(body.token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("purpose") != "password_reset":
+            raise HTTPException(400, "رمز غير صالح")
+        user_id = payload.get("sub")
+    except JWTError:
+        raise HTTPException(400, "رمز منتهي الصلاحية أو غير صالح")
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "id": 1})
+    if not user:
+        raise HTTPException(404, "المستخدم غير موجود")
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"password_hash": hash_pw(body.new_password)}}
+    )
+    logger.info(f"Password reset completed | user={user_id}")
+    return {"message": "تم تغيير كلمة المرور بنجاح"}
+
 
 @api_router.post("/auth/login")
 async def login(body: UserLogin, request: Request):
@@ -715,18 +901,21 @@ async def update_me(body: UserUpdate, user: dict = Depends(require_user)):
     if body.bio is not None:
         updates["bio"] = body.bio[:300]
     if body.avatar_url is not None:
-        updates["avatar_url"] = body.avatar_url[:500]
+        updates["avatar_url"] = body.avatar_url
     if body.banner_url is not None:
-        updates["banner_url"] = body.banner_url[:500]
+        updates["banner_url"] = body.banner_url
     if body.accent_color is not None:
-        # only allow hex colors
-        ac = body.accent_color.strip()
-        if ac.startswith("#") and len(ac) in (4, 7):
-            updates["accent_color"] = ac
+        updates["accent_color"] = body.accent_color
     if body.interests is not None:
         updates["interests"] = body.interests[:10]
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        if "password_hash" in updates:
+            # Invalidate all active sessions so stolen tokens can't be reused
+            await db.auth_sessions.update_many(
+                {"user_id": user["id"], "is_active": True},
+                {"$set": {"is_active": False, "revoked_reason": "password_changed"}}
+            )
     updated = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
     return updated
 
@@ -738,14 +927,21 @@ async def update_me(body: UserUpdate, user: dict = Depends(require_user)):
 async def admin_login(body: AdminLogin, request: Request):
     await _rate_check(f"admin_login:{request.headers.get('x-forwarded-for', request.client.host).split(',')[0].strip()}", max_calls=8, window_secs=300)
     username = (body.username or "admin").strip()
-    # Super admin login
+    # Super admin login — use constant-time comparison to prevent timing attacks
     if username.lower() == "admin" or username == "":
-        if body.password != ADMIN_PASSWORD:
-            raise HTTPException(401, "كلمة المرور غلط")
+        # Support both plain (legacy) and bcrypt-hashed ADMIN_PASSWORD
+        pw_env = ADMIN_PASSWORD
+        if pw_env.startswith("$2b$") or pw_env.startswith("$2a$"):
+            if not verify_pw(body.password, pw_env):
+                raise HTTPException(401, "كلمة المرور غلط")
+        else:
+            import hmac
+            if not hmac.compare_digest(body.password, pw_env):
+                raise HTTPException(401, "كلمة المرور غلط")
         token = create_token(
             {"sub": "admin", "role": "admin", "sub_role": "super_admin",
              "admin_name": "المدير الرئيسي"},
-            expires_hours=48
+            expires_hours=4
         )
         return {"token": token, "role": "super_admin", "name": "المدير الرئيسي"}
     # Staff login
@@ -756,7 +952,7 @@ async def admin_login(body: AdminLogin, request: Request):
     token = create_token(
         {"sub": staff["id"], "role": "admin", "sub_role": "staff",
          "admin_name": display},
-        expires_hours=48
+        expires_hours=4
     )
     return {"token": token, "role": "staff", "name": display}
 
@@ -812,6 +1008,24 @@ async def admin_delete_user(user_id: str, admin: dict = Depends(get_super_admin)
                            user.get("username", user_id) if user else user_id)
     return {"message": "تم الحذف"}
 
+@api_router.post("/admin/send-welcome-emails")
+async def admin_send_welcome_emails(admin: dict = Depends(get_super_admin)):
+    users = await db.users.find({}, {"_id": 0, "email": 1, "username": 1}).to_list(1000)
+    sent, failed = 0, 0
+    for u in users:
+        email = u.get("email", "")
+        username = u.get("username", "")
+        if not email:
+            continue
+        subject, html = build_welcome_email(username)
+        ok = await send_email(email, subject, html)
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+    await log_admin_action(admin, "إرسال", "إيميل ترحيب", f"أُرسل: {sent}، فشل: {failed}")
+    return {"sent": sent, "failed": failed}
+
 @api_router.get("/admin/analytics")
 async def admin_analytics(_: dict = Depends(get_super_admin)):
     now = datetime.now(timezone.utc)
@@ -819,92 +1033,79 @@ async def admin_analytics(_: dict = Depends(get_super_admin)):
     week_ago   = (now - timedelta(days=7)).isoformat()
     month_ago  = (now - timedelta(days=30)).isoformat()
 
-    # ── User counts ──
     users_total   = await db.users.count_documents({})
     premium       = await db.users.count_documents({"subscription_type": "premium"})
     recent_7d     = await db.users.count_documents({"created_at": {"$gte": week_ago}})
-    recent_30d    = await db.users.count_documents({"created_at": {"$gte": month_ago}})
-
-    # ── Active users (had a game session in period) ──
-    active_24h_sessions = await db.game_sessions.distinct("user_id", {"created_at": {"$gte": yesterday}})
-    active_7d_sessions  = await db.game_sessions.distinct("user_id", {"created_at": {"$gte": week_ago}})
-    active_30d_sessions = await db.game_sessions.distinct("user_id", {"created_at": {"$gte": month_ago}})
-
-    # ── Question counts ──
-    q_total       = await db.questions.count_documents({"deleted_at": None})
-    q_300         = await db.questions.count_documents({"difficulty": 300, "deleted_at": None})
-    q_600         = await db.questions.count_documents({"difficulty": 600, "deleted_at": None})
-    q_900         = await db.questions.count_documents({"difficulty": 900, "deleted_at": None})
-    q_pending     = await db.pending_questions.count_documents({"status": "pending"})
-
-    # ── Sessions ──
-    sessions_total = await db.game_sessions.count_documents({})
-    sessions_24h   = await db.game_sessions.count_documents({"created_at": {"$gte": yesterday}})
-    sessions_7d    = await db.game_sessions.count_documents({"created_at": {"$gte": week_ago}})
-
-    # ── Revenue ──
-    revenue_docs  = await db.payment_transactions.find({"payment_status": "paid"}, {"amount": 1, "created_at": 1}).to_list(1000)
+    q_total       = await db.questions.count_documents({})
+    sessions_total= await db.game_sessions.count_documents({})
+    active_24h    = await db.game_sessions.count_documents({"created_at": {"$gte": yesterday}})
+    revenue_docs  = await db.payment_transactions.find({"payment_status": "paid"}, {"amount": 1}).to_list(1000)
     total_revenue = sum(float(d.get("amount", 0)) for d in revenue_docs)
     recent_txns   = await db.payment_transactions.find({}, {"_id": 0}).sort("created_at", -1).to_list(10)
 
-    # Revenue trend: last 30 days grouped by day
-    revenue_trend = {}
-    for d in revenue_docs:
-        ts = d.get("created_at", "")
-        if ts and ts >= month_ago:
-            day = ts[:10]  # YYYY-MM-DD
-            revenue_trend[day] = revenue_trend.get(day, 0) + float(d.get("amount", 0))
-    trend_list = [{"date": k, "amount": round(v, 2)} for k, v in sorted(revenue_trend.items())]
-
-    # ── Category stats ──
-    cats = await db.categories.find({}, {"_id": 0, "id": 1, "name": 1, "icon": 1}).to_list(50)
+    cats = await db.categories.find({}, {"_id": 0, "id": 1, "name": 1}).to_list(50)
     cat_stats = []
     for c in cats:
-        count = await db.questions.count_documents({"category_id": c["id"], "deleted_at": None})
-        cat_stats.append({"id": c["id"], "name": c["name"], "icon": c.get("icon", ""), "count": count})
+        count = await db.questions.count_documents({"category_id": c["id"]})
+        cat_stats.append({"id": c["id"], "name": c["name"], "count": count})
 
-    active_cats   = await db.categories.count_documents({"is_active": {"$ne": False}})
+    # Enhanced platform analytics
+    active_cats = await db.categories.count_documents({"is_active": {"$ne": False}})
     inactive_cats = await db.categories.count_documents({"is_active": False})
-    premium_cats  = await db.categories.count_documents({"is_premium": True})
-    most_popular  = max(cat_stats, key=lambda x: x["count"]) if cat_stats else {}
-    weak_cats     = [c for c in cat_stats if c["count"] < 6]
+    premium_cats = await db.categories.count_documents({"is_premium": True})
+    most_popular = max(cat_stats, key=lambda x: x["count"]) if cat_stats else {}
+
+    # User activity breakdown
+    active_users_24h = await db.users.count_documents({"last_active": {"$gte": yesterday}})
+    active_users_7d  = await db.users.count_documents({"last_active": {"$gte": week_ago}})
+    active_users_30d = await db.users.count_documents({"last_active": {"$gte": month_ago}})
+    conversion_rate  = round((premium / users_total * 100), 1) if users_total > 0 else 0
+
+    # Expired subscriptions
+    expired_subs = await db.users.count_documents({
+        "subscription_type": {"$ne": "premium"},
+        "subscription_expires_at": {"$lt": now.isoformat(), "$exists": True}
+    })
+
+    # Questions by difficulty
+    diff_300 = await db.questions.count_documents({"difficulty": 300})
+    diff_600 = await db.questions.count_documents({"difficulty": 600})
+    diff_900 = await db.questions.count_documents({"difficulty": 900})
+
+    # Revenue trend: last 30 days daily
+    all_paid_txns = await db.payment_transactions.find(
+        {"payment_status": "paid", "created_at": {"$gte": month_ago}},
+        {"_id": 0, "amount": 1, "created_at": 1}
+    ).to_list(2000)
+    daily_revenue: dict = defaultdict(float)
+    for txn in all_paid_txns:
+        day = (txn.get("created_at") or "")[:10]
+        if day:
+            daily_revenue[day] += float(txn.get("amount", 0))
+    revenue_trend = []
+    for i in range(29, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        revenue_trend.append({"date": day, "amount": round(daily_revenue.get(day, 0), 2)})
 
     return {
         "users": {
-            "total": users_total,
-            "premium": premium,
-            "free": users_total - premium,
-            "new_7d": recent_7d,
-            "new_30d": recent_30d,
-            "active_24h": len(active_24h_sessions),
-            "active_7d": len(active_7d_sessions),
-            "active_30d": len(active_30d_sessions),
+            "total": users_total, "premium": premium, "free": users_total - premium,
+            "recent_7d": recent_7d, "active_24h": active_users_24h,
+            "active_7d": active_users_7d, "active_30d": active_users_30d,
+            "conversion_rate": conversion_rate,
         },
         "questions": {
-            "total": q_total,
-            "pending": q_pending,
-            "by_difficulty": {"300": q_300, "600": q_600, "900": q_900},
-            "by_category": cat_stats,
-            "weak_categories": sorted(weak_cats, key=lambda x: x["count"]),
+            "total": q_total, "by_category": cat_stats,
+            "by_difficulty": {"300": diff_300, "600": diff_600, "900": diff_900}
         },
-        "sessions": {
-            "total": sessions_total,
-            "active_24h": sessions_24h,
-            "active_7d": sessions_7d,
+        "sessions": {"total": sessions_total, "active_24h": active_24h},
+        "revenue":  {
+            "total": round(total_revenue, 2), "currency": "SAR",
+            "recent_transactions": recent_txns, "trend_30d": revenue_trend,
         },
-        "revenue": {
-            "total": round(total_revenue, 2),
-            "currency": "SAR",
-            "recent_transactions": recent_txns,
-            "trend": trend_list,
-        },
-        "categories": {
-            "total": len(cats),
-            "active": active_cats,
-            "inactive": inactive_cats,
-            "premium": premium_cats,
-            "most_popular": most_popular,
-        },
+        "subscriptions": {"active": premium, "expired": expired_subs},
+        "categories": {"total": len(cats), "active": active_cats, "inactive": inactive_cats,
+                       "premium": premium_cats, "most_popular": most_popular},
     }
 
 @api_router.get("/admin/sessions")
@@ -933,7 +1134,7 @@ async def get_categories(show_inactive: bool = False):
         c.setdefault("is_active", True)
     if not show_inactive:
         cats = [c for c in cats if c.get("is_active", True)]
-    _cache_set(cache_key, cats, ttl=120)
+    _cache_set(cache_key, cats, ttl=60)
     return cats
 
 @api_router.get("/free-categories")
@@ -945,7 +1146,7 @@ async def get_free_categories():
     settings = {**DEFAULT_SETTINGS, **(s or {})}
     t1 = settings.get("trial_team1_categories", DEFAULT_SETTINGS["trial_team1_categories"])
     t2 = settings.get("trial_team2_categories", DEFAULT_SETTINGS["trial_team2_categories"])
-    all_ids = list(dict.fromkeys(t1 + t2))
+    all_ids = list(dict.fromkeys(t1 + t2))  # preserve order, no duplicates
     cats = await db.categories.find({"id": {"$in": all_ids}}, {"_id": 0}).to_list(20)
     cats_map = {c["id"]: c for c in cats}
     result = {
@@ -957,31 +1158,19 @@ async def get_free_categories():
         "category_ids":           all_ids,
         "categories":             cats,
     }
-    _cache_set("free-categories", result, ttl=120)
+    _cache_set("free-categories", result, ttl=60)
     return result
 
 def _invalidate_category_cache():
     for k in ["categories:True", "categories:False", "free-categories"]:
         _cache.pop(k, None)
 
-async def _generate_unique_category_code() -> str:
-    chars = string.ascii_uppercase + string.digits
-    while True:
-        code = "".join(random.choices(chars, k=6))
-        exists = await db.categories.find_one({"code": code}, {"_id": 1})
-        comm_exists = await db.community_categories.find_one({"code": code}, {"_id": 1})
-        if not exists and not comm_exists:
-            return code
-
 @api_router.post("/categories")
-async def create_category(body: CategoryCreate, background_tasks: BackgroundTasks, admin: dict = Depends(get_admin)):
+async def create_category(body: CategoryCreate, admin: dict = Depends(get_admin)):
     cat = Category(**body.model_dump())
-    cat.code = await _generate_unique_category_code()
     await db.categories.insert_one(cat.model_dump())
     _invalidate_category_cache()
     await log_admin_action(admin, "إضافة", "فئة", cat.name)
-    background_tasks.add_task(obsidian_sync_category, cat.model_dump())
-    background_tasks.add_task(obsidian_update_memory, "إضافة فئة", cat.name)
     return cat
 
 @api_router.put("/categories/{cat_id}")
@@ -1028,14 +1217,12 @@ async def get_question(q_id: str):
     return q
 
 @api_router.post("/questions")
-async def create_question(body: QuestionCreate, background_tasks: BackgroundTasks, admin: dict = Depends(get_admin)):
+async def create_question(body: QuestionCreate, admin: dict = Depends(get_admin)):
     q = Question(**body.model_dump())
     await db.questions.insert_one(q.model_dump())
     cat = await db.categories.find_one({"id": body.category_id}, {"_id": 0, "name": 1})
     cat_name = cat.get("name", body.category_id) if cat else body.category_id
     await log_admin_action(admin, "إضافة", "سؤال", q.text[:60], f"فئة: {cat_name} | صعوبة: {body.difficulty}")
-    background_tasks.add_task(obsidian_sync_question, q.model_dump(), cat_name)
-    background_tasks.add_task(obsidian_update_memory, "إضافة سؤال", f"{q.text[:50]} — فئة: {cat_name}")
     return q
 
 @api_router.put("/questions/{q_id}")
@@ -1085,7 +1272,7 @@ async def restore_question(q_id: str, admin: dict = Depends(get_admin)):
 @api_router.patch("/questions/{q_id}/autosave")
 async def autosave_question(q_id: str, body: dict, admin: dict = Depends(get_admin)):
     """Quick auto-save for question field changes — no full validation required."""
-    allowed_fields = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id", "translation"}
+    allowed_fields = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty"}
     updates = {k: v for k, v in body.items() if k in allowed_fields}
     if not updates:
         return {"saved": False, "reason": "no valid fields"}
@@ -1198,14 +1385,12 @@ async def _parse_ai_response_to_questions(raw: str, category_id: str, ai_engine:
         # Skip answers that are just choice letters
         if ans.strip() in {"أ", "ب", "ج", "د", "A", "B", "C", "D", "1", "2", "3", "4"}:
             continue
-        choices = r.get("choices")
         questions.append({
             "id":               str(uuid.uuid4()),
             "category_id":      str(r.get("category_id") or category_id).strip() or category_id,
             "difficulty":       _parse_difficulty(r.get("difficulty", 300)),
             "text":             text,
             "answer":           ans,
-            "choices":          choices if isinstance(choices, list) else [],
             "image_url":        str(r.get("image_url") or "").strip(),
             "answer_image_url": "",
             "image_query":      str(r.get("image_query") or "").strip(),
@@ -1284,45 +1469,30 @@ async def _extract_docx_text(content: bytes) -> str:
 
 
 async def _extract_image_questions(content: bytes, mime: str, category_id: str) -> list:
-    """Use OpenRouter/Gemini Vision to extract questions from an image."""
+    """Use Gemini Vision to extract questions from an image."""
     import base64
-    img_b64 = base64.standard_b64encode(content).decode()
-
-    prompt = """أنت خبير في استخراج الأسئلة من صور المناهج الدراسية العربية.
-استخرج جميع الأسئلة من هذه الصورة.
-قواعد:
-1. استخرج نص كل سؤال كاملاً
-2. استخرج الخيارات (أ/ب/ج/د أو A/B/C/D) إن وُجدت
-3. استخرج الإجابة الصحيحة كنص كامل (لا تكتب الحرف فقط)
-4. قيّم الصعوبة: 300=سهل 600=متوسط 900=صعب
-
-أعد JSON array فقط بدون أي نص آخر:
-[{"text":"السؤال كاملاً؟","choices":["نص أ","نص ب","نص ج","نص د"],"answer":"نص الإجابة الصحيحة","difficulty":300}]"""
-
-    try:
-        if os.environ.get("OPENROUTER_API_KEY"):
-            raw = await _openrouter_vision(img_b64, mime, prompt)
-        else:
-            api_key = os.environ.get("GEMINI_API_KEY", "")
-            if not api_key:
-                return []
-            payload = {"contents": [{"parts": [
-                {"inline_data": {"mime_type": mime, "data": img_b64}},
-                {"text": prompt},
-            ]}]}
-            async with httpx.AsyncClient(timeout=60) as client:
-                r = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}",
-                    json=payload,
-                )
-            if r.status_code != 200:
-                logger.warning(f"Gemini Vision image error: {r.text[:200]}")
-                return []
-            raw = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception as e:
-        logger.warning(f"Vision image extraction failed: {e}")
+    img_b64 = base64.b64encode(content).decode()
+    GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+    if not GEMINI_KEY:
         return []
-    m = re.search(r'\[.*\]', raw, re.DOTALL)
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": "استخرج الأسئلة والإجابات من هذه الصورة. أعد JSON array فقط: [{\"text\":\"السؤال؟\",\"answer\":\"الإجابة\",\"difficulty\":300,\"image_query\":\"search term\"}]"},
+                {"inline_data": {"mime_type": mime, "data": img_b64}},
+            ]
+        }]
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            json=payload,
+            headers={"x-goog-api-key": GEMINI_KEY},
+        )
+    if resp.status_code != 200:
+        return []
+    raw = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+    m = re.search(r'\[.*?\]', raw, re.DOTALL)
     if not m:
         return []
     try:
@@ -1332,269 +1502,25 @@ async def _extract_image_questions(content: bytes, mime: str, category_id: str) 
 
     ts = datetime.now(timezone.utc).isoformat()
     questions = []
-    for item in items:
-        text = str(item.get("text") or "").strip()
-        ans  = str(item.get("answer") or "").strip()
-        if not text or not ans:
-            continue
-        questions.append({
-            "id":               str(uuid.uuid4()),
-            "category_id":      category_id,
-            "difficulty":       _parse_difficulty(item.get("difficulty", 300)),
-            "text":             text,
-            "answer":           ans,
-            "choices":          item.get("choices") if isinstance(item.get("choices"), list) else [],
-            "image_url":        "",
-            "answer_image_url": "",
-            "image_query":      "",
-            "question_type":    "text",
-            "is_experimental":  False,
-            "status":           "pending",
-            "created_at":       ts,
-        })
+    for r in items:
+        text = str(r.get("text") or "").strip()
+        ans  = str(r.get("answer") or "").strip()
+        if text and ans:
+            questions.append({
+                "id":               str(uuid.uuid4()),
+                "category_id":      category_id,
+                "difficulty":       _parse_difficulty(r.get("difficulty", 300)),
+                "text":             text,
+                "answer":           ans,
+                "image_url":        "",
+                "answer_image_url": "",
+                "image_query":      str(r.get("image_query") or "").strip(),
+                "question_type":    "text",
+                "is_experimental":  False,
+                "status":           "pending",
+                "created_at":       ts,
+            })
     return questions
-
-
-async def _claude_analyze_pdf_vision(file_path: str, category_id: str, extra_prompt: str = "") -> list:
-    """Render each PDF page as JPEG → Vision AI → extract MCQ questions with cropped images."""
-    openrouter_key  = os.environ.get("OPENROUTER_API_KEY", "")
-    gemini_key      = os.environ.get("GEMINI_API_KEY", "")
-    anthropic_key   = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not openrouter_key and not gemini_key and not anthropic_key:
-        raise HTTPException(500, "لا يوجد AI API key — أضف ANTHROPIC_API_KEY أو OPENROUTER_API_KEY أو GEMINI_API_KEY")
-    try:
-        import fitz
-    except ImportError:
-        raise HTTPException(500, "pymupdf غير مثبّت — أضف pymupdf لـ requirements.txt")
-    import base64
-    from PIL import Image as PILImage
-    import io as _io
-
-    # ── helpers ────────────────────────────────────────────────────────────────
-
-    def _parse_json(raw: str):
-        """Extract JSON array from any AI response format."""
-        # Remove markdown code fences
-        cleaned = re.sub(r'```(?:json)?', '', raw, flags=re.IGNORECASE).replace('```', '').strip()
-        m = re.search(r'\[.*\]', cleaned, re.DOTALL)
-        if not m:
-            return None
-        fragment = m.group()
-        for attempt in (fragment, fragment.replace("'", '"')):
-            try:
-                result = json.loads(attempt)
-                if isinstance(result, list):
-                    return result
-            except Exception:
-                pass
-        return None
-
-    async def _vision_call(img_b64: str) -> str:
-        """Call Vision API: Claude primary → OpenRouter → Gemini direct fallback."""
-        prompt = f"""أنت خبير في استخراج الأسئلة من تجميعات اختبار التحصيل الدراسي السعودي.
-
-هذه صورة صفحة من PDF. استخرج كل الأسئلة منها.
-قواعد:
-1. نص السؤال كاملاً بدون تعديل
-2. نصوص الخيارات الأربعة كاملةً (لا تكتفِ بالأحرف)
-3. الإجابة الصحيحة: نص الخيار كاملاً (لو مفتاح الإجابة في أسفل الصفحة استخدمه)
-4. الصعوبة: 300=سهل 600=متوسط 900=صعب
-5. bbox: موضع السؤال كنسبة (0.0=أعلى، 1.0=أسفل) — top=بداية السؤال, bottom=نهاية آخر خيار
-{f"تعليمات: {extra_prompt}" if extra_prompt else ""}
-أعد JSON array فقط، بدون أي نص أو markdown حوله:
-[{{"text":"...","choices":["...","...","...","..."],"answer":"...","difficulty":300,"bbox":{{"top":0.10,"bottom":0.35}}}}]"""
-
-        # 1. Claude Vision (primary — has balance)
-        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if anthropic_key:
-            try:
-                async with httpx.AsyncClient(timeout=120) as client:
-                    r = await client.post(
-                        "https://api.anthropic.com/v1/messages",
-                        headers={
-                            "x-api-key": anthropic_key,
-                            "anthropic-version": "2023-06-01",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "model": "claude-sonnet-4-6",
-                            "max_tokens": 4096,
-                            "messages": [{"role": "user", "content": [
-                                {"type": "image", "source": {
-                                    "type": "base64", "media_type": "image/jpeg", "data": img_b64
-                                }},
-                                {"type": "text", "text": prompt},
-                            ]}],
-                        },
-                    )
-                if r.status_code == 200:
-                    content = r.json()["content"][0]["text"]
-                    logger.info("  Claude Vision OK")
-                    return content
-                else:
-                    logger.warning(f"  Claude Vision → {r.status_code}: {r.text[:200]}")
-            except Exception as e:
-                logger.warning(f"  Claude Vision exception: {e}")
-
-        # 2. OpenRouter fallback
-        if openrouter_key:
-            for model in ("google/gemini-2.5-flash", "google/gemini-1.5-flash"):
-                try:
-                    async with httpx.AsyncClient(timeout=120) as client:
-                        r = await client.post(
-                            "https://openrouter.ai/api/v1/chat/completions",
-                            headers={"Authorization": f"Bearer {openrouter_key}",
-                                     "Content-Type": "application/json"},
-                            json={"model": model, "messages": [{"role": "user", "content": [
-                                {"type": "image_url",
-                                 "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
-                                {"type": "text", "text": prompt},
-                            ]}]},
-                        )
-                    if r.status_code == 200:
-                        content = r.json()["choices"][0]["message"]["content"]
-                        logger.info(f"  OpenRouter {model} OK")
-                        return content
-                    else:
-                        logger.warning(f"  OpenRouter {model} → {r.status_code}: {r.text[:200]}")
-                except Exception as e:
-                    logger.warning(f"  OpenRouter {model} exception: {e}")
-
-        # 3. Gemini direct fallback
-        if gemini_key:
-            try:
-                payload = {"contents": [{"parts": [
-                    {"inline_data": {"mime_type": "image/jpeg", "data": img_b64}},
-                    {"text": prompt},
-                ]}]}
-                async with httpx.AsyncClient(timeout=120) as client:
-                    r = await client.post(
-                        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}",
-                        json=payload,
-                    )
-                if r.status_code == 200:
-                    data = r.json()
-                    content = data["candidates"][0]["content"]["parts"][0]["text"]
-                    logger.info("  Gemini direct OK")
-                    return content
-                else:
-                    logger.warning(f"  Gemini direct → {r.status_code}: {r.text[:200]}")
-            except Exception as e:
-                logger.warning(f"  Gemini direct exception: {e}")
-
-        raise RuntimeError("All Vision AI backends failed for this page")
-
-    # ── main loop ──────────────────────────────────────────────────────────────
-
-    doc    = fitz.open(file_path)
-    all_qs = []
-    seen   = set()
-    ts     = datetime.now(timezone.utc).isoformat()
-    page_errors = []
-
-    for page_num in range(len(doc)):
-        try:
-            page = doc[page_num]
-            pix  = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), colorspace=fitz.csRGB)
-            img_w, img_h = pix.width, pix.height
-
-            # Convert page to JPEG bytes (RGB guaranteed by colorspace=fitz.csRGB)
-            pil_page = PILImage.frombytes("RGB", (img_w, img_h), pix.samples)
-            jpeg_buf = _io.BytesIO()
-            pil_page.save(jpeg_buf, format="JPEG", quality=80, optimize=True)
-            jpeg_bytes = jpeg_buf.getvalue()
-            img_b64 = base64.standard_b64encode(jpeg_bytes).decode()
-            logger.info(f"Page {page_num+1}/{len(doc)}: {img_w}×{img_h}px JPEG={len(jpeg_bytes)//1024}KB")
-
-            raw = await _vision_call(img_b64)
-            logger.info(f"Page {page_num+1} response[:200]: {raw[:200]}")
-
-            items = _parse_json(raw)
-            if not items:
-                logger.warning(f"Page {page_num+1}: JSON parse failed. raw[:400]={raw[:400]}")
-                page_errors.append(f"page {page_num+1}: no JSON")
-                continue
-
-            # Collect valid items
-            valid = []
-            for item in items:
-                t = str(item.get("text") or "").strip()
-                a = str(item.get("answer") or "").strip()
-                if t and a and t not in seen:
-                    seen.add(t)
-                    valid.append(item)
-
-            n = len(valid)
-            logger.info(f"Page {page_num+1}: {n} valid questions")
-
-            for idx, item in enumerate(valid):
-                text    = str(item.get("text") or "").strip()
-                ans     = str(item.get("answer") or "").strip()
-                choices = item.get("choices")
-                if isinstance(choices, list):
-                    choices = [str(c).strip() for c in choices if str(c).strip()]
-                else:
-                    choices = []
-
-                # ── Crop image ──────────────────────────────────────────
-                image_url = ""
-                try:
-                    bbox = item.get("bbox") or {}
-                    try:
-                        top_pct    = float(bbox.get("top",    -1))
-                        bottom_pct = float(bbox.get("bottom", -1))
-                    except (TypeError, ValueError):
-                        top_pct = bottom_pct = -1
-
-                    # Use equal-slice fallback if bbox invalid/missing
-                    if not (0.0 <= top_pct < bottom_pct <= 1.0):
-                        slice_h    = 1.0 / max(n, 1)
-                        top_pct    = idx * slice_h
-                        bottom_pct = (idx + 1) * slice_h
-
-                    # 2% padding
-                    top_px    = max(0,      int((top_pct    - 0.02) * img_h))
-                    bottom_px = min(img_h,  int((bottom_pct + 0.02) * img_h))
-
-                    if bottom_px - top_px > 40:
-                        crop     = pil_page.crop((0, top_px, img_w, bottom_px))
-                        cbuf     = _io.BytesIO()
-                        crop.save(cbuf, format="JPEG", quality=85, optimize=True)
-                        b64      = base64.standard_b64encode(cbuf.getvalue()).decode()
-                        image_url = f"data:image/jpeg;base64,{b64}"
-                        logger.info(f"  q{idx+1} crop OK top={top_pct:.2f} bot={bottom_pct:.2f} {len(b64)//1024}KB")
-                except Exception as ce:
-                    logger.warning(f"  q{idx+1} crop failed: {ce}")
-
-                all_qs.append({
-                    "id":               str(uuid.uuid4()),
-                    "category_id":      category_id,
-                    "difficulty":       _parse_difficulty(item.get("difficulty", 300)),
-                    "text":             text,
-                    "answer":           ans,
-                    "choices":          choices,
-                    "image_url":        image_url,
-                    "answer_image_url": "",
-                    "image_query":      "",
-                    "question_type":    "image" if image_url else "text",
-                    "is_experimental":  False,
-                    "status":           "pending",
-                    "created_at":       ts,
-                })
-
-        except Exception as page_err:
-            logger.warning(f"Page {page_num+1} failed: {page_err}")
-            page_errors.append(f"page {page_num+1}: {page_err}")
-
-    doc.close()
-    logger.info(f"PDF Vision done: {len(all_qs)} questions, {len(page_errors)} page errors")
-
-    if not all_qs:
-        # Raise with details so caller can fall back to text extraction
-        detail = "; ".join(page_errors[:3]) if page_errors else "لم تُعثر على أسئلة"
-        raise RuntimeError(f"Vision extraction returned 0 questions. Errors: {detail}")
-
-    return all_qs
 
 
 @api_router.post("/admin/questions/import")
@@ -1607,7 +1533,12 @@ async def import_questions(
 ):
     """Import questions from any file type (Excel/CSV/JSON/PDF/Word/Image/TXT) with AI extraction."""
     filename = (file.filename or "untitled").lower()
+    MAX_IMPORT_MB = 20
+    if file.size and file.size > MAX_IMPORT_MB * 1024 * 1024:
+        raise HTTPException(400, f"الحجم الأقصى {MAX_IMPORT_MB} ميغابايت")
     content  = await file.read()
+    if len(content) > MAX_IMPORT_MB * 1024 * 1024:
+        raise HTTPException(400, f"الحجم الأقصى {MAX_IMPORT_MB} ميغابايت")
     questions = []
     # Sanitize AI prompt — strip, limit length, remove injection patterns
     extra_prompt = (extra_prompt or "").strip()[:500]
@@ -1619,19 +1550,15 @@ async def import_questions(
             raw_list = raw if isinstance(raw, list) else raw.get("questions", [])
             ts = datetime.now(timezone.utc).isoformat()
             for r in raw_list:
-                text    = str(r.get("text") or r.get("question") or "").strip()
-                ans     = str(r.get("answer") or "").strip()
-                choices = r.get("choices") or {}
-                if not text: continue
-                # Allow questions with choices but no answer yet (extracted via AI — admin picks answer)
-                if not ans and not choices: continue
+                text = str(r.get("text") or r.get("question") or "").strip()
+                ans  = str(r.get("answer") or "").strip()
+                if not text or not ans: continue
                 questions.append({
                     "id":               str(uuid.uuid4()),
                     "category_id":      str(r.get("category_id") or category_id or "").strip() or category_id,
                     "difficulty":       _parse_difficulty(r.get("difficulty", 300)),
                     "text":             text,
                     "answer":           ans,
-                    "choices":          choices if isinstance(choices, dict) else {},
                     "image_url":        str(r.get("image_url") or "").strip(),
                     "answer_image_url": "",
                     "image_query":      str(r.get("image_query") or "").strip(),
@@ -1650,21 +1577,20 @@ async def import_questions(
             text_content = content.decode("utf-8", errors="replace")
             questions = await _extract_via_ai(text_content, category_id, extra_prompt, ai_engine)
         elif filename.endswith(".pdf"):
-            # Claude Vision: render each page as image → extract MCQ questions
+            # Try Gemini file analysis first, fallback to text extraction
             tmp_path = f"/tmp/upload_{uuid.uuid4().hex}.pdf"
             with open(tmp_path, "wb") as f:
                 f.write(content)
             try:
-                questions = await _claude_analyze_pdf_vision(tmp_path, category_id, extra_prompt)
-            except Exception as e:
-                logger.warning(f"PDF Vision failed: {e}")
-                logger.info("Falling back to text extraction...")
+                prompt = AI_EXTRACT_PROMPT + (f"\nتعليمات: {extra_prompt}\n" if extra_prompt else "")
+                prompt += "\nاستخرج جميع الأسئلة من هذا الملف — لا تتجاهل أي سؤال."
+                raw = await _gemini_analyze_file(tmp_path, "application/pdf", prompt)
+                questions = await _parse_ai_response_to_questions(raw, category_id, ai_engine, extra_prompt)
+            except Exception:
+                # Fallback: text extraction
                 pdf_text = await _extract_pdf_text(content)
                 if not pdf_text.strip():
-                    raise HTTPException(422,
-                        f"فشل استخراج الأسئلة بالـ Vision ({str(e)[:120]}) "
-                        "وتعذّر استخراج نص من الـ PDF (قد يكون ملف مسح ضوئي). "
-                        "تأكد من وجود OPENROUTER_API_KEY أو GEMINI_API_KEY في الـ environment.")
+                    raise HTTPException(422, "لم يُمكن استخراج نص من الـ PDF")
                 questions = await _extract_via_ai(pdf_text, category_id, extra_prompt, ai_engine)
             finally:
                 if os.path.exists(tmp_path): os.remove(tmp_path)
@@ -1692,7 +1618,7 @@ async def import_questions(
         raise HTTPException(422, f"خطأ في قراءة الملف: {str(e)[:200]}")
 
     if not questions:
-        raise HTTPException(400, "لم يتم العثور على أسئلة صالحة — تأكد من الملف، أو تحقق من /api/admin/debug/ai لتشخيص مفاتيح AI")
+        raise HTTPException(400, "لم يتم العثور على أسئلة صالحة — تأكد من الملف أو جرب تعليمات مختلفة")
 
     await db.pending_questions.insert_many(questions)
     await log_admin_action(admin, "رفع ملف أسئلة", "أسئلة معلقة", filename,
@@ -1722,7 +1648,7 @@ async def get_pending_questions(
 @api_router.patch("/admin/questions/pending/{q_id}")
 async def patch_pending_question(q_id: str, body: dict, admin: dict = Depends(get_admin)):
     """Update specific fields of a pending question (e.g., image_url, answer_image_url)."""
-    allowed = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id", "choices", "translation"}
+    allowed = {"text", "answer", "image_url", "answer_image_url", "image_query", "difficulty", "category_id"}
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
         raise HTTPException(400, "لا توجد حقول صالحة للتحديث")
@@ -1730,6 +1656,32 @@ async def patch_pending_question(q_id: str, body: dict, admin: dict = Depends(ge
     if result.matched_count == 0:
         raise HTTPException(404, "السؤال غير موجود")
     return {"message": "تم التحديث"}
+
+
+@api_router.post("/admin/questions/pending/bulk")
+async def bulk_pending_action(body: dict, _: dict = Depends(get_admin)):
+    action = body.get("action")  # "approve" | "reject" | "delete"
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(400, "لا توجد أسئلة محددة")
+
+    if action == "approve":
+        docs = await db.pending_questions.find({"id": {"$in": ids}}).to_list(200)
+        for d in docs:
+            d.pop("_id", None)
+            d["status"] = "approved"
+        if docs:
+            await db.questions.insert_many(docs)
+        await db.pending_questions.delete_many({"id": {"$in": ids}})
+        return {"message": f"تم نشر {len(docs)} سؤال"}
+    elif action == "reject":
+        await db.pending_questions.delete_many({"id": {"$in": ids}})
+        return {"message": f"تم رفض {len(ids)} سؤال"}
+    elif action == "delete":
+        await db.pending_questions.delete_many({"id": {"$in": ids}})
+        return {"message": f"تم حذف {len(ids)} سؤال"}
+    else:
+        raise HTTPException(400, "إجراء غير صالح")
 
 
 @api_router.post("/admin/questions/{q_id}/approve")
@@ -1760,7 +1712,7 @@ async def approve_pending_question(q_id: str, body: dict = {}, admin: dict = Dep
                         img_data = r.json()
                         q["image_url"] = img_data.get("urls", {}).get("regular", "")
         except Exception as ue:
-            logger.error(f"[Unsplash] fetch on approve failed: {ue}")
+            logger.warning(f"Unsplash fetch on approve failed: {ue}")
 
     q.pop("status", None)
     q["approved_by"] = admin.get("admin_name", "admin")
@@ -1898,13 +1850,8 @@ async def create_session(body: GameSessionCreate, authorization: Optional[str] =
 
 @api_router.get("/game/session/{session_id}")
 async def get_session(session_id: str):
-    cache_key = f"session:{session_id}"
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
     s = await db.game_sessions.find_one({"id": session_id}, {"_id": 0})
     if not s: raise HTTPException(404, "الجلسة غير موجودة")
-    _cache_set(cache_key, s, ttl=2)   # 2s cache — safe since scores update via separate PUT
     return s
 
 @api_router.put("/game/session/{session_id}")
@@ -1913,7 +1860,6 @@ async def update_session(session_id: str, body: GameSessionUpdate):
     upd["updated_at"] = datetime.now(timezone.utc).isoformat()
     res = await db.game_sessions.find_one_and_update({"id": session_id}, {"$set": upd}, {"_id": 0}, return_document=True)
     if not res: raise HTTPException(404, "الجلسة غير موجودة")
-    _cache.pop(f"session:{session_id}", None)   # invalidate on write
     return res
 
 @api_router.post("/game/session/{session_id}/question")
@@ -1937,33 +1883,31 @@ async def get_next_question(session_id: str, category_id: str, difficulty: int,
     # Build base query — exclude soft-deleted questions
     base_q = {"category_id": category_id, "difficulty": difficulty, "id": {"$nin": exclude_ids}, "deleted_at": None}
 
-    async def _sample_one(q: dict):
-        """Pick 1 random doc via $sample — much faster than to_list(1000)."""
-        pipeline = [{"$match": q}, {"$sample": {"size": 1}}, {"$project": {"_id": 0}}]
-        results = await db.questions.aggregate(pipeline).to_list(1)
-        return results[0] if results else None
-
-    settings_doc = None
+    # Trial sessions: filter only experimental questions (if any are marked)
     if is_trial:
         settings_doc = await db.settings.find_one({"key": "game_settings"}, {"_id": 0})
         use_trial_only = (settings_doc or {}).get("trial_questions_only", False)
         if use_trial_only:
-            question = await _sample_one({**base_q, "is_experimental": True})
-            if not question:
-                question = await _sample_one(base_q)
+            trial_q = {**base_q, "is_experimental": True}
+            available = await db.questions.find(trial_q, {"_id": 0}).to_list(1000)
+            if not available:
+                # fallback: all questions if none tagged
+                available = await db.questions.find(base_q, {"_id": 0}).to_list(1000)
         else:
-            question = await _sample_one(base_q)
+            available = await db.questions.find(base_q, {"_id": 0}).to_list(1000)
     else:
-        question = await _sample_one(base_q)
+        available = await db.questions.find(base_q, {"_id": 0}).to_list(1000)
 
-    if not question:
-        # Reset: ignore exclude list
+    if not available:
+        # Reset and try again (ignoring exclude list)
         reset_q = {"category_id": category_id, "difficulty": difficulty, "deleted_at": None}
-        if is_trial and (settings_doc or {}).get("trial_questions_only"):
+        if is_trial and (settings_doc if 'settings_doc' in dir() else {}).get("trial_questions_only"):
             reset_q["is_experimental"] = True
-        question = await _sample_one(reset_q)
-        if not question:
+        available = await db.questions.find(reset_q, {"_id": 0}).to_list(1000)
+        if not available:
             raise HTTPException(404, "لا يوجد أسئلة")
+
+    question = random.choice(available)
 
     new_used = list(set(session.get("used_questions", []) + [question["id"]]))
     await db.game_sessions.update_one(
@@ -1976,31 +1920,6 @@ async def get_next_question(session_id: str, category_id: str, difficulty: int,
         await db.users.update_one(
             {"id": user["id"]},
             {"$addToSet": {"answered_question_ids": question["id"]}}
-        )
-
-    # Community category play tracking (monthly unique player = 1 point)
-    comm_cat = await db.community_categories.find_one(
-        {"id": category_id, "status": "approved"}, {"_id": 0, "creator_id": 1}
-    )
-    if comm_cat:
-        # Always increment total display counter
-        await db.community_categories.update_one(
-            {"id": category_id}, {"$inc": {"play_count": 1}}
-        )
-        # Log unique player per month (upsert — same player this month = ignored)
-        player_id = user["id"] if user else f"anon:{session_id}"
-        month_key = datetime.now(timezone.utc).strftime("%Y-%m")
-        await db.community_play_logs.update_one(
-            {"category_id": category_id, "player_id": player_id, "month": month_key},
-            {"$setOnInsert": {
-                "category_id": category_id,
-                "creator_id": comm_cat["creator_id"],
-                "player_id": player_id,
-                "month": month_key,
-                "processed": False,
-                "logged_at": datetime.now(timezone.utc).isoformat(),
-            }},
-            upsert=True,
         )
 
     return question
@@ -2017,7 +1936,6 @@ async def update_score(session_id: str, body: ScoreUpdate,
         {"id": session_id},
         {"$set": {field: new_score, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
-    _cache.pop(f"session:{session_id}", None)   # invalidate on score change
     updated = await db.game_sessions.find_one({"id": session_id}, {"_id": 0})
     return {"team1_score": updated["team1_score"], "team2_score": updated["team2_score"]}
 
@@ -2026,7 +1944,7 @@ async def update_score(session_id: str, body: ScoreUpdate,
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_router.get("/secret/{question_id}")
-async def get_secret_word(question_id: str):
+async def get_secret_word(question_id: str, user: dict = Depends(require_user)):
     q = await db.questions.find_one({"id": question_id}, {"_id": 0})
     if not q: raise HTTPException(404, "الكلمة غير موجودة")
     return {"word": q.get("answer", ""), "image_url": q.get("image_url", ""), "difficulty": q.get("difficulty", 200)}
@@ -2275,9 +2193,7 @@ class PaylinkInitiate(BaseModel):
 @api_router.post("/paylink/initiate")
 async def paylink_initiate(body: PaylinkInitiate, user: dict = Depends(require_user)):
     """Create a Paylink invoice and return the payment URL."""
-    _pay_id  = os.environ.get("PAYMENT_API_ID",  PAYMENT_API_ID)
-    _pay_key = os.environ.get("PAYMENT_API_KEY", PAYMENT_API_KEY)
-    if not _pay_id or not _pay_key:
+    if not PAYMENT_API_ID or not PAYMENT_API_KEY:
         raise HTTPException(503, "بوابة الدفع غير مفعّلة — تواصل مع الإدارة")
 
     plan = SUBSCRIPTION_PLANS.get(body.plan_id)
@@ -2370,22 +2286,12 @@ async def paylink_verify(transaction_no: str, user: dict = Depends(require_user)
         )
         if result.modified_count > 0:
             logger.info(f"Premium activated for user {user['id']} via txn {transaction_no}")
-            # Send confirmation invoice email (fire-and-forget — never block the response)
             if user.get("email"):
-                invoice_no = f"HJH-{transaction_no[:8].upper()}"
-                html = build_invoice_html(
-                    username=user.get("username", ""),
-                    plan_name=plan["name"],
-                    amount=plan["amount"],
-                    transaction_no=transaction_no,
-                    expires_at=expires,
-                    invoice_no=invoice_no,
+                subject, html = build_subscription_confirmation_email(
+                    user.get("username", ""), plan.get("name", "Premium"), expires
                 )
-                asyncio.create_task(send_email_notification(
-                    user["email"],
-                    f"✅ تم تفعيل اشتراكك في حُجّة — {plan['name']}",
-                    html,
-                ))
+                ok = await send_email(user["email"], subject, html)
+                logger.info(f"Subscription confirmation email {'sent' if ok else 'failed'} | user={user['id']}")
         await db.payment_transactions.update_one(
             {"transaction_no": transaction_no, "payment_status": {"$ne": "paid"}},
             {"$set": {"payment_status": "paid", "status": "complete", "updated_at": now}}
@@ -3398,6 +3304,14 @@ async def update_settings(body: dict, admin: dict = Depends(get_admin)):
 
 ALLOWED_EXTS = {"jpg", "jpeg", "png", "webp"}
 
+def _check_image_magic(data: bytes) -> bool:
+    """Verify file starts with known image magic bytes (PNG, JPEG, or WEBP)."""
+    return (
+        data[:4] == b"\x89PNG" or
+        data[:3] == b"\xff\xd8\xff" or
+        (len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP")
+    )
+
 @api_router.post("/upload")
 async def upload_image(request: Request, file: UploadFile = File(...), admin=Depends(get_admin)):
     ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
@@ -3408,8 +3322,36 @@ async def upload_image(request: Request, file: UploadFile = File(...), admin=Dep
     filename = f"{uuid.uuid4()}.{ext}"
     dest = UPLOAD_DIR / filename
     content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "الحجم الأقصى 5 ميغابايت")
+    if not _check_image_magic(content):
+        raise HTTPException(400, "الملف لا يبدو صورة حقيقية")
     dest.write_bytes(content)
     # Use forwarded host/proto headers if behind reverse proxy
+    fwd_proto = request.headers.get("x-forwarded-proto") or str(request.base_url).split("://")[0]
+    fwd_host  = request.headers.get("x-forwarded-host") or request.headers.get("host") or str(request.base_url).split("://")[1].rstrip("/")
+    base = f"{fwd_proto}://{fwd_host.rstrip('/')}"
+    url = f"{base}/api/static/uploads/{filename}"
+    return {"url": url, "filename": filename}
+
+@api_router.post("/upload/image")
+async def upload_image_user(request: Request, file: UploadFile = File(...), user: dict = Depends(require_user)):
+    """Image upload for premium community creators."""
+    if user.get("subscription_type") != "premium":
+        raise HTTPException(403, "رفع الصور متاح للمشتركين Premium فقط")
+    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_EXTS:
+        raise HTTPException(400, "يُسمح فقط بـ PNG / JPG / WEBP")
+    if file.size and file.size > 5 * 1024 * 1024:
+        raise HTTPException(400, "الحجم الأقصى 5 ميغابايت")
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(400, "الحجم الأقصى 5 ميغابايت")
+    if not _check_image_magic(content):
+        raise HTTPException(400, "الملف لا يبدو صورة حقيقية")
+    filename = f"{uuid.uuid4()}.{ext}"
+    dest = UPLOAD_DIR / filename
+    dest.write_bytes(content)
     fwd_proto = request.headers.get("x-forwarded-proto") or str(request.base_url).split("://")[0]
     fwd_host  = request.headers.get("x-forwarded-host") or request.headers.get("host") or str(request.base_url).split("://")[1].rstrip("/")
     base = f"{fwd_proto}://{fwd_host.rstrip('/')}"
@@ -3443,10 +3385,10 @@ async def _gemini_generate(prompt: str) -> str:
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         raise HTTPException(500, "GEMINI_API_KEY غير مضبوط في ملف البيئة")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(url, json=payload)
+        r = await client.post(url, json=payload, headers={"x-goog-api-key": api_key})
     if r.status_code != 200:
         raise HTTPException(500, f"خطأ Gemini {r.status_code}: {r.text[:300]}")
     data = r.json()
@@ -3456,280 +3398,65 @@ async def _gemini_generate(prompt: str) -> str:
         raise HTTPException(500, "لم يُرسل Gemini استجابة نصية")
 
 
-async def _openrouter_generate(prompt: str, model: str = "google/gemini-2.5-flash") -> str:
-    """Generate text via OpenRouter API."""
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
-    if not api_key:
-        raise ValueError("OPENROUTER_API_KEY not set")
-    async with httpx.AsyncClient(timeout=90) as client:
-        r = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": [{"role": "user", "content": prompt}]},
-        )
-    if r.status_code != 200:
-        raise HTTPException(500, f"OpenRouter error {r.status_code}: {r.text[:300]}")
-    return r.json()["choices"][0]["message"]["content"]
-
-
-async def _openrouter_vision(img_b64: str, mime: str, prompt: str, model: str = "google/gemini-2.5-flash") -> str:
-    """Send image + text to OpenRouter Vision."""
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
-    if not api_key:
-        raise ValueError("OPENROUTER_API_KEY not set")
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": [{"role": "user", "content": [
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
-                {"type": "text", "text": prompt},
-            ]}]},
-        )
-    if r.status_code != 200:
-        raise ValueError(f"OpenRouter Vision error {r.status_code}: {r.text[:300]}")
-    return r.json()["choices"][0]["message"]["content"]
-
-
-async def _ai_generate(prompt: str, prefer: str = "openrouter") -> str:
-    """OpenRouter primary · Gemini fallback · Claude last resort."""
-    if os.environ.get("OPENROUTER_API_KEY"):
+async def _ai_generate(prompt: str, prefer: str = "claude") -> str:
+    """Try Claude first, fall back to Gemini if unavailable."""
+    if prefer == "claude" and os.environ.get("CLAUDE_API_KEY"):
         try:
-            return await _openrouter_generate(prompt)
-        except Exception as e:
-            logger.warning(f"OpenRouter failed, falling back to Gemini: {e}")
-    if os.environ.get("GEMINI_API_KEY"):
-        try:
-            return await _gemini_generate(prompt)
-        except Exception as ge:
-            logger.warning(f"Gemini failed, falling back to Claude: {ge}")
-    return await _claude_generate(prompt)
+            return await _claude_generate(prompt)
+        except Exception as ce:
+            logger.warning(f"Claude failed, falling back to Gemini: {ce}")
+    return await _gemini_generate(prompt)
 
 
-async def _claude_analyze_file_text(file_path: str, prompt: str) -> str:
-    """Send a text-extracted file content to Claude for processing."""
-    with open(file_path, "rb") as f:
-        content = f.read()
-    text = content.decode("utf-8", errors="replace")
-    return await _claude_generate(prompt + "\n\n" + text[:15000])
+async def _gemini_analyze_file(file_path: str, mime_type: str, prompt: str) -> str:
+    """Use Gemini with file attachment (supports PDF, images, etc.)."""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(500, "GEMINI_API_KEY غير مضبوط")
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"hujjah-file-{uuid.uuid4().hex[:8]}",
+        system_message="أنت مساعد ذكي لتحليل الملفات واستخراج الأسئلة."
+    ).with_model("gemini", "gemini-2.5-flash")
+    file_obj = FileContentWithMimeType(file_path=file_path, mime_type=mime_type)
+    msg = UserMessage(text=prompt, file_contents=[file_obj])
+    resp = await chat.send_message(msg)
+    return resp if isinstance(resp, str) else str(resp)
 
 
 async def _fetch_unsplash_image(query: str) -> str:
-    """Fetch a single Unsplash image URL for a query using search (more reliable than random)."""
+    """Fetch a single Unsplash image URL for a query. Returns URL or empty string."""
     if not query:
         return ""
     key = os.environ.get("UNSPLASH_API_KEY", "")
     if not key:
         return ""
     try:
-        async with httpx.AsyncClient(timeout=10) as c:
-            # Use /search/photos for more reliable results on specific queries
+        async with httpx.AsyncClient(timeout=8) as c:
             r = await c.get(
-                "https://api.unsplash.com/search/photos",
-                params={"query": query, "orientation": "landscape", "per_page": 5},
-                headers={"Authorization": f"Client-ID {key}"},
-            )
-            if r.status_code == 200:
-                results = r.json().get("results", [])
-                if results:
-                    return results[0].get("urls", {}).get("regular", "")
-            # Fallback to random if search returns nothing
-            r2 = await c.get(
                 "https://api.unsplash.com/photos/random",
                 params={"query": query, "orientation": "landscape"},
                 headers={"Authorization": f"Client-ID {key}"},
             )
-            if r2.status_code == 200:
-                return r2.json().get("urls", {}).get("regular", "")
+            if r.status_code == 200:
+                return r.json().get("urls", {}).get("regular", "")
     except Exception:
         pass
     return ""
 
 
-# ─── Category Generation Templates ───────────────────────────────────────────
-# Each template provides: persona, context, MCQ preference, and level examples.
-# Matched by keyword in category name.
-CATEGORY_TEMPLATES: dict = {
-    "أحياء": {
-        "persona": "خبير في الأحياء والعلوم الحياتية للمناهج السعودية",
-        "context": "أسئلة اختبار التحصيل الدراسي — الأحياء — المنهج السعودي",
-        "levels": {
-            300: {
-                "desc": "حقائق ومصطلحات أساسية، تعريفات مباشرة يعرفها طالب متوسط",
-                "example": '{"text":"ما الجزء المسؤول عن إنتاج الطاقة في الخلية؟","answer":"الميتوكوندريا","image_query":"mitochondria cell diagram","answer_image_query":"mitochondria ATP energy production"}',
-            },
-            600: {
-                "desc": "عمليات حيوية وأنظمة متكاملة، تحتاج فهماً لا مجرد حفظ",
-                "example": '{"text":"ما الناتج النهائي للتنفس اللاهوائي في خلايا العضلات؟","answer":"حمض اللاكتيك","image_query":"anaerobic respiration muscle cells","answer_image_query":"lactic acid fermentation biology"}',
-            },
-            900: {
-                "desc": "تحليل تجارب، وراثة متقدمة، تفسير بيانات — مستوى طالب متميز",
-                "example": '{"text":"في تجربة التورث المرتبط بالجنس، إذا كان تردد الجين X في الذكور 0.08 — ما نسبة ظهوره في الإناث؟","answer":"0.0064","image_query":"sex-linked inheritance genetics chart","answer_image_query":"X-linked gene frequency females calculation"}',
-            },
-        },
-    },
-    "كيمياء": {
-        "persona": "خبير في الكيمياء للمناهج السعودية",
-        "context": "أسئلة اختبار التحصيل الدراسي — الكيمياء — المنهج السعودي",
-        "levels": {
-            300: {
-                "desc": "خصائص عناصر، جدول دوري، تفاعلات بسيطة ومعادلات مباشرة",
-                "example": '{"text":"ما عدد الإلكترونات في الغلاف الخارجي لذرة الكلور (العدد الذري 17)؟","answer":"7","image_query":"chlorine periodic table element","answer_image_query":"chlorine electron configuration shells"}',
-            },
-            600: {
-                "desc": "حسابات ستويكيومترية، موازنة معادلات، كيمياء عضوية مبدئية",
-                "example": '{"text":"ما حجم CO2 المنتج عند الظروف القياسية من احتراق 24g كربون كاملاً؟","answer":"44.8 لتر","image_query":"carbon combustion CO2 production chemistry","answer_image_query":"stoichiometry mole volume calculation"}',
-            },
-            900: {
-                "desc": "آليات تفاعل عضوي، ترمودينامكا، حركية كيميائية، تحليل متقدم",
-                "example": '{"text":"في تفاعل إضافة HBr على البروبين وفق قاعدة ماركوفنيكوف، على أي كربون يرتبط البروم؟","answer":"الكربون الثاني","image_query":"Markovnikov rule propene HBr addition","answer_image_query":"organic chemistry addition reaction mechanism"}',
-            },
-        },
-    },
-    "فيزياء": {
-        "persona": "خبير في الفيزياء للمناهج السعودية",
-        "context": "أسئلة اختبار التحصيل الدراسي — الفيزياء — المنهج السعودي",
-        "levels": {
-            300: {
-                "desc": "قوانين وصيغ أساسية، تطبيقات مباشرة، مسائل ذات خطوة واحدة",
-                "example": '{"text":"جسم كتلته 10 kg يتسارع بمقدار 5 m/s² — ما القوة المؤثرة عليه؟","answer":"50 نيوتن","image_query":"Newton second law force mass diagram","answer_image_query":"force acceleration physics 50N calculation"}',
-            },
-            600: {
-                "desc": "تحليل دوائر كهربائية، موجات، ضوء، مسائل متعددة الخطوات",
-                "example": '{"text":"مقاومتان 6Ω و3Ω موصولتان على التوازي مع بطارية 12V — ما التيار الكلي؟","answer":"6 أمبير","image_query":"parallel circuit two resistors physics","answer_image_query":"Ohm law parallel resistors total current"}',
-            },
-            900: {
-                "desc": "ميكانيكا متقدمة، فيزياء حديثة، تحليل بيانات تجريبية معقدة",
-                "example": '{"text":"في التجربة الكهروضوئية، إذا تضاعفت شدة الضوء مع ثبات تردده — ماذا يحدث للطاقة الحركية القصوى للإلكترونات؟","answer":"تبقى ثابتة","image_query":"photoelectric effect light intensity electrons","answer_image_query":"photoelectric effect kinetic energy graph"}',
-            },
-        },
-    },
-    "رياضيات": {
-        "persona": "خبير في الرياضيات للمناهج السعودية",
-        "context": "أسئلة اختبار التحصيل الدراسي — الرياضيات — المنهج السعودي",
-        "levels": {
-            300: {
-                "desc": "معادلات بسيطة، هندسة مبدئية، نسب مباشرة، عمليات أساسية",
-                "example": '{"text":"ما قيمة س إذا كان 3س - 7 = 11؟","answer":"6","image_query":"algebra linear equation solving","answer_image_query":"equation 3x-7=11 solution x=6"}',
-            },
-            600: {
-                "desc": "دوال، مثلثات، احتمالات، إحصاء، مسائل متعددة المراحل",
-                "example": '{"text":"ما مشتقة الدالة f(x) = x³ - 4x² + 7 عند x = 2؟","answer":"-4","image_query":"polynomial derivative calculus graph","answer_image_query":"derivative calculation f prime 2 result"}',
-            },
-            900: {
-                "desc": "تفاضل وتكامل متقدم، مصفوفات، برهان منطقي، مسائل مركبة",
-                "example": '{"text":"ما قيمة التكامل المحدود ∫₀¹ x·eˣ dx؟","answer":"1","image_query":"integration by parts calculus definite integral","answer_image_query":"xe^x integral from 0 to 1 result"}',
-            },
-        },
-    },
-    "كمي": {
-        "persona": "خبير في القدرات الكمية واختبار قياس السعودي",
-        "context": "أسئلة القدرات العامة — القسم الكمي — اختبار قياس",
-        "levels": {
-            300: {
-                "desc": "عمليات حسابية مباشرة، نسب بسيطة، متتاليات عددية واضحة",
-                "example": '{"text":"ما العدد الناقص في المتتالية: 2، 6، 18، __، 162؟","answer":"54","image_query":"number sequence geometric pattern","answer_image_query":"geometric sequence multiplication factor 3"}',
-            },
-            600: {
-                "desc": "مسائل لفظية تحتاج تحليلاً، نسب مئوية، مقارنات كمية",
-                "example": '{"text":"إذا كان ثمن الكتاب بعد خصم 20% هو 160 ريالاً — ما ثمنه الأصلي؟","answer":"200 ريال","image_query":"percentage discount original price calculation","answer_image_query":"reverse percentage 20 off 160 equals 200"}',
-            },
-            900: {
-                "desc": "استدلال رياضي معقد، تحليل بيانات متعددة، مسائل مركبة متعددة الخطوات",
-                "example": '{"text":"إذا كان متوسط 7 أعداد 15 وحذفنا أصغرها وهو 3 — ما متوسط الأعداد المتبقية؟","answer":"17","image_query":"arithmetic mean calculation statistics","answer_image_query":"average after removing minimum value 6 numbers"}',
-            },
-        },
-    },
-    "لفظي": {
-        "persona": "خبير في اللغة العربية وقدرات التحليل اللغوي — اختبار قياس",
-        "context": "أسئلة القدرات العامة — القسم اللفظي — اختبار قياس السعودي",
-        "levels": {
-            300: {
-                "desc": "مرادفات وأضداد واضحة، إكمال الجمل البسيط، فهم لغوي مباشر",
-                "example": '{"text":"ما مرادف كلمة (فصيح)؟","answer":"بليغ","image_query":"Arabic language eloquence calligraphy","answer_image_query":"Arabic word baligha fasih meaning"}',
-            },
-            600: {
-                "desc": "تناظر لفظي، قراءة نص واستنتاج، علاقات معنوية متقدمة",
-                "example": '{"text":"البياض للثلج ما الخضرة لـ___؟","answer":"الشجر","image_query":"Arabic verbal analogy reasoning test","answer_image_query":"green tree color analogy"}',
-            },
-            900: {
-                "desc": "استدلال لفظي معقد، تحليل نصوص، علاقات منطقية متعددة المستويات",
-                "example": '{"text":"إذا كان كل طبيب حكيم وبعض الحكماء شعراء — ما الاستنتاج الصحيح؟","answer":"بعض الأطباء قد يكونون شعراء","image_query":"logical reasoning syllogism Arabic language","answer_image_query":"Venn diagram logical inference"}',
-            },
-        },
-    },
-    "Block": {
-        "persona": "A medical doctor and professor specializing in Basic Year medical science questions",
-        "context": "Basic Year medical trivia questions — anatomy, physiology, pathology — written in ENGLISH",
-        "lang": "en",
-        "levels": {
-            300: {
-                "desc": "Basic anatomy, direct organ functions, medical definitions and terminology",
-                "example": '{"text":"Which organ is responsible for producing bile?","answer":"The liver","image_query":"liver bile production anatomy","answer_image_query":"liver hepatocytes bile canaliculi"}',
-            },
-            600: {
-                "desc": "Applied physiology, disease mechanisms, clinical-basic science correlations",
-                "example": '{"text":"Which hormone is responsible for sodium reabsorption in the distal convoluted tubule of the kidney?","answer":"Aldosterone","image_query":"aldosterone distal tubule kidney sodium","answer_image_query":"aldosterone renin angiotensin system diagram"}',
-            },
-            900: {
-                "desc": "Multi-system integration, clinical scenarios, lab data interpretation",
-                "example": '{"text":"A patient presents with elevated TSH and low free T4 — what is the most likely site of dysfunction in the HPT axis?","answer":"The thyroid gland itself (primary hypothyroidism)","image_query":"HPT axis thyroid TSH T4 feedback loop","answer_image_query":"primary hypothyroidism elevated TSH low T4 diagram"}',
-            },
-        },
-    },
-    "إسلاميات": {
-        "persona": "عالم متخصص في الفقه الإسلامي والقرآن والسيرة النبوية",
-        "context": "أسئلة تريفيا إسلامية — السياق سعودي/خليجي",
-        "levels": {
-            300: {"desc": "أركان الإسلام والإيمان، سور قصيرة معروفة، أحداث السيرة الشهيرة", "example": ""},
-            600: {"desc": "أحكام فقهية، آيات قرآنية وتفسيرها، غزوات وأحداث إسلامية", "example": ""},
-            900: {"desc": "فقه دقيق، أحاديث نبوية نصوص، تاريخ الفقهاء والمذاهب", "example": ""},
-        },
-    },
-    "تاريخ": {
-        "persona": "مؤرخ متخصص في التاريخ العربي والإسلامي والعالمي",
-        "context": "أسئلة تريفيا تاريخية — الجمهور سعودي/عربي",
-        "levels": {
-            300: {"desc": "أحداث تاريخية شهيرة، شخصيات معروفة، تواريخ مهمة", "example": ""},
-            600: {"desc": "حضارات، معارك، اتفاقيات، أسباب ونتائج أحداث تاريخية", "example": ""},
-            900: {"desc": "تاريخ دبلوماسي وثقافي دقيق، شخصيات غير شهيرة، مقارنات حضارية", "example": ""},
-        },
-    },
-    "كرة القدم": {
-        "persona": "خبير في كرة القدم المحلية والعالمية",
-        "context": "أسئلة تريفيا كرة قدم — الجمهور سعودي/خليجي",
-        "levels": {
-            300: {"desc": "أندية شهيرة، نجوم معروفون، بطولات عالمية رئيسية", "example": ""},
-            600: {"desc": "إحصاءات، بطولات محلية خليجية وسعودية، نتائج مباريات تاريخية", "example": ""},
-            900: {"desc": "أرقام قياسية دقيقة، تاريخ أندية محلية، نتائج وأهداف تفصيلية", "example": ""},
-        },
-    },
-}
-
-def _get_category_template(cat_name: str) -> dict | None:
-    """Find the best matching template for a category by name keyword."""
-    for key, template in CATEGORY_TEMPLATES.items():
-        if key in cat_name:
-            return template
-    return None
-
-
 @api_router.post("/ai/generate-questions")
 async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
-    category_id  = body.get("category_id", "")
-    mode         = body.get("mode", "single")
-    ai_engine    = body.get("ai_engine", "claude")
-    fetch_images = body.get("fetch_images", True)
-    extra_prompt = (body.get("prompt_description") or body.get("extra_prompt") or "").strip()
+    category_id      = body.get("category_id", "")
+    mode             = body.get("mode", "single")
+    ai_engine        = body.get("ai_engine", "claude")      # "claude" | "gemini"
+    fetch_images     = body.get("fetch_images", True)        # auto-fetch Unsplash
+    extra_prompt     = (body.get("prompt_description") or body.get("extra_prompt") or "").strip()
 
     cat      = await db.categories.find_one({"id": category_id}, {"_id": 0})
     cat_name = cat.get("name", "عامة") if cat else "عامة"
     cat_desc = (cat.get("description") or cat_name) if cat else cat_name
-
-    # Look up category template for rich context + examples
-    template = _get_category_template(cat_name)
-
-    is_english_template = (template or {}).get("lang") == "en"
 
     existing_qs = await db.questions.find(
         {"category_id": category_id, "deleted_at": None},
@@ -3737,71 +3464,36 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
     ).to_list(300)
     existing_hint = ""
     if existing_qs:
-        lines = "\n".join(f"- {q['text']}" for q in existing_qs[-20:])
-        if is_english_template:
-            existing_hint = f"\n⚠️ Do NOT repeat these existing questions:\n{lines}\n\n"
-        else:
-            existing_hint = f"\n⚠️ لا تكرر هذه الأسئلة الموجودة:\n{lines}\n\n"
+        lines = "\n".join(f"- {q['text']}" for q in existing_qs[-30:])
+        existing_hint = f"\n⚠️ لا تكرر هذه الأسئلة الموجودة:\n{lines}\n\n"
 
-    if extra_prompt:
-        custom = f"\nAdmin instructions: {extra_prompt}\n" if is_english_template else f"\nتعليمات المشرف: {extra_prompt}\n"
-    else:
-        custom = ""
+    custom = f"\nتعليمات المشرف: {extra_prompt}\n" if extra_prompt else ""
+
+    base_rules = (
+        "CRITICAL RULES — follow exactly:\n"
+        "1. Write ALL questions and answers in formal Arabic (العربية الفصيحة)\n"
+        "2. NEVER include the answer inside the question text — the question must not give away the answer\n"
+        "3. The answer must be SHORT (1-3 words max) — never a full sentence\n"
+        "4. NEVER use multiple choice format (أ/ب/ج/د or A/B/C/D)\n"
+        "5. Questions must be appropriate for the category context described above\n"
+        "6. Difficulty assignment:\n"
+        "   - 300 (سهل/easy): widely known facts, basic knowledge\n"
+        "   - 600 (متوسط/medium): requires some knowledge, not obvious\n"
+        "   - 900 (صعب/hard): expert-level, obscure facts, deep knowledge\n"
+        "7. image_query: short English phrase for image search (relevant to the answer)\n"
+        "8. Return ONLY a JSON array, no explanation:\n"
+        '[{"text":"...؟","answer":"...","image_query":"...","difficulty":300}]\n'
+        "9. Each question must end with ؟\n"
+        "10. Make questions exciting and engaging for trivia game context"
+    )
 
     async def _gen(count: int, diff: int) -> list:
-        lvl_data   = (template.get("levels", {}) if template else {}).get(diff, {})
-        diff_desc  = lvl_data.get("desc", "")
-        example    = lvl_data.get("example", "")
-        persona    = (template.get("persona") if template else None) or "خبير في صياغة أسئلة التريفيا العربية"
-        ctx        = (template.get("context") if template else None) or f"أسئلة تريفيا عربية — فئة {cat_name}"
-        diff_label = {300: "Easy (300)", 600: "Medium (600)", 900: "Hard (900)"}.get(diff, "Medium (600)") \
-                     if is_english_template else \
-                     {300: "سهل (300)", 600: "متوسط (600)", 900: "صعب (900)"}.get(diff, "متوسط (600)")
-
-        if is_english_template:
-            prompt = (
-                f"You are {persona}.\n"
-                f"Context: {ctx}\n\n"
-                f"Task: Generate exactly {count} questions at {diff_label} level.\n"
-                + (f"Level description: {diff_desc}\n" if diff_desc else "")
-                + (f"\nExample of required quality:\n{example}\n" if example else "")
-                + f"\n{custom}{existing_hint}"
-                "Strict rules:\n"
-                "1. Write questions and answers in ENGLISH only\n"
-                "2. Also provide 'translation' — an accurate Arabic translation of the question text\n"
-                "3. Also provide 'answer_ar' — the Arabic translation of the answer\n"
-                "4. ⚠️ Never include the answer inside the question text\n"
-                "5. Answer must be concise and precise (1-6 words)\n"
-                "6. image_query: short English phrase describing the best illustration for the question\n"
-                "7. answer_image_query: short English phrase describing an illustration of the answer\n"
-                f"8. difficulty: {diff} for every question\n\n"
-                "Return ONLY a JSON array, no extra text:\n"
-                '[{"text":"Question in English?","answer":"Answer","translation":"السؤال بالعربي؟",'
-                '"answer_ar":"الإجابة بالعربي","image_query":"image","answer_image_query":"image",'
-                f'"difficulty":{diff}' + "}]"
-            )
-        else:
-            prompt = (
-                f"أنت {persona}.\n"
-                f"السياق: {ctx}\n\n"
-                f"المطلوب: أنشئ بالضبط {count} سؤال بمستوى {diff_label}.\n"
-                + (f"وصف المستوى: {diff_desc}\n" if diff_desc else "")
-                + (f"\nمثال على الجودة المطلوبة:\n{example}\n" if example else "")
-                + f"\n{custom}{existing_hint}"
-                "قواعد صارمة:\n"
-                "1. اكتب كل شيء بالعربية الفصيحة الواضحة\n"
-                "2. كل سؤال يختبر جانباً مختلفاً — تنوع تام في الموضوعات والصياغة\n"
-                "3. ⚠️ لا تضع الإجابة داخل نص السؤال — السؤال يختبر المعرفة لا يكشفها\n"
-                "4. الإجابة نص قصير ودقيق (1-5 كلمات) — لا حروف مثل أ/ب/ج\n"
-                "5. image_query: جملة إنجليزية تصف أفضل صورة توضيحية للسؤال\n"
-                "6. answer_image_query: جملة إنجليزية تصف صورة توضيحية للإجابة تحديداً\n"
-                f"7. difficulty: {diff} لكل سؤال\n\n"
-                "أرجع JSON array فقط بدون أي نص إضافي:\n"
-                '[{"text":"السؤال؟","answer":"الإجابة",'
-                '"image_query":"english question image","answer_image_query":"english answer image",'
-                f'"difficulty":{diff}' + "}]"
-            )
-
+        diff_label = {300: "سهلة", 600: "متوسطة", 900: "صعبة"}.get(diff, "متوسطة")
+        prompt = (
+            f"أنشئ بالضبط {count} سؤال لفئة \"{cat_name}\" بمستوى {diff_label} ({diff} نقطة).\n"
+            f"وصف الفئة: {cat_desc}\n"
+            f"{custom}{existing_hint}{base_rules}"
+        )
         raw = await _ai_generate(prompt, prefer=ai_engine)
         m = re.search(r'\[.*?\]', raw, re.DOTALL) or re.search(r'\[.*\]', raw, re.DOTALL)
         if not m:
@@ -3810,49 +3502,30 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
             items = json.loads(m.group())
         except json.JSONDecodeError:
             return []
-
         ts = datetime.now(timezone.utc).isoformat()
         result = []
-        for q in items[:count + 3]:
+        for q in items[:count]:
             txt = (q.get("text") or "").strip()
             ans = (q.get("answer") or "").strip()
-            if not txt or not ans:
+            # Skip if answer looks like a choice letter
+            if not txt or not ans or ans in {"أ", "ب", "ج", "د", "A", "B", "C", "D"}:
                 continue
-            if ans in {"أ", "ب", "ج", "د", "A", "B", "C", "D"}:
+            # Validate answer is not revealed in question text
+            if ans.lower() in txt.lower():
                 continue
-            if ans and len(ans) > 3 and ans in txt:
-                logger.warning(f"Quality guard: answer in question — skipping")
-                continue
-            # Build translation field: "Q: <translation> | A: <answer_ar>"
-            translation = ""
-            if is_english_template:
-                t_q = (q.get("translation") or "").strip()
-                t_a = (q.get("answer_ar") or "").strip()
-                if t_q or t_a:
-                    translation = json.dumps({"q": t_q, "a": t_a}, ensure_ascii=False)
             result.append({
-                "id":                 str(uuid.uuid4()),
-                "category_id":        category_id,
-                "difficulty":         diff,
-                "text":               txt,
-                "answer":             ans,
-                "translation":        translation,
-                "image_query":        (q.get("image_query") or "").strip(),
-                "answer_image_query": (q.get("answer_image_query") or "").strip(),
-                "image_url":          "",
-                "answer_image_url":   "",
-                "question_type":      "text",
-                "is_experimental":    True,
-                "created_at":         ts,
+                "id": str(uuid.uuid4()), "category_id": category_id, "difficulty": diff,
+                "text": txt, "answer": ans,
+                "image_query": (q.get("image_query") or "").strip(),
+                "image_url": "", "answer_image_url": "",
+                "question_type": "text", "is_experimental": True, "created_at": ts,
             })
-            if len(result) >= count:
-                break
         return result
 
     if mode == "full18":
         all_questions = []
-        for diff, cnt in [(300, 6), (600, 6), (900, 6)]:
-            all_questions.extend(await _gen(cnt, diff))
+        for diff, count in [(300, 6), (600, 6), (900, 6)]:
+            all_questions.extend(await _gen(count, diff))
     else:
         raw_diff = body.get("difficulty", 300)
         diff_map = {"easy": 300, "medium": 600, "hard": 900, "سهل": 300, "متوسط": 600, "صعب": 900}
@@ -3860,55 +3533,17 @@ async def ai_generate_questions(body: dict, admin=Depends(get_admin)):
         count      = min(int(body.get("count", 10)), 30)
         all_questions = await _gen(count, difficulty)
 
-    # Fetch question image + answer image in parallel
+    # Auto-fetch Unsplash images in parallel
     if fetch_images and all_questions:
-        q_queries = [q.get("image_query", "") for q in all_questions]
-        a_queries = [q.get("answer_image_query", "") for q in all_questions]
-        q_results, a_results = await asyncio.gather(
-            asyncio.gather(*[_fetch_unsplash_image(qr) for qr in q_queries], return_exceptions=True),
-            asyncio.gather(*[_fetch_unsplash_image(ar) for ar in a_queries], return_exceptions=True),
+        image_results = await asyncio.gather(
+            *[_fetch_unsplash_image(q["image_query"]) for q in all_questions],
+            return_exceptions=True,
         )
-        for i, q in enumerate(all_questions):
-            if isinstance(q_results[i], str) and q_results[i]:
-                q["image_url"] = q_results[i]
-            if isinstance(a_results[i], str) and a_results[i]:
-                q["answer_image_url"] = a_results[i]
+        for i, url in enumerate(image_results):
+            if isinstance(url, str) and url:
+                all_questions[i]["image_url"] = url
 
-    return {
-        "questions":    all_questions,
-        "count":        len(all_questions),
-        "template_used": (template.get("context", "")[:50] if template else None),
-    }
-
-
-@api_router.post("/ai/translate")
-async def ai_translate(body: dict, admin=Depends(get_admin)):
-    """Translate question text and/or answer to Arabic."""
-    text   = (body.get("text") or "").strip()
-    answer = (body.get("answer") or "").strip()
-    if not text and not answer:
-        raise HTTPException(400, "أرسل text أو answer للترجمة")
-    parts = []
-    if text:   parts.append(f'Q: {text}')
-    if answer: parts.append(f'A: {answer}')
-    prompt = (
-        "Translate the following medical question and/or answer from English to Arabic. "
-        "Use clear, formal Arabic (فصحى). Keep medical terms accurate. "
-        "Return ONLY a JSON object with keys 'text_ar' and 'answer_ar' (include only the keys that were provided):\n\n"
-        + "\n".join(parts)
-    )
-    raw = await _ai_generate(prompt, prefer="claude")
-    m = re.search(r'\{.*?\}', raw, re.DOTALL) or re.search(r'\{.*\}', raw, re.DOTALL)
-    if not m:
-        raise HTTPException(500, "فشل استخراج الترجمة")
-    try:
-        result = json.loads(m.group())
-    except json.JSONDecodeError:
-        raise HTTPException(500, "فشل تحويل الترجمة")
-    return {
-        "text_ar":   result.get("text_ar", ""),
-        "answer_ar": result.get("answer_ar", ""),
-    }
+    return {"questions": all_questions, "count": len(all_questions)}
 
 
 @api_router.post("/ai/save-questions")
@@ -3932,11 +3567,7 @@ async def ai_save_questions(body: dict, admin=Depends(get_admin)):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Hujjah API v2 – حُجّة", "version": "2.1"}
-
-@api_router.get("/ping")
-async def ping():
-    return {"ok": True}
+    return {"message": "Hujjah API v2 – حُجّة", "version": "2.0"}
 
 @api_router.post("/admin/seed-letter-categories")
 async def seed_letter_categories(_: dict = Depends(get_super_admin)):
@@ -4091,56 +3722,6 @@ async def seed_letter_categories(_: dict = Depends(get_super_admin)):
 # ADMIN LOGS  (Super Admin only)
 # ══════════════════════════════════════════════════════════════════════════════
 
-@api_router.get("/admin/debug/ai")
-async def debug_ai_keys(admin: dict = Depends(get_admin)):
-    """Quick diagnostic: test every AI key configured on this server."""
-    results = {}
-
-    # 1. Check env vars
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "")
-    gemini_key     = os.environ.get("GEMINI_API_KEY", "")
-    results["env"] = {
-        "OPENROUTER_API_KEY": f"{'set (' + openrouter_key[:8] + '...)' if openrouter_key else 'NOT SET'}",
-        "GEMINI_API_KEY":     f"{'set (' + gemini_key[:8] + '...)' if gemini_key else 'NOT SET'}",
-    }
-
-    # 2. Test OpenRouter text
-    if openrouter_key:
-        for model in ("google/gemini-2.5-flash", "google/gemini-1.5-flash"):
-            try:
-                async with httpx.AsyncClient(timeout=30) as client:
-                    r = await client.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        headers={"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"},
-                        json={"model": model, "messages": [{"role": "user", "content": "قل: مرحبا"}]},
-                    )
-                results[f"openrouter_{model}"] = {
-                    "status": r.status_code,
-                    "ok": r.status_code == 200,
-                    "response": r.text[:300] if r.status_code != 200 else r.json()["choices"][0]["message"]["content"][:100],
-                }
-            except Exception as e:
-                results[f"openrouter_{model}"] = {"status": "exception", "ok": False, "response": str(e)[:200]}
-
-    # 3. Test Gemini
-    if gemini_key:
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                r = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}",
-                    json={"contents": [{"parts": [{"text": "قل: مرحبا"}]}]},
-                )
-            results["gemini_direct"] = {
-                "status": r.status_code,
-                "ok": r.status_code == 200,
-                "response": r.text[:300] if r.status_code != 200 else r.json()["candidates"][0]["content"]["parts"][0]["text"][:100],
-            }
-        except Exception as e:
-            results["gemini_direct"] = {"status": "exception", "ok": False, "response": str(e)[:200]}
-
-    return results
-
-
 @api_router.get("/admin/logs")
 async def get_admin_logs(limit: int = 50, skip: int = 0, admin: dict = Depends(get_super_admin)):
     logs = await db.admin_logs.find({}, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
@@ -4227,7 +3808,6 @@ async def create_staff(body: StaffCreate, admin: dict = Depends(get_super_admin)
         "username": body.username.strip(),
         "password_hash": hash_pw(body.password),
         "display_name": (body.display_name or body.username).strip(),
-        "email": body.email.strip() if body.email else None,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.admin_accounts.insert_one(staff)
@@ -4292,183 +3872,21 @@ async def gift_subscription(user_id: str, body: GiftSubscription, admin: dict = 
     await log_admin_action(admin, "هدية اشتراك", "مستخدم",
                            user.get("username", user_id) if user else user_id,
                            f"مدة {days} يوم حتى {expires[:10]}")
+    if user and user.get("email"):
+        subject, html = build_subscription_confirmation_email(
+            user.get("username", ""), plan.get("name", "Premium"), expires
+        )
+        await send_email(user["email"], subject, html)
     return {"message": f"تم منح الاشتراك المميز لـ {days} يوم", "expires_at": expires, "user": user}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # EMAIL NOTIFICATION SYSTEM
 # ══════════════════════════════════════════════════════════════════════════════
 
-def build_invoice_html(username: str, plan_name: str, amount: float, transaction_no: str,
-                       expires_at: str, invoice_no: str) -> str:
-    exp_date  = expires_at[:10] if expires_at else ""
-    paid_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    return f"""
-    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:580px;margin:auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.13)">
-
-      <!-- Header -->
-      <div style="background:linear-gradient(135deg,#5B0E14 0%,#8B1520 60%,#A01C26 100%);padding:36px 32px;text-align:center">
-        <div style="font-size:2.8rem;margin-bottom:4px">🏆</div>
-        <h1 style="color:#F1E194;margin:0;font-size:2.2rem;letter-spacing:0.05em">حُجّة</h1>
-        <p style="color:rgba(241,225,148,0.65);margin:6px 0 0;font-size:0.9rem">لعبة المعلومات العربية</p>
-      </div>
-
-      <!-- Confirmation banner -->
-      <div style="background:#f0fdf4;border-bottom:2px solid #bbf7d0;padding:18px 32px;display:flex;align-items:center;gap:14px">
-        <span style="font-size:1.8rem">✅</span>
-        <div>
-          <div style="color:#166534;font-weight:900;font-size:1.05rem">تم تفعيل اشتراكك بنجاح!</div>
-          <div style="color:#16a34a;font-size:0.85rem">مرحباً {username}، أنت الآن عضو مميز في حُجّة.</div>
-        </div>
-      </div>
-
-      <!-- Invoice box -->
-      <div style="padding:28px 32px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <div>
-            <div style="color:#5B0E14;font-weight:900;font-size:1.15rem">فاتورة اشتراك</div>
-            <div style="color:#888;font-size:0.8rem;margin-top:2px">رقم الفاتورة: {invoice_no}</div>
-          </div>
-          <div style="text-align:left">
-            <div style="color:#888;font-size:0.8rem">تاريخ الدفع</div>
-            <div style="color:#222;font-weight:700;font-size:0.92rem">{paid_date}</div>
-          </div>
-        </div>
-
-        <!-- Line items -->
-        <table style="width:100%;border-collapse:collapse;font-size:0.92rem">
-          <thead>
-            <tr style="background:#fdf6e3">
-              <th style="padding:10px 14px;text-align:right;color:#5B0E14;font-weight:900;border-radius:8px 0 0 0">الخدمة</th>
-              <th style="padding:10px 14px;text-align:center;color:#5B0E14;font-weight:900">المدة</th>
-              <th style="padding:10px 14px;text-align:left;color:#5B0E14;font-weight:900;border-radius:0 8px 0 0">المبلغ</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style="border-bottom:1px solid #f0e8d0">
-              <td style="padding:12px 14px;color:#333;font-weight:700">{plan_name}</td>
-              <td style="padding:12px 14px;text-align:center;color:#666">حتى {exp_date}</td>
-              <td style="padding:12px 14px;text-align:left;color:#5B0E14;font-weight:900;font-size:1.05rem">{amount:.2f} ر.س</td>
-            </tr>
-          </tbody>
-          <tfoot>
-            <tr style="background:#fdf6e3">
-              <td colspan="2" style="padding:12px 14px;text-align:right;font-weight:900;color:#5B0E14">المجموع المدفوع</td>
-              <td style="padding:12px 14px;text-align:left;font-weight:900;color:#5B0E14;font-size:1.1rem">{amount:.2f} ر.س</td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <!-- Transaction ref -->
-        <div style="margin-top:18px;background:#f8f8f8;border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;font-size:0.82rem">
-          <span style="color:#888">رقم المرجع</span>
-          <span style="color:#444;font-family:monospace;font-weight:700">{transaction_no}</span>
-        </div>
-
-        <!-- What you get -->
-        <div style="margin-top:24px;background:#fdf6e3;border-right:4px solid #F1E194;border-radius:10px;padding:16px 20px">
-          <div style="color:#5B0E14;font-weight:900;margin-bottom:10px">🎯 ما حصلت عليه:</div>
-          <ul style="margin:0;padding:0;list-style:none;color:#555;font-size:0.88rem;line-height:2">
-            <li>✅ وصول كامل لجميع الفئات المميزة</li>
-            <li>✅ أسئلة حصرية غير متاحة مجاناً</li>
-            <li>✅ دعم أولوي</li>
-            <li>✅ تحديثات مستمرة بمحتوى جديد</li>
-          </ul>
-        </div>
-
-        <!-- CTA -->
-        <div style="text-align:center;margin-top:28px">
-          <a href="https://al-amaliya-al-akhira.vercel.app"
-             style="background:linear-gradient(135deg,#5B0E14,#8B1520);color:#F1E194;padding:14px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1rem;display:inline-block">
-            🎮 ابدأ اللعب الآن
-          </a>
-        </div>
-      </div>
-
-      <!-- Footer -->
-      <div style="background:#fdf6e3;padding:18px 32px;text-align:center;border-top:1px solid #f0e8d0">
-        <p style="color:#999;font-size:0.78rem;margin:0">
-          إذا واجهت أي مشكلة تواصل معنا · هذه الفاتورة تُثبت اشتراكك
-        </p>
-      </div>
-    </div>
-    """
-
-
 async def send_email_notification(to_email: str, subject: str, html_body: str) -> bool:
-    """Send email via Resend API. Returns True on success."""
-    if not RESEND_API_KEY:
-        logger.warning("RESEND_API_KEY not configured — skipping email send")
-        return False
-    try:
-        async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.post(
-                "https://api.resend.com/emails",
-                headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
-                json={"from": "حُجّة <onboarding@resend.dev>", "to": [to_email],
-                      "subject": subject, "html": html_body},
-            )
-        if r.status_code == 200 or r.status_code == 201:
-            logger.info(f"Email sent to {to_email}: {subject}")
-            return True
-        logger.error(f"Resend error {r.status_code}: {r.text[:200]}")
-        return False
-    except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
-        return False
+    """Send email via Resend. Returns True on success."""
+    return await send_email(to_email, subject, html_body)
 
-def build_warning_email(username: str, expires_at: str) -> str:
-    exp_date = expires_at[:10] if expires_at else ""
-    return f"""
-    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:520px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1)">
-      <div style="background:linear-gradient(135deg,#5B0E14,#8B1520);padding:32px;text-align:center">
-        <h1 style="color:#F1E194;margin:0;font-size:2rem">حُجّة</h1>
-        <p style="color:rgba(241,225,148,0.7);margin:8px 0 0">لعبة المعلومات العربية</p>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#5B0E14;margin:0 0 16px">مرحباً {username} 👋</h2>
-        <p style="color:#444;line-height:1.7;font-size:1rem">
-          اشتراكك المميز في <strong>حُجّة</strong> سينتهي قريباً بتاريخ <strong>{exp_date}</strong>.
-        </p>
-        <p style="color:#444;line-height:1.7">
-          جدّد اشتراكك الآن للاستمرار في الاستمتاع بجميع الفئات المميزة دون انقطاع.
-        </p>
-        <div style="text-align:center;margin:28px 0">
-          <a href="https://al-amaliya-al-akhira.vercel.app/pricing"
-             style="background:#F1E194;color:#5B0E14;padding:14px 32px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1.1rem">
-            جدّد الاشتراك
-          </a>
-        </div>
-        <p style="color:#888;font-size:0.85rem;text-align:center">
-          إذا كنت لا ترغب في هذه الرسائل يمكنك تجاهلها.
-        </p>
-      </div>
-    </div>
-    """
-
-def build_expired_email(username: str) -> str:
-    return f"""
-    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:520px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1)">
-      <div style="background:linear-gradient(135deg,#5B0E14,#8B1520);padding:32px;text-align:center">
-        <h1 style="color:#F1E194;margin:0;font-size:2rem">حُجّة</h1>
-        <p style="color:rgba(241,225,148,0.7);margin:8px 0 0">لعبة المعلومات العربية</p>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#5B0E14;margin:0 0 16px">مرحباً {username} 👋</h2>
-        <p style="color:#444;line-height:1.7;font-size:1rem">
-          انتهى اشتراكك المميز في <strong>حُجّة</strong>.
-        </p>
-        <p style="color:#444;line-height:1.7">
-          يمكنك تجديد اشتراكك في أي وقت للعودة إلى الوصول الكامل لجميع الفئات والمحتوى المميز.
-        </p>
-        <div style="text-align:center;margin:28px 0">
-          <a href="https://al-amaliya-al-akhira.vercel.app/pricing"
-             style="background:#F1E194;color:#5B0E14;padding:14px 32px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1.1rem">
-            اشترك مجدداً
-          </a>
-        </div>
-      </div>
-    </div>
-    """
 
 async def check_subscription_notifications():
     """Check all premium users and send expiry notification emails."""
@@ -4492,21 +3910,17 @@ async def check_subscription_notifications():
 
             if now < exp_dt <= three_days_later and not user.get("notify_warning_sent"):
                 # Warning: expires within 3 days
-                sent = await send_email_notification(
-                    user["email"],
-                    "⚠️ اشتراكك في حُجّة سينتهي قريباً",
-                    build_warning_email(user.get("username", ""), exp_str)
+                subject, html = build_subscription_expiry_warning_email(
+                    user.get("username", ""), exp_str
                 )
+                sent = await send_email_notification(user["email"], subject, html)
                 if sent:
                     await db.users.update_one({"id": user["id"]}, {"$set": {"notify_warning_sent": True}})
 
             elif exp_dt <= now and not user.get("notify_expired_sent"):
                 # Expired
-                sent = await send_email_notification(
-                    user["email"],
-                    "❌ انتهى اشتراكك المميز في حُجّة",
-                    build_expired_email(user.get("username", ""))
-                )
+                subject, html = build_subscription_expired_email(user.get("username", ""))
+                sent = await send_email_notification(user["email"], subject, html)
                 if sent:
                     await db.users.update_one(
                         {"id": user["id"]},
@@ -4618,25 +4032,611 @@ async def seed_category_groups(_: dict = Depends(get_super_admin)):
         added += 1
     return {"message": f"تمت إضافة {added} مجموعة", "added": added}
 
+# ══════════════════════════════════════════════════════════════════════════════
+# COMMUNITY CREATOR SYSTEM
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.get("/community/wallet")
+async def community_wallet(user: dict = Depends(require_user)):
+    uid = user["id"]
+    now = datetime.now(timezone.utc)
+    month_key = now.strftime("%Y-%m")
+
+    earnings = await db.creator_earnings.find_one({"user_id": uid, "month": month_key}, {"_id": 0})
+    total_doc = await db.creator_earnings.aggregate([
+        {"$match": {"user_id": uid}},
+        {"$group": {"_id": None, "total": {"$sum": "$approved_money"}, "paid": {"$sum": "$paid_money"}}}
+    ]).to_list(1)
+
+    points = earnings["points"] if earnings else 0
+    estimated = round(points / 100, 2)
+    total_lifetime = total_doc[0]["total"] if total_doc else 0
+    total_paid = total_doc[0]["paid"] if total_doc else 0
+
+    pending_payout = await db.payout_requests.find_one(
+        {"user_id": uid, "status": {"$in": ["pending", "under_review", "approved"]}},
+        {"_id": 0}
+    )
+
+    return {
+        "points_this_month": points,
+        "estimated_sar_this_month": estimated,
+        "available_balance": max(0, total_lifetime - total_paid),
+        "pending_payout": pending_payout,
+        "total_lifetime_earnings": round(total_lifetime, 2),
+        "total_paid": round(total_paid, 2),
+        "min_withdrawal": 50.0,
+        "conversion_rate": "100 نقطة = 1 ريال",
+        "month": month_key,
+    }
+
+@api_router.get("/community/categories/mine")
+async def my_community_categories(user: dict = Depends(require_user)):
+    cats = await db.community_categories.find({"creator_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for c in cats:
+        c["question_count"] = await db.community_questions.count_documents({"category_id": c["id"]})
+    return cats
+
+@api_router.post("/community/categories")
+async def create_community_category(body: CommunityCategoryCreate, user: dict = Depends(require_user)):
+    if user.get("subscription_type") != "premium":
+        raise HTTPException(403, "إنشاء الفئات متاح للمشتركين Premium فقط")
+    cat = {
+        "id": str(uuid.uuid4()),
+        "code": await _unique_category_code(),
+        "creator_id": user["id"],
+        "creator_name": user.get("username", "مجهول"),
+        "name": body.name.strip(),
+        "description": body.description or "",
+        "image_url": body.image_url or "",
+        "group": body.group or "general",
+        "status": "draft",
+        "plays": 0,
+        "likes": 0,
+        "monthly_score": 0,
+        "lifetime_score": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.community_categories.insert_one(cat)
+    cat.pop("_id", None)
+    return cat
+
+@api_router.delete("/community/categories/{cat_id}")
+async def delete_community_category(cat_id: str, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    if cat.get("status") == "published":
+        raise HTTPException(400, "لا يمكن حذف فئة منشورة")
+    await db.community_categories.delete_one({"id": cat_id})
+    await db.community_questions.delete_many({"category_id": cat_id})
+    return {"message": "تم الحذف"}
+
+@api_router.post("/community/categories/{cat_id}/submit")
+async def submit_community_category(cat_id: str, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(404, "الفئة غير موجودة")
+    q_count = await db.community_questions.count_documents({"category_id": cat_id})
+    if q_count < 24:
+        raise HTTPException(400, f"تحتاج 24 سؤال على الأقل (لديك {q_count})")
+    await db.community_categories.update_one(
+        {"id": cat_id},
+        {"$set": {"status": "pending_review", "submitted_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"message": "تم إرسال الفئة للمراجعة"}
+
+@api_router.get("/community/categories/{cat_id}/questions")
+async def get_community_questions(cat_id: str, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(403, "غير مصرح")
+    qs = await db.community_questions.find({"category_id": cat_id}, {"_id": 0}).to_list(500)
+    return qs
+
+@api_router.post("/community/categories/{cat_id}/questions")
+async def add_community_question(cat_id: str, body: CommunityQuestionCreate, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(403, "غير مصرح")
+    if cat.get("status") not in ("draft", "rejected"):
+        raise HTTPException(400, "لا يمكن إضافة أسئلة لفئة في مرحلة المراجعة أو منشورة")
+    q = {
+        "id": str(uuid.uuid4()),
+        "category_id": cat_id,
+        "text": body.text.strip(),
+        "answer": body.answer.strip(),
+        "difficulty": body.difficulty,
+        "image_url": body.image_url or "",
+        "answer_image_url": body.answer_image_url or "",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.community_questions.insert_one(q)
+    q.pop("_id", None)
+    return q
+
+@api_router.delete("/community/categories/{cat_id}/questions/{q_id}")
+async def delete_community_question(cat_id: str, q_id: str, user: dict = Depends(require_user)):
+    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
+    if not cat:
+        raise HTTPException(403, "غير مصرح")
+    await db.community_questions.delete_one({"id": q_id, "category_id": cat_id})
+    return {"message": "تم الحذف"}
+
+@api_router.get("/community/payouts")
+async def get_my_payouts(user: dict = Depends(require_user)):
+    payouts = await db.payout_requests.find({"user_id": user["id"]}, {"_id": 0}).sort("requested_at", -1).to_list(50)
+    return payouts
+
+@api_router.post("/community/payouts")
+async def request_payout(body: PayoutRequestCreate, user: dict = Depends(require_user)):
+    existing = await db.payout_requests.find_one(
+        {"user_id": user["id"], "status": {"$in": ["pending", "under_review", "approved"]}}
+    )
+    if existing:
+        raise HTTPException(400, "لديك طلب سحب قيد المراجعة بالفعل")
+    if body.amount < 50:
+        raise HTTPException(400, "الحد الأدنى للسحب 50 ريال")
+    req = {
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "username": user.get("username", ""),
+        "amount": body.amount,
+        "iban": body.iban.strip(),
+        "account_name": body.account_name.strip(),
+        "status": "pending",
+        "requested_at": datetime.now(timezone.utc).isoformat(),
+        "reviewed_at": None,
+        "paid_at": None,
+        "admin_note": "",
+    }
+    await db.payout_requests.insert_one(req)
+    req.pop("_id", None)
+    return req
+
+@api_router.get("/community/notifications")
+async def get_notifications(user: dict = Depends(require_user)):
+    notifs = await db.community_notifications.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).limit(30).to_list(30)
+    return notifs
+
+@api_router.post("/community/notifications/read")
+async def mark_notifications_read(user: dict = Depends(require_user)):
+    await db.community_notifications.update_many(
+        {"user_id": user["id"], "is_read": False},
+        {"$set": {"is_read": True}}
+    )
+    return {"message": "ok"}
+
+@api_router.get("/community/discover")
+async def discover_community(
+    q: Optional[str] = None,
+    group: Optional[str] = None,
+    sort: str = "trending",
+    skip: int = 0,
+    limit: int = 20
+):
+    filt: dict = {"status": "published"}
+    if q:
+        filt["name"] = {"$regex": q, "$options": "i"}
+    if group and group != "all":
+        filt["group"] = group
+
+    sort_field = "monthly_score" if sort == "trending" else \
+                 "plays" if sort == "most_played" else \
+                 "likes" if sort == "top_liked" else "created_at"
+
+    cats = await db.community_categories.find(filt, {"_id": 0}).sort(sort_field, -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.community_categories.count_documents(filt)
+    return {"items": cats, "total": total}
+
+@api_router.post("/community/categories/{cat_id}/like")
+async def like_community_category(cat_id: str, user: dict = Depends(require_user)):
+    if user.get("subscription_type") != "premium":
+        raise HTTPException(403, "الإعجاب متاح للمشتركين Premium فقط")
+    existing = await db.community_likes.find_one({"user_id": user["id"], "category_id": cat_id})
+    if existing:
+        await db.community_likes.delete_one({"user_id": user["id"], "category_id": cat_id})
+        await db.community_categories.update_one({"id": cat_id}, {"$inc": {"likes": -1}})
+        return {"liked": False}
+    await db.community_likes.insert_one({
+        "user_id": user["id"], "category_id": cat_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    await db.community_categories.update_one({"id": cat_id}, {"$inc": {"likes": 1}})
+    return {"liked": True}
+
+@api_router.get("/admin/community/categories")
+async def admin_get_community_cats(status: Optional[str] = None, admin: dict = Depends(get_admin)):
+    filt = {}
+    if status:
+        filt["status"] = status
+    cats = await db.community_categories.find(filt, {"_id": 0}).sort("submitted_at", -1).to_list(200)
+    for c in cats:
+        c["question_count"] = await db.community_questions.count_documents({"category_id": c["id"]})
+    return cats
+
+@api_router.post("/admin/community/categories/{cat_id}/approve")
+async def admin_approve_community_cat(cat_id: str, admin: dict = Depends(get_admin)):
+    cat = await db.community_categories.find_one({"id": cat_id})
+    if not cat:
+        raise HTTPException(404, "غير موجود")
+    await db.community_categories.update_one(
+        {"id": cat_id},
+        {"$set": {"status": "published", "published_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    await db.community_notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": cat["creator_id"],
+        "type": "category_approved",
+        "message": f"تم قبول فئتك '{cat['name']}' ونشرها!",
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"message": "تم النشر"}
+
+@api_router.post("/admin/community/categories/{cat_id}/reject")
+async def admin_reject_community_cat(cat_id: str, body: dict = {}, admin: dict = Depends(get_admin)):
+    cat = await db.community_categories.find_one({"id": cat_id})
+    if not cat:
+        raise HTTPException(404, "غير موجود")
+    reason = body.get("reason", "")
+    await db.community_categories.update_one(
+        {"id": cat_id},
+        {"$set": {"status": "rejected", "reject_reason": reason}}
+    )
+    await db.community_notifications.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": cat["creator_id"],
+        "type": "category_rejected",
+        "message": f"تم رفض فئتك '{cat['name']}'. السبب: {reason or 'لم يُذكر'}",
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"message": "تم الرفض"}
+
+@api_router.get("/admin/community/payouts")
+async def admin_get_payouts(status: Optional[str] = None, admin: dict = Depends(get_admin)):
+    filt = {}
+    if status:
+        filt["status"] = status
+    payouts = await db.payout_requests.find(filt, {"_id": 0}).sort("requested_at", -1).to_list(200)
+    return payouts
+
+@api_router.patch("/admin/community/payouts/{payout_id}")
+async def admin_update_payout(payout_id: str, body: dict, admin: dict = Depends(get_admin)):
+    new_status = body.get("status")
+    if new_status not in ("under_review", "approved", "rejected", "paid"):
+        raise HTTPException(400, "حالة غير صالحة")
+    now = datetime.now(timezone.utc).isoformat()
+    upd: dict = {"status": new_status, "admin_note": body.get("admin_note", "")}
+    if new_status in ("approved", "rejected"):
+        upd["reviewed_at"] = now
+    if new_status == "paid":
+        upd["paid_at"] = now
+    await db.payout_requests.update_one({"id": payout_id}, {"$set": upd})
+    payout = await db.payout_requests.find_one({"id": payout_id}, {"_id": 0})
+    msgs = {
+        "approved": "تم الموافقة على طلب سحبك!",
+        "rejected": f"تم رفض طلب سحبك. {body.get('admin_note','')}",
+        "paid": "تم تحويل مبلغ السحب إلى حسابك!",
+    }
+    if new_status in msgs and payout:
+        await db.community_notifications.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": payout["user_id"],
+            "type": f"payout_{new_status}",
+            "message": msgs[new_status],
+            "is_read": False,
+            "created_at": now,
+        })
+    return payout
+
+# ── END COMMUNITY CREATOR SYSTEM ──────────────────────────────────────────────
+
+# ══════════════════════════════════════════════════════════════════════════════
+# USER PROFILES
+# ══════════════════════════════════════════════════════════════════════════════
+
+XP_PER_PRESTIGE = 10_000
+LEVELS_PER_PRESTIGE = 55
+
+def _compute_xp_progress(total_xp: int, prestige: int):
+    xp_used = prestige * XP_PER_PRESTIGE
+    xp_in_prestige = max(0, total_xp - xp_used)
+    xp_per_level = XP_PER_PRESTIGE / LEVELS_PER_PRESTIGE
+    level = min(LEVELS_PER_PRESTIGE, int(xp_in_prestige / xp_per_level) + 1)
+    can_prestige = xp_in_prestige >= XP_PER_PRESTIGE and prestige < 11
+    return {
+        "total_xp": total_xp,
+        "xp_in_prestige": xp_in_prestige,
+        "level": level,
+        "can_prestige": can_prestige,
+    }
+
+@api_router.get("/profile/{username}")
+async def get_profile(username: str, request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    viewer_id = None
+    if token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            viewer_id = payload.get("id")
+        except Exception:
+            pass
+
+    u = await db.users.find_one({"username": username}, {"_id": 0, "password_hash": 0, "answered_question_ids": 0})
+    if not u:
+        raise HTTPException(404, "المستخدم غير موجود")
+
+    # Aggregate community stats
+    cats_agg = await db.community_categories.aggregate([
+        {"$match": {"creator_id": u["id"], "status": "published"}},
+        {"$group": {"_id": None, "total_plays": {"$sum": "$plays"}, "total_likes": {"$sum": "$likes"}, "count": {"$sum": 1}}}
+    ]).to_list(1)
+    agg = cats_agg[0] if cats_agg else {"total_plays": 0, "total_likes": 0, "count": 0}
+    total_plays = agg.get("total_plays", 0)
+    total_likes = agg.get("total_likes", 0)
+    approved_categories = agg.get("count", 0)
+    game_count = u.get("game_count", 0)
+
+    total_xp = game_count * 10 + approved_categories * 50 + total_plays * 2 + total_likes * 5
+    prestige = u.get("prestige", 0)
+    xp_prog = _compute_xp_progress(total_xp, prestige)
+
+    # Best category
+    best_cat = await db.community_categories.find_one(
+        {"creator_id": u["id"], "status": "published"},
+        {"_id": 0},
+        sort=[("plays", -1)]
+    )
+    if best_cat:
+        best_cat["play_count"] = best_cat.get("plays", 0)
+        best_cat["likes_count"] = best_cat.get("likes", 0)
+
+    # Follow counts
+    followers_count = await db.user_follows.count_documents({"following_id": u["id"]})
+    following_count = await db.user_follows.count_documents({"follower_id": u["id"]})
+    is_following = False
+    if viewer_id and viewer_id != u["id"]:
+        is_following = bool(await db.user_follows.find_one({"follower_id": viewer_id, "following_id": u["id"]}))
+
+    is_own = viewer_id == u["id"]
+
+    resp = {
+        "id": u["id"],
+        "username": u["username"],
+        "bio": u.get("bio", ""),
+        "avatar_url": u.get("avatar_url", ""),
+        "banner_url": u.get("banner_url", ""),
+        "accent_color": u.get("accent_color", "#f2b85b"),
+        "interests": u.get("interests", []),
+        "subscription_type": u.get("subscription_type", "free"),
+        "prestige": prestige,
+        "level": xp_prog["level"],
+        "total_xp": total_xp,
+        "game_count": game_count,
+        "approved_categories": approved_categories,
+        "total_plays": total_plays,
+        "total_likes": total_likes,
+        "xp_progress": xp_prog,
+        "best_category": best_cat,
+        "followers_count": followers_count,
+        "following_count": following_count,
+        "is_following": is_following,
+        "is_own": is_own,
+    }
+
+    # Wallet (own only)
+    if is_own:
+        now = datetime.now(timezone.utc)
+        month_key = now.strftime("%Y-%m")
+        earnings = await db.creator_earnings.find_one({"user_id": u["id"], "month": month_key})
+        total_doc = await db.creator_earnings.aggregate([
+            {"$match": {"user_id": u["id"]}},
+            {"$group": {"_id": None, "total": {"$sum": "$approved_money"}, "paid": {"$sum": "$paid_money"}}}
+        ]).to_list(1)
+        total_lifetime = total_doc[0]["total"] if total_doc else 0
+        total_paid = total_doc[0]["paid"] if total_doc else 0
+        resp["wallet"] = {
+            "balance": round(max(0, total_lifetime - total_paid), 2),
+            "monthly_pending_sar": round((earnings["points"] if earnings else 0) / 100, 2),
+            "total_earned": round(total_lifetime, 2),
+        }
+
+    return resp
+
+@api_router.post("/profile/{username}/follow")
+async def follow_user(username: str, user: dict = Depends(require_user)):
+    target = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not target:
+        raise HTTPException(404, "المستخدم غير موجود")
+    if target["id"] == user["id"]:
+        raise HTTPException(400, "لا يمكنك متابعة نفسك")
+    existing = await db.user_follows.find_one({"follower_id": user["id"], "following_id": target["id"]})
+    if existing:
+        return {"following": True}
+    await db.user_follows.insert_one({
+        "id": str(uuid.uuid4()),
+        "follower_id": user["id"],
+        "following_id": target["id"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"following": True}
+
+@api_router.delete("/profile/{username}/follow")
+async def unfollow_user(username: str, user: dict = Depends(require_user)):
+    target = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not target:
+        raise HTTPException(404, "المستخدم غير موجود")
+    await db.user_follows.delete_one({"follower_id": user["id"], "following_id": target["id"]})
+    return {"following": False}
+
+@api_router.get("/profile/{username}/followers")
+async def get_followers(username: str):
+    u = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not u:
+        raise HTTPException(404, "المستخدم غير موجود")
+    follows = await db.user_follows.find({"following_id": u["id"]}, {"_id": 0, "follower_id": 1}).to_list(200)
+    ids = [f["follower_id"] for f in follows]
+    users = await db.users.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "username": 1, "avatar_url": 1, "bio": 1, "subscription_type": 1}).to_list(200)
+    return users
+
+@api_router.get("/profile/{username}/following")
+async def get_following(username: str):
+    u = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not u:
+        raise HTTPException(404, "المستخدم غير موجود")
+    follows = await db.user_follows.find({"follower_id": u["id"]}, {"_id": 0, "following_id": 1}).to_list(200)
+    ids = [f["following_id"] for f in follows]
+    users = await db.users.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "username": 1, "avatar_url": 1, "bio": 1, "subscription_type": 1}).to_list(200)
+    return users
+
+@api_router.get("/profile/{username}/categories")
+async def get_profile_categories(username: str, skip: int = 0, limit: int = 12):
+    u = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
+    if not u:
+        raise HTTPException(404, "المستخدم غير موجود")
+    cats = await db.community_categories.find(
+        {"creator_id": u["id"], "status": "published"},
+        {"_id": 0}
+    ).sort("plays", -1).skip(skip).limit(limit).to_list(limit)
+    for c in cats:
+        c["play_count"] = c.get("plays", 0)
+        c["likes_count"] = c.get("likes", 0)
+        c["questions_count"] = await db.community_questions.count_documents({"category_id": c["id"]})
+    return cats
+
+@api_router.post("/profile/{username}/prestige")
+async def prestige_up(username: str, user: dict = Depends(require_user)):
+    if user.get("username") != username:
+        raise HTTPException(403, "غير مسموح")
+    prestige = user.get("prestige", 0)
+    if prestige >= 11:
+        raise HTTPException(400, "وصلت للبرستيج الأقصى")
+    # Recompute XP
+    cats_agg = await db.community_categories.aggregate([
+        {"$match": {"creator_id": user["id"], "status": "published"}},
+        {"$group": {"_id": None, "total_plays": {"$sum": "$plays"}, "total_likes": {"$sum": "$likes"}, "count": {"$sum": 1}}}
+    ]).to_list(1)
+    agg = cats_agg[0] if cats_agg else {"total_plays": 0, "total_likes": 0, "count": 0}
+    game_count = user.get("game_count", 0)
+    total_xp = game_count * 10 + agg.get("count", 0) * 50 + agg.get("total_plays", 0) * 2 + agg.get("total_likes", 0) * 5
+    xp_prog = _compute_xp_progress(total_xp, prestige)
+    if not xp_prog["can_prestige"]:
+        raise HTTPException(400, "لم تصل بعد لـ 10,000 XP في هذا البرستيج")
+    new_prestige = prestige + 1
+    await db.users.update_one({"id": user["id"]}, {"$set": {"prestige": new_prestige}})
+    return {"new_prestige": new_prestige}
+
+# ── END USER PROFILES ──────────────────────────────────────────────────────────
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CATEGORY CODE LOOKUP
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.get("/category/code/{code}")
+async def get_category_by_code(code: str):
+    cat = await db.community_categories.find_one({"code": code.upper().strip()}, {"_id": 0})
+    if not cat:
+        raise HTTPException(404, "الكود غير صحيح أو الفئة غير موجودة")
+    if cat.get("status") != "published":
+        raise HTTPException(404, "الفئة غير متاحة للعب حالياً")
+    return cat
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FAVORITES SYSTEM
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_router.post("/favorites/add")
+async def add_favorite(body: FavoriteAdd, user: dict = Depends(require_user)):
+    existing = await db.user_favorites.find_one({"user_id": user["id"], "category_id": body.category_id})
+    if existing:
+        return {"ok": True, "already": True}
+    await db.user_favorites.insert_one({
+        "user_id": user["id"],
+        "category_id": body.category_id,
+        "category_type": body.category_type,
+        "added_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True}
+
+@api_router.get("/favorites")
+async def get_favorites(user: dict = Depends(require_user)):
+    favs = await db.user_favorites.find(
+        {"user_id": user["id"]}, {"_id": 0}
+    ).sort("added_at", -1).to_list(200)
+
+    result = []
+    for fav in favs:
+        cat = None
+        if fav.get("category_type") == "community":
+            cat = await db.community_categories.find_one({"id": fav["category_id"]}, {"_id": 0})
+        else:
+            cat = await db.categories.find_one({"id": fav["category_id"]}, {"_id": 0})
+        if cat:
+            cat["_fav_added_at"] = fav["added_at"]
+            cat["_fav_type"] = fav.get("category_type", "community")
+            result.append(cat)
+    return result
+
+@api_router.delete("/favorites/remove")
+async def remove_favorite(body: FavoriteRemove, user: dict = Depends(require_user)):
+    await db.user_favorites.delete_one({"user_id": user["id"], "category_id": body.category_id})
+    return {"ok": True}
+
+@api_router.get("/favorites/check/{category_id}")
+async def check_favorite(category_id: str, user: dict = Depends(require_user)):
+    exists = await db.user_favorites.find_one({"user_id": user["id"], "category_id": category_id})
+    return {"is_favorite": bool(exists)}
+
+app.include_router(api_router)
+
+# ── Security headers middleware ─────────────────────────────────────────────
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+_cors_origins_env = os.environ.get('CORS_ORIGINS', '')
+_cors_origins = _cors_origins_env.split(',') if _cors_origins_env else ["https://hujjahgames.com", "https://nakbah.hujjahgames.com"]
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get(
-        'CORS_ORIGINS',
-        'http://localhost:3000,https://al-amaliya-al-akhira.vercel.app'
-    ).split(','),
+    allow_credentials=False if "*" in _cors_origins else True,
+    allow_origins=_cors_origins,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Device-Id", "Accept", "Accept-Language", "Content-Language"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Device-Id"],
 )
 
-# Fast health/keepalive at app level (no router prefix)
 @app.get("/health")
-async def health():
-    try:
-        await db.command("ping")
-        return {"ok": True, "db": "connected"}
-    except Exception:
-        return {"ok": True, "db": "error"}
+async def health_check():
+    return {"status": "ok", "ts": int(time.time()), "v": "2.0"}
+
+async def _self_ping_loop():
+    """Ping own /health every 5 min to prevent Railway cold starts."""
+    backend_url = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
+    if not backend_url:
+        return
+    url = f"https://{backend_url}/health"
+    await asyncio.sleep(60)  # wait 60s after startup
+    async with httpx.AsyncClient(timeout=10) as client_http:
+        while True:
+            try:
+                await client_http.get(url)
+                logger.info("Self-ping OK")
+            except Exception as e:
+                logger.warning(f"Self-ping failed: {e}")
+            await asyncio.sleep(300)  # every 5 min
 
 async def _subscription_daily_loop():
     """Run subscription expiry check every 24 hours."""
@@ -4648,943 +4648,11 @@ async def _subscription_daily_loop():
             logger.error(f"Daily subscription loop error: {e}")
         await asyncio.sleep(86400)  # 24 hours
 
-async def _keepalive_loop():
-    """Ping /health every 4 min to prevent Railway cold start."""
-    await asyncio.sleep(60)  # Let server fully start first
-    port = os.environ.get("PORT", "8000")
-    url  = f"http://127.0.0.1:{port}/health"
-    while True:
-        try:
-            async with httpx.AsyncClient(timeout=10) as c:
-                await c.get(url)
-        except Exception:
-            pass
-        await asyncio.sleep(240)  # 4 minutes
-
-# ══════════════════════════════════════════════════════════════════════════════
-# COMMUNITY CREATOR ECONOMY
-# ══════════════════════════════════════════════════════════════════════════════
-
-COMMUNITY_POINTS_PER_QUESTION = 5      # points per approved question
-COMMUNITY_POINTS_TO_SAR       = 100    # 100 points = 1 SAR
-COMMUNITY_MIN_PAYOUT_SAR      = 50     # minimum payout amount
-# Play earning: 1 point per UNIQUE player per month — resets each month
-# Total play_count (display) never resets
-COMMUNITY_MIN_QUESTIONS       = 24     # minimum questions before review
-
-def _require_premium(user: dict):
-    if user.get("subscription_type") != "premium":
-        raise HTTPException(403, "هذه الميزة متاحة للمشتركين المميزين فقط")
-
-async def _notify(user_id: str, type_: str, message: str):
-    await db.community_notifications.insert_one({
-        "id": str(uuid.uuid4()), "user_id": user_id,
-        "type": type_, "message": message,
-        "is_read": False, "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-
-async def _get_wallet(user_id: str) -> dict:
-    w = await db.community_wallets.find_one({"user_id": user_id}, {"_id": 0})
-    if not w:
-        w = {"user_id": user_id, "balance": 0.0, "total_earned": 0.0,
-             "total_withdrawn": 0.0, "points": 0}
-    return w
-
-async def _add_points(user_id: str, points: int):
-    sar = round(points / COMMUNITY_POINTS_TO_SAR, 4)
-    await db.community_wallets.update_one(
-        {"user_id": user_id},
-        {"$inc": {"points": points, "balance": sar, "total_earned": sar}},
-        upsert=True,
-    )
-
-# ── Creator: Category CRUD ─────────────────────────────────────────────────
-
-class CommunityCategoryCreate(BaseModel):
-    name: str
-    description: str = ""
-    image_url: str = ""
-
-@api_router.post("/community/categories")
-async def community_create_category(body: CommunityCategoryCreate, user: dict = Depends(require_user)):
-    _require_premium(user)
-    if not body.name.strip():
-        raise HTTPException(400, "اسم الفئة مطلوب")
-    cat = {
-        "id": str(uuid.uuid4()),
-        "creator_id": user["id"],
-        "creator_username": user.get("username", ""),
-        "name": body.name.strip(),
-        "description": body.description.strip(),
-        "image_url": body.image_url.strip(),
-        "status": "draft",
-        "rejection_reason": "",
-        "questions_count": 0,
-        "play_count": 0,
-        "likes_count": 0,
-        "code": await _generate_unique_category_code(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "submitted_at": None,
-        "reviewed_at": None,
-    }
-    await db.community_categories.insert_one(cat)
-    cat.pop("_id", None)
-    return cat
-
-@api_router.get("/community/categories/mine")
-async def community_my_categories(user: dict = Depends(require_user)):
-    cats = await db.community_categories.find(
-        {"creator_id": user["id"]}, {"_id": 0}
-    ).sort("created_at", -1).to_list(100)
-    return cats
-
-@api_router.get("/community/categories")
-async def community_browse_categories(skip: int = 0, limit: int = 20):
-    cats = await db.community_categories.find(
-        {"status": "approved"}, {"_id": 0}
-    ).sort([("play_count", -1), ("likes_count", -1)]).skip(skip).limit(limit).to_list(limit)
-    for c in cats:
-        c.setdefault("likes_count", 0)
-    return cats
-
-@api_router.delete("/community/categories/{cat_id}")
-async def community_delete_category(cat_id: str, user: dict = Depends(require_user)):
-    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    if cat["status"] not in ("draft", "rejected"):
-        raise HTTPException(400, "لا يمكن حذف فئة قيد المراجعة أو معتمدة")
-    await db.community_categories.delete_one({"id": cat_id})
-    await db.community_questions.delete_many({"category_id": cat_id})
-    return {"message": "تم الحذف"}
-
-@api_router.put("/community/categories/{cat_id}")
-async def community_update_category(cat_id: str, body: CommunityCategoryCreate, user: dict = Depends(require_user)):
-    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    if cat["status"] not in ("draft", "rejected"):
-        raise HTTPException(400, "لا يمكن تعديل فئة قيد المراجعة أو معتمدة")
-    updates = {}
-    if body.name.strip():
-        updates["name"] = body.name.strip()
-    if body.description is not None:
-        updates["description"] = body.description.strip()
-    if body.image_url is not None:
-        updates["image_url"] = body.image_url.strip()
-    if updates:
-        await db.community_categories.update_one({"id": cat_id}, {"$set": updates})
-    updated = await db.community_categories.find_one({"id": cat_id}, {"_id": 0})
-    return updated
-
-@api_router.post("/community/upload")
-async def community_upload(file: UploadFile = File(...), user: dict = Depends(require_user)):
-    """Upload endpoint for community creators (no admin required)."""
-    _require_premium(user)
-    ext = (file.filename or "file.jpg").rsplit(".", 1)[-1].lower()
-    if ext not in ALLOWED_EXTS:
-        raise HTTPException(400, "يُسمح فقط بـ PNG / JPG / WEBP")
-    content = await file.read()
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(400, "الحجم الأقصى 5 ميغابايت")
-    filename = f"comm_{uuid.uuid4().hex}.{ext}"
-    dest = UPLOAD_DIR / filename
-    dest.write_bytes(content)
-    backend_url = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "")
-    if backend_url:
-        base = f"https://{backend_url}"
-    else:
-        base = "https://backend-production-cfa1f.up.railway.app"
-    url = f"{base}/api/static/uploads/{filename}"
-    return {"url": url}
-
-# ── Creator: Questions ─────────────────────────────────────────────────────
-
-class CommunityQuestionCreate(BaseModel):
-    text: str
-    answer: str
-    difficulty: str = "medium"
-    image_url: str = ""
-    answer_image_url: str = ""
-
-@api_router.post("/community/categories/{cat_id}/questions")
-async def community_add_question(cat_id: str, body: CommunityQuestionCreate, user: dict = Depends(require_user)):
-    _require_premium(user)
-    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    if cat["status"] not in ("draft", "rejected"):
-        raise HTTPException(400, "لا يمكن إضافة أسئلة لفئة قيد المراجعة أو معتمدة")
-    if not body.text.strip() or not body.answer.strip():
-        raise HTTPException(400, "السؤال والجواب مطلوبان")
-    q = {
-        "id": str(uuid.uuid4()),
-        "category_id": cat_id,
-        "creator_id": user["id"],
-        "text": body.text.strip(),
-        "answer": body.answer.strip(),
-        "difficulty": body.difficulty,
-        "image_url": body.image_url.strip(),
-        "answer_image_url": body.answer_image_url.strip(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.community_questions.insert_one(q)
-    await db.community_categories.update_one({"id": cat_id}, {"$inc": {"questions_count": 1}})
-    q.pop("_id", None)
-    return q
-
-@api_router.get("/community/categories/{cat_id}/questions")
-async def community_get_questions(cat_id: str, user: dict = Depends(require_user)):
-    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    qs = await db.community_questions.find({"category_id": cat_id}, {"_id": 0}).to_list(500)
-    return qs
-
-@api_router.delete("/community/categories/{cat_id}/questions/{q_id}")
-async def community_delete_question(cat_id: str, q_id: str, user: dict = Depends(require_user)):
-    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    if cat["status"] not in ("draft", "rejected"):
-        raise HTTPException(400, "لا يمكن حذف الأسئلة الآن")
-    res = await db.community_questions.delete_one({"id": q_id, "category_id": cat_id})
-    if res.deleted_count == 0:
-        raise HTTPException(404, "السؤال غير موجود")
-    await db.community_categories.update_one({"id": cat_id}, {"$inc": {"questions_count": -1}})
-    return {"message": "تم الحذف"}
-
-@api_router.post("/community/categories/{cat_id}/submit")
-async def community_submit_category(cat_id: str, user: dict = Depends(require_user)):
-    _require_premium(user)
-    cat = await db.community_categories.find_one({"id": cat_id, "creator_id": user["id"]})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    if cat["status"] not in ("draft", "rejected"):
-        raise HTTPException(400, "الفئة مرسلة للمراجعة مسبقاً")
-    count = await db.community_questions.count_documents({"category_id": cat_id})
-    if count < COMMUNITY_MIN_QUESTIONS:
-        raise HTTPException(400, f"يجب إضافة {COMMUNITY_MIN_QUESTIONS} سؤالاً على الأقل قبل الإرسال (لديك {count})")
-    await db.community_categories.update_one(
-        {"id": cat_id},
-        {"$set": {"status": "pending_review", "submitted_at": datetime.now(timezone.utc).isoformat(), "rejection_reason": ""}}
-    )
-    return {"message": "تم إرسال الفئة للمراجعة"}
-
-# ── Wallet & Payouts ───────────────────────────────────────────────────────
-
-@api_router.get("/community/wallet")
-async def community_get_wallet(user: dict = Depends(require_user)):
-    wallet = await _get_wallet(user["id"])
-    cats_approved = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
-    cats_pending  = await db.community_categories.count_documents({"creator_id": user["id"], "status": "pending_review"})
-    cats_draft    = await db.community_categories.count_documents({"creator_id": user["id"], "status": "draft"})
-    # Monthly unique players (current month, unprocessed)
-    month_key = datetime.now(timezone.utc).strftime("%Y-%m")
-    monthly_pipeline = [
-        {"$match": {"creator_id": user["id"], "month": month_key, "processed": False}},
-        {"$group": {"_id": "$category_id", "unique_players": {"$sum": 1}}},
-        {"$group": {"_id": None, "total_players": {"$sum": "$unique_players"},
-                    "categories": {"$push": {"cat": "$_id", "players": "$unique_players"}}}},
-    ]
-    monthly_res = await db.community_play_logs.aggregate(monthly_pipeline).to_list(1)
-    monthly_players = monthly_res[0]["total_players"] if monthly_res else 0
-    monthly_sar     = round(monthly_players / COMMUNITY_POINTS_TO_SAR, 4)
-    return {
-        **wallet,
-        "cats_approved": cats_approved,
-        "cats_pending": cats_pending,
-        "cats_draft": cats_draft,
-        "month": month_key,
-        "monthly_unique_players": monthly_players,
-        "monthly_pending_sar": monthly_sar,
-    }
-
-class PayoutRequest(BaseModel):
-    amount: float
-    iban: str
-    account_name: str
-
-@api_router.post("/community/payouts")
-async def community_request_payout(body: PayoutRequest, user: dict = Depends(require_user)):
-    wallet = await _get_wallet(user["id"])
-    if body.amount < COMMUNITY_MIN_PAYOUT_SAR:
-        raise HTTPException(400, f"الحد الأدنى للسحب {COMMUNITY_MIN_PAYOUT_SAR} ريال")
-    if body.amount > wallet.get("balance", 0):
-        raise HTTPException(400, "الرصيد غير كافٍ")
-    if not body.iban.strip() or not body.account_name.strip():
-        raise HTTPException(400, "الآيبان واسم الحساب مطلوبان")
-    pending = await db.community_payouts.find_one({"user_id": user["id"], "status": "pending"})
-    if pending:
-        raise HTTPException(400, "لديك طلب سحب معلق بالفعل")
-    payout = {
-        "id": str(uuid.uuid4()),
-        "user_id": user["id"],
-        "username": user.get("username", ""),
-        "amount": body.amount,
-        "iban": body.iban.strip(),
-        "account_name": body.account_name.strip(),
-        "status": "pending",
-        "admin_note": "",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.community_payouts.insert_one(payout)
-    await db.community_wallets.update_one(
-        {"user_id": user["id"]},
-        {"$inc": {"balance": -body.amount}},
-    )
-    payout.pop("_id", None)
-    return payout
-
-@api_router.get("/community/payouts")
-async def community_my_payouts(user: dict = Depends(require_user)):
-    payouts = await db.community_payouts.find(
-        {"user_id": user["id"]}, {"_id": 0}
-    ).sort("created_at", -1).to_list(50)
-    return payouts
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CATEGORY CODE LOOKUP
-# ══════════════════════════════════════════════════════════════════════════════
-
-@api_router.get("/category/code/{code}")
-async def get_category_by_code(code: str):
-    code = code.strip().upper()
-    # search admin categories
-    cat = await db.categories.find_one({"code": code}, {"_id": 0})
-    if cat:
-        return {"type": "admin", "category": cat}
-    # search community categories
-    comm = await db.community_categories.find_one(
-        {"code": code, "status": "approved"}, {"_id": 0}
-    )
-    if comm:
-        return {"type": "community", "category": comm}
-    raise HTTPException(404, "الكود غير صحيح أو الفئة غير موجودة")
-
-# ══════════════════════════════════════════════════════════════════════════════
-# FAVORITES
-# ══════════════════════════════════════════════════════════════════════════════
-
-class FavoriteAction(BaseModel):
-    category_id: str
-    category_type: str = "admin"  # "admin" | "community"
-
-@api_router.post("/favorites/add")
-async def favorites_add(body: FavoriteAction, user: dict = Depends(require_user)):
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$addToSet": {"favorites": {"id": body.category_id, "type": body.category_type}}}
-    )
-    return {"message": "تمت الإضافة"}
-
-@api_router.delete("/favorites/remove")
-async def favorites_remove(body: FavoriteAction, user: dict = Depends(require_user)):
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$pull": {"favorites": {"id": body.category_id, "type": body.category_type}}}
-    )
-    return {"message": "تم الحذف"}
-
-@api_router.get("/favorites")
-async def favorites_get(user: dict = Depends(require_user)):
-    user_doc = await db.users.find_one({"id": user["id"]}, {"_id": 0, "favorites": 1})
-    favs = user_doc.get("favorites", []) if user_doc else []
-    if not favs:
-        return []
-    admin_ids = [f["id"] for f in favs if f.get("type") == "admin"]
-    comm_ids  = [f["id"] for f in favs if f.get("type") == "community"]
-    result = []
-    if admin_ids:
-        cats = await db.categories.find({"id": {"$in": admin_ids}}, {"_id": 0}).to_list(200)
-        for c in cats:
-            c["_fav_type"] = "admin"
-        result.extend(cats)
-    if comm_ids:
-        cats = await db.community_categories.find({"id": {"$in": comm_ids}}, {"_id": 0}).to_list(200)
-        for c in cats:
-            c["_fav_type"] = "community"
-        result.extend(cats)
-    return result
-
-@api_router.post("/admin/migrate/category-codes")
-async def migrate_category_codes(admin: dict = Depends(get_admin)):
-    """Assign codes to existing categories that don't have one yet."""
-    updated = 0
-    for col_name in ("categories", "community_categories"):
-        col = db[col_name]
-        async for doc in col.find({"code": {"$in": [None, ""]}}, {"_id": 1, "id": 1}):
-            code = await _generate_unique_category_code()
-            await col.update_one({"_id": doc["_id"]}, {"$set": {"code": code}})
-            updated += 1
-    return {"migrated": updated}
-
-# ── Notifications ──────────────────────────────────────────────────────────
-
-@api_router.get("/community/notifications")
-async def community_get_notifications(user: dict = Depends(require_user)):
-    notifs = await db.community_notifications.find(
-        {"user_id": user["id"]}, {"_id": 0}
-    ).sort("created_at", -1).limit(50).to_list(50)
-    return notifs
-
-@api_router.patch("/community/notifications/read")
-async def community_mark_read(user: dict = Depends(require_user)):
-    await db.community_notifications.update_many(
-        {"user_id": user["id"], "is_read": False},
-        {"$set": {"is_read": True}},
-    )
-    return {"message": "تم"}
-
-# ── Admin: Moderation ──────────────────────────────────────────────────────
-
-@api_router.get("/admin/community/pending")
-async def admin_community_pending(admin: dict = Depends(get_admin)):
-    cats = await db.community_categories.find(
-        {"status": "pending_review"}, {"_id": 0}
-    ).sort("submitted_at", 1).to_list(100)
-    return cats
-
-@api_router.get("/admin/community/categories")
-async def admin_community_all(status: str = "", admin: dict = Depends(get_admin)):
-    filt = {} if not status else {"status": status}
-    cats = await db.community_categories.find(filt, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return cats
-
-@api_router.post("/admin/community/{cat_id}/approve")
-async def admin_community_approve(cat_id: str, admin: dict = Depends(get_admin)):
-    cat = await db.community_categories.find_one({"id": cat_id})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    await db.community_categories.update_one(
-        {"id": cat_id},
-        {"$set": {"status": "approved", "reviewed_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    qs_count = await db.community_questions.count_documents({"category_id": cat_id})
-    pts = qs_count * COMMUNITY_POINTS_PER_QUESTION
-    await _add_points(cat["creator_id"], pts)
-    await _notify(cat["creator_id"], "category_approved",
-                  f"🎉 تمت الموافقة على فئتك \"{cat['name']}\" وحصلت على {pts} نقطة!")
-    return {"message": "تمت الموافقة"}
-
-class AdminRejectBody(BaseModel):
-    reason: str = ""
-
-@api_router.post("/admin/community/{cat_id}/reject")
-async def admin_community_reject(cat_id: str, body: AdminRejectBody, admin: dict = Depends(get_admin)):
-    cat = await db.community_categories.find_one({"id": cat_id})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    await db.community_categories.update_one(
-        {"id": cat_id},
-        {"$set": {"status": "rejected", "rejection_reason": body.reason,
-                  "reviewed_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    reason_text = f" — السبب: {body.reason}" if body.reason else ""
-    await _notify(cat["creator_id"], "category_rejected",
-                  f"❌ لم تُقبل فئتك \"{cat['name']}\"{reason_text}")
-    return {"message": "تم الرفض"}
-
-@api_router.get("/admin/community/payouts")
-async def admin_community_payouts(status: str = "", admin: dict = Depends(get_admin)):
-    filt = {} if not status else {"status": status}
-    payouts = await db.community_payouts.find(filt, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return payouts
-
-class PayoutStatusUpdate(BaseModel):
-    status: str  # approved | paid | rejected
-    admin_note: str = ""
-
-@api_router.patch("/admin/community/payouts/{payout_id}")
-async def admin_update_payout(payout_id: str, body: PayoutStatusUpdate, admin: dict = Depends(get_admin)):
-    if body.status not in ("approved", "paid", "rejected"):
-        raise HTTPException(400, "حالة غير صالحة")
-    payout = await db.community_payouts.find_one({"id": payout_id})
-    if not payout:
-        raise HTTPException(404, "الطلب غير موجود")
-    await db.community_payouts.update_one(
-        {"id": payout_id},
-        {"$set": {"status": body.status, "admin_note": body.admin_note,
-                  "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    if body.status == "rejected":
-        await db.community_wallets.update_one(
-            {"user_id": payout["user_id"]},
-            {"$inc": {"balance": payout["amount"]}},
-        )
-    msg_map = {
-        "approved": f"✅ طلب سحب {payout['amount']} ريال تمت الموافقة عليه",
-        "paid":     f"💰 تم تحويل {payout['amount']} ريال لحسابك",
-        "rejected": f"❌ تم رفض طلب سحب {payout['amount']} ريال",
-    }
-    await _notify(payout["user_id"], f"payout_{body.status}", msg_map[body.status])
-    return {"message": "تم التحديث"}
-
-@api_router.get("/admin/community/analytics")
-async def admin_community_analytics(admin: dict = Depends(get_admin)):
-    total_cats     = await db.community_categories.count_documents({})
-    approved_cats  = await db.community_categories.count_documents({"status": "approved"})
-    pending_cats   = await db.community_categories.count_documents({"status": "pending_review"})
-    total_payouts  = await db.community_payouts.count_documents({})
-    pending_payouts= await db.community_payouts.count_documents({"status": "pending"})
-    pipeline = [{"$group": {"_id": None, "total": {"$sum": "$amount"}}}]
-    paid_res = await db.community_payouts.aggregate([
-        {"$match": {"status": "paid"}}, *pipeline
-    ]).to_list(1)
-    total_paid = paid_res[0]["total"] if paid_res else 0
-    # Monthly play stats
-    cur_month = datetime.now(timezone.utc).strftime("%Y-%m")
-    monthly_plays = await db.community_play_logs.count_documents({"month": cur_month, "processed": False})
-    return {
-        "total_categories": total_cats,
-        "approved_categories": approved_cats,
-        "pending_categories": pending_cats,
-        "total_payout_requests": total_payouts,
-        "pending_payout_requests": pending_payouts,
-        "total_paid_sar": total_paid,
-        "current_month": cur_month,
-        "monthly_unprocessed_plays": monthly_plays,
-    }
-
-@api_router.post("/admin/community/process-monthly-earnings")
-async def admin_process_monthly_earnings(body: dict = {}, admin: dict = Depends(get_admin)):
-    """
-    Process monthly play earnings for all creators.
-    Counts unique unprocessed plays per creator, awards 1 point each,
-    then marks them as processed so they don't count again next run.
-    Call at end of each month (or any time — safe to run multiple times,
-    only unprocessed logs are counted).
-    """
-    month_to_process = body.get("month") or datetime.now(timezone.utc).strftime("%Y-%m")
-
-    pipeline = [
-        {"$match": {"month": month_to_process, "processed": False}},
-        {"$group": {"_id": "$creator_id", "unique_players": {"$sum": 1}}},
-    ]
-    results = await db.community_play_logs.aggregate(pipeline).to_list(10000)
-
-    if not results:
-        return {"message": "لا توجد ألعاب غير محسوبة لهذا الشهر", "month": month_to_process, "creators_paid": 0}
-
-    total_points_awarded = 0
-    for row in results:
-        creator_id = row["_id"]
-        points     = row["unique_players"]   # 1 point per unique player
-        sar        = round(points / COMMUNITY_POINTS_TO_SAR, 4)
-        await db.community_wallets.update_one(
-            {"user_id": creator_id},
-            {"$inc": {"points": points, "balance": sar, "total_earned": sar}},
-            upsert=True,
-        )
-        await _notify(creator_id, "monthly_earnings",
-                      f"💰 أرباح {month_to_process}: {points} لاعع فريد → {sar:.2f} ريال أُضيف لرصيدك")
-        total_points_awarded += points
-
-    # Mark all as processed
-    await db.community_play_logs.update_many(
-        {"month": month_to_process, "processed": False},
-        {"$set": {"processed": True}},
-    )
-
-    return {
-        "message": "تمت معالجة الأرباح الشهرية",
-        "month": month_to_process,
-        "creators_paid": len(results),
-        "total_points_awarded": total_points_awarded,
-        "total_sar_awarded": round(total_points_awarded / COMMUNITY_POINTS_TO_SAR, 2),
-    }
-
-# ══════════════════════════════════════════════════════════════════════════════
-# XP / PRESTIGE SYSTEM  — 11 prestiges × 55 levels each
-# Curve: slow start, accelerates toward level 55 (need 10,000 XP per prestige)
-# ══════════════════════════════════════════════════════════════════════════════
-
-_XP_PER_PRESTIGE = 10_000   # XP needed within one prestige cycle
-_MAX_PRESTIGE    = 11        # P1–P10 regular + P11 Master
-
-def _prestige_xp_for_level(n: int) -> int:
-    """Cumulative XP from prestige-start needed to reach level n (0-55)."""
-    if n <= 0:  return 0
-    if n >= 55: return _XP_PER_PRESTIGE
-    t = n / 55
-    return int(_XP_PER_PRESTIGE * (t * t * 0.6 + t * 0.4))
-
-def _calc_xp(game_count: int, approved_cats: int, total_plays: int, total_likes: int, is_premium: bool) -> int:
-    return (game_count * 10) + (approved_cats * 50) + (total_plays * 2) + (total_likes * 5) + (100 if is_premium else 0)
-
-def _xp_to_level(total_xp: int, prestige: int) -> int:
-    """Level within current prestige cycle (0-55)."""
-    pxp   = max(0, total_xp - prestige * _XP_PER_PRESTIGE)
-    level = 0
-    for n in range(1, 56):
-        if pxp >= _prestige_xp_for_level(n):
-            level = n
-        else:
-            break
-    return level
-
-def _xp_progress(total_xp: int, prestige: int) -> dict:
-    pxp   = max(0, total_xp - prestige * _XP_PER_PRESTIGE)
-    level = 0
-    for n in range(1, 56):
-        if pxp >= _prestige_xp_for_level(n):
-            level = n
-        else:
-            break
-    if level >= 55:
-        return {
-            "current_xp": _XP_PER_PRESTIGE, "needed_xp": _XP_PER_PRESTIGE,
-            "percent": 100, "total_xp": total_xp, "next_level_at": total_xp,
-            "prestige_xp": pxp, "can_prestige": prestige < _MAX_PRESTIGE,
-        }
-    current_t = _prestige_xp_for_level(level)
-    next_t    = _prestige_xp_for_level(level + 1)
-    pct       = round(((pxp - current_t) / (next_t - current_t)) * 100, 1) if next_t > current_t else 0
-    return {
-        "current_xp":    pxp - current_t,
-        "needed_xp":     next_t - current_t,
-        "percent":       pct,
-        "total_xp":      total_xp,
-        "next_level_at": prestige * _XP_PER_PRESTIGE + next_t,
-        "prestige_xp":   pxp,
-        "can_prestige":  False,
-    }
-
-# ══════════════════════════════════════════════════════════════════════════════
-# COMMUNITY LIKES
-# ══════════════════════════════════════════════════════════════════════════════
-
-@api_router.post("/community/categories/{cat_id}/like")
-async def like_community_category(cat_id: str, user: dict = Depends(require_user)):
-    cat = await db.community_categories.find_one({"id": cat_id, "status": "approved"})
-    if not cat:
-        raise HTTPException(404, "الفئة غير موجودة")
-    existing = await db.community_likes.find_one({"user_id": user["id"], "category_id": cat_id})
-    if existing:
-        await db.community_likes.delete_one({"user_id": user["id"], "category_id": cat_id})
-        await db.community_categories.update_one({"id": cat_id}, {"$inc": {"likes_count": -1}})
-        return {"liked": False}
-    await db.community_likes.insert_one({
-        "user_id": user["id"],
-        "category_id": cat_id,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    await db.community_categories.update_one({"id": cat_id}, {"$inc": {"likes_count": 1}})
-    return {"liked": True}
-
-@api_router.get("/community/categories/{cat_id}/liked")
-async def check_category_liked(cat_id: str, user: dict = Depends(require_user)):
-    existing = await db.community_likes.find_one({"user_id": user["id"], "category_id": cat_id})
-    return {"liked": bool(existing)}
-
-# ══════════════════════════════════════════════════════════════════════════════
-# USER PROFILES & FOLLOWS
-# ══════════════════════════════════════════════════════════════════════════════
-
-@api_router.get("/profile/{username}")
-async def get_profile(username: str, current_user: Optional[dict] = Depends(get_current_user)):
-    user = await db.users.find_one(
-        {"username": username},
-        {"_id": 0, "password_hash": 0, "answered_question_ids": 0, "email": 0, "is_locked": 0}
-    )
-    if not user:
-        raise HTTPException(404, "المستخدم غير موجود")
-
-    game_count    = user.get("game_count", 0)
-    is_premium    = user.get("subscription_type") == "premium"
-
-    # Parallel aggregations
-    approved_cats  = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
-    plays_res      = await db.community_categories.aggregate([
-        {"$match": {"creator_id": user["id"], "status": "approved"}},
-        {"$group": {"_id": None, "total": {"$sum": "$play_count"}}},
-    ]).to_list(1)
-    likes_res      = await db.community_categories.aggregate([
-        {"$match": {"creator_id": user["id"], "status": "approved"}},
-        {"$group": {"_id": None, "total": {"$sum": "$likes_count"}}},
-    ]).to_list(1)
-    best_cat_list  = await db.community_categories.find(
-        {"creator_id": user["id"], "status": "approved"}, {"_id": 0, "name": 1, "play_count": 1, "likes_count": 1, "image_url": 1}
-    ).sort("play_count", -1).limit(1).to_list(1)
-
-    total_plays  = plays_res[0]["total"]  if plays_res  else 0
-    total_likes  = likes_res[0]["total"]  if likes_res  else 0
-    best_cat     = best_cat_list[0]       if best_cat_list else None
-
-    followers_count = await db.follows.count_documents({"following_id": user["id"]})
-    following_count = await db.follows.count_documents({"follower_id": user["id"]})
-
-    is_following = False
-    is_own       = False
-    if current_user:
-        is_own = current_user["id"] == user["id"]
-        if not is_own:
-            is_following = bool(await db.follows.find_one(
-                {"follower_id": current_user["id"], "following_id": user["id"]}
-            ))
-
-    prestige = user.get("prestige", 0)
-    total_xp = _calc_xp(game_count, approved_cats, total_plays, total_likes, is_premium)
-    level    = _xp_to_level(total_xp, prestige)
-    xp_prog  = _xp_progress(total_xp, prestige)
-
-    profile = {
-        "id":                  user["id"],
-        "username":            user["username"],
-        "bio":                 user.get("bio", ""),
-        "avatar_url":          user.get("avatar_url", ""),
-        "banner_url":          user.get("banner_url", ""),
-        "accent_color":        user.get("accent_color", "#f2b85b"),
-        "interests":           user.get("interests", []),
-        "subscription_type":   user.get("subscription_type", "free"),
-        "prestige":            prestige,
-        "level":               level,
-        "total_xp":            total_xp,
-        "xp_progress":         xp_prog,
-        "game_count":          game_count,
-        "approved_categories": approved_cats,
-        "total_plays":         total_plays,
-        "total_likes":         total_likes,
-        "followers_count":     followers_count,
-        "following_count":     following_count,
-        "best_category":       best_cat,
-        "is_following":        is_following,
-        "is_own":              is_own,
-        "created_at":          user.get("created_at", ""),
-    }
-
-    if is_own:
-        wallet = await db.community_wallets.find_one({"user_id": user["id"]}, {"_id": 0})
-        profile["wallet"] = wallet or {"balance": 0.0, "total_earned": 0.0, "monthly_pending_sar": 0.0, "month": ""}
-
-    return profile
-
-@api_router.post("/profile/{username}/follow")
-async def follow_user(username: str, current_user: dict = Depends(require_user)):
-    target = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
-    if not target:
-        raise HTTPException(404, "المستخدم غير موجود")
-    if target["id"] == current_user["id"]:
-        raise HTTPException(400, "لا يمكنك متابعة نفسك")
-    existing = await db.follows.find_one({"follower_id": current_user["id"], "following_id": target["id"]})
-    if existing:
-        raise HTTPException(400, "أنت تتابع هذا المستخدم مسبقاً")
-    await db.follows.insert_one({
-        "follower_id":  current_user["id"],
-        "following_id": target["id"],
-        "created_at":   datetime.now(timezone.utc).isoformat(),
-    })
-    return {"message": "تمت المتابعة"}
-
-@api_router.delete("/profile/{username}/follow")
-async def unfollow_user(username: str, current_user: dict = Depends(require_user)):
-    target = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
-    if not target:
-        raise HTTPException(404, "المستخدم غير موجود")
-    res = await db.follows.delete_one({"follower_id": current_user["id"], "following_id": target["id"]})
-    if res.deleted_count == 0:
-        raise HTTPException(400, "أنت لا تتابع هذا المستخدم")
-    return {"message": "تم إلغاء المتابعة"}
-
-@api_router.post("/profile/{username}/prestige")
-async def do_prestige(username: str, current_user: dict = Depends(require_user)):
-    """Upgrade to next prestige — requires reaching level 55 of current prestige."""
-    if current_user["username"] != username:
-        raise HTTPException(403, "غير مسموح")
-    user = await db.users.find_one({"username": username})
-    if not user:
-        raise HTTPException(404, "المستخدم غير موجود")
-    prestige = user.get("prestige", 0)
-    if prestige >= _MAX_PRESTIGE:
-        raise HTTPException(400, "أنت على أعلى رتبة — ماستر 👑")
-    game_count    = user.get("game_count", 0)
-    is_premium    = user.get("subscription_type") == "premium"
-    approved_cats = await db.community_categories.count_documents({"creator_id": user["id"], "status": "approved"})
-    plays_res     = await db.community_categories.aggregate([
-        {"$match": {"creator_id": user["id"], "status": "approved"}},
-        {"$group": {"_id": None, "total": {"$sum": "$play_count"}}},
-    ]).to_list(1)
-    likes_res     = await db.community_categories.aggregate([
-        {"$match": {"creator_id": user["id"], "status": "approved"}},
-        {"$group": {"_id": None, "total": {"$sum": "$likes_count"}}},
-    ]).to_list(1)
-    total_plays = plays_res[0]["total"] if plays_res else 0
-    total_likes = likes_res[0]["total"] if likes_res else 0
-    total_xp    = _calc_xp(game_count, approved_cats, total_plays, total_likes, is_premium)
-    level       = _xp_to_level(total_xp, prestige)
-    if level < 55:
-        raise HTTPException(400, f"تحتاج الوصول للمستوى 55 أولاً — أنت في المستوى {level}")
-    new_prestige = prestige + 1
-    await db.users.update_one({"username": username}, {"$set": {"prestige": new_prestige}})
-    return {"ok": True, "new_prestige": new_prestige}
-
-@api_router.get("/users/search")
-async def search_users(q: str = "", limit: int = 10):
-    """Search users by username (case-insensitive partial match)."""
-    q = q.strip()
-    if not q:
-        return []
-    users = await db.users.find(
-        {"username": {"$regex": q, "$options": "i"}},
-        {"_id": 0, "id": 1, "username": 1, "avatar_url": 1, "subscription_type": 1, "bio": 1, "prestige": 1}
-    ).limit(min(limit, 20)).to_list(20)
-    return users
-
-@api_router.get("/profile/{username}/followers")
-async def get_followers(username: str, skip: int = 0, limit: int = 20):
-    user = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
-    if not user:
-        raise HTTPException(404, "المستخدم غير موجود")
-    follows = await db.follows.find(
-        {"following_id": user["id"]}, {"_id": 0, "follower_id": 1}
-    ).skip(skip).limit(limit).to_list(limit)
-    ids = [f["follower_id"] for f in follows]
-    users = await db.users.find(
-        {"id": {"$in": ids}},
-        {"_id": 0, "id": 1, "username": 1, "avatar_url": 1, "subscription_type": 1, "bio": 1}
-    ).to_list(limit)
-    return users
-
-@api_router.get("/profile/{username}/following")
-async def get_following(username: str, skip: int = 0, limit: int = 20):
-    user = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
-    if not user:
-        raise HTTPException(404, "المستخدم غير موجود")
-    follows = await db.follows.find(
-        {"follower_id": user["id"]}, {"_id": 0, "following_id": 1}
-    ).skip(skip).limit(limit).to_list(limit)
-    ids = [f["following_id"] for f in follows]
-    users = await db.users.find(
-        {"id": {"$in": ids}},
-        {"_id": 0, "id": 1, "username": 1, "avatar_url": 1, "subscription_type": 1, "bio": 1}
-    ).to_list(limit)
-    return users
-
-@api_router.get("/profile/{username}/categories")
-async def get_profile_categories(username: str, skip: int = 0, limit: int = 20):
-    user = await db.users.find_one({"username": username}, {"_id": 0, "id": 1})
-    if not user:
-        raise HTTPException(404, "المستخدم غير موجود")
-    cats = await db.community_categories.find(
-        {"creator_id": user["id"], "status": "approved"}, {"_id": 0}
-    ).sort([("play_count", -1), ("likes_count", -1)]).skip(skip).limit(limit).to_list(limit)
-    for c in cats:
-        c.setdefault("likes_count", 0)
-    return cats
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TOURNAMENT — save results to DB
-# ══════════════════════════════════════════════════════════════════════════════
-
-@api_router.post("/tournament/save")
-async def save_tournament(body: dict, user: dict = Depends(require_user)):
-    """Save completed tournament result to DB for history/stats."""
-    champion   = body.get("champion")        # team name (string)
-    teams      = body.get("teams", [])       # list of {name, color}
-    rounds     = body.get("rounds", [])      # bracket rounds
-    total_matches = sum(
-        1 for r in rounds for m in r.get("matches", []) if m.get("winner") and not m.get("isBye")
-    )
-    doc = {
-        "id":            str(uuid.uuid4()),
-        "user_id":       user["id"],
-        "username":      user.get("username", ""),
-        "champion":      champion,
-        "teams":         [t.get("name") for t in teams if t.get("name")],
-        "team_count":    len(teams),
-        "total_matches": total_matches,
-        "rounds_count":  len(rounds),
-        "created_at":    datetime.now(timezone.utc).isoformat(),
-    }
-    await db.tournaments.insert_one(doc)
-    return {"id": doc["id"], "message": "تم حفظ نتيجة البطولة"}
-
-
-@api_router.get("/admin/tournaments")
-async def list_tournaments(
-    limit: int = 50,
-    admin: dict = Depends(get_admin),
-):
-    """Admin: list all saved tournament results."""
-    items = await db.tournaments.find({}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
-    total = await db.tournaments.count_documents({})
-    return {"items": items, "total": total}
-
-
-HTML_TEST_EMAIL = """
-    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:560px;margin:auto;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.12)">
-      <div style="background:linear-gradient(135deg,#5B0E14 0%,#8B1520 60%,#A01C26 100%);padding:36px 32px;text-align:center">
-        <div style="font-size:2.8rem;margin-bottom:4px">🏆</div>
-        <h1 style="color:#F1E194;margin:0;font-size:2.2rem;letter-spacing:0.05em">حُجّة</h1>
-        <p style="color:rgba(241,225,148,0.65);margin:6px 0 0;font-size:0.9rem">لعبة المعلومات العربية</p>
-      </div>
-      <div style="padding:32px">
-        <h2 style="color:#5B0E14;margin:0 0 14px">مرحباً {username} 👋</h2>
-        <p style="color:#444;line-height:1.8;font-size:1rem">
-          شكراً لتسجيلك في <strong>حُجّة</strong> — منصة تريفيا عربية تجمع أصدقاءك وزملاءك في تحدي مثير للمعلومات.
-        </p>
-        <p style="color:#444;line-height:1.8">نشتاق لحضورك! اللعبة جاهزة، والأسئلة بانتظارك.</p>
-        <div style="text-align:center;margin:28px 0">
-          <a href="https://al-amaliya-al-akhira.vercel.app"
-             style="background:linear-gradient(135deg,#5B0E14,#8B1520);color:#F1E194;padding:14px 40px;border-radius:50px;text-decoration:none;font-weight:900;font-size:1rem;display:inline-block">
-            🎮 العب الآن
-          </a>
-        </div>
-        <div style="background:#fdf6e3;border-radius:12px;padding:16px 20px;border-right:4px solid #F1E194">
-          <div style="color:#5B0E14;font-weight:900;margin-bottom:8px">🎯 ماذا ستجد في حُجّة؟</div>
-          <ul style="margin:0;padding:0;list-style:none;color:#555;font-size:0.88rem;line-height:2">
-            <li>✅ أسئلة متنوعة: ثقافة · رياضة · علوم · إسلاميات</li>
-            <li>✅ مود البطولة للفرق المتعددة</li>
-            <li>✅ لوحة Jeopardy بمستويات صعوبة مختلفة</li>
-            <li>✅ أسئلة الكلمة السرية بـ QR code</li>
-          </ul>
-        </div>
-      </div>
-      <div style="background:#fdf6e3;padding:16px 32px;text-align:center;border-top:1px solid #f0e8d0">
-        <p style="color:#999;font-size:0.78rem;margin:0">حُجّة · لعبة المعلومات العربية</p>
-      </div>
-    </div>
-"""
-
-async def _bulk_send(users_list: list):
-    """Background task: send welcome email to each user sequentially."""
-    for u in users_list:
-        email = u.get("email", "")
-        if not email:
-            continue
-        html = HTML_TEST_EMAIL.replace("{username}", u.get("username", "صديق"))
-        await send_email_notification(email, "🎮 حُجّة بتنتظرك — لعبة المعلومات العربية", html)
-        await asyncio.sleep(0.5)   # gentle rate-limit
-
-
-@api_router.post("/admin/send-test-email")
-async def send_test_email_all(background_tasks: BackgroundTasks, admin: dict = Depends(get_super_admin)):
-    """Fire-and-forget: send a welcome email to all registered users."""
-    users_list = await db.users.find(
-        {"email": {"$exists": True, "$ne": None, "$ne": ""}},
-        {"_id": 0, "email": 1, "username": 1}
-    ).to_list(1000)
-    users_list = [u for u in users_list if u.get("email")]
-    background_tasks.add_task(_bulk_send, users_list)
-    return {"queued": len(users_list), "message": "جاري الإرسال في الخلفية"}
-
-
-app.include_router(api_router)
-
-# ══════════════════════════════════════════════════════════════════════════════
-
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(_subscription_daily_loop())
-    asyncio.create_task(_keepalive_loop())
-    logger.info("Subscription notification loop + keepalive started")
-    # Warm up MongoDB connection pool immediately
-    try:
-        await db.command("ping")
-        logger.info("MongoDB connection pool warmed up")
-    except Exception as e:
-        logger.warning(f"MongoDB warmup warning: {e}")
+    asyncio.create_task(_self_ping_loop())
+    logger.info("Subscription notification loop started")
     # DB Indexes for performance at scale
     try:
         await db.questions.create_index([("category_id", 1), ("difficulty", 1)])
@@ -5607,12 +4675,34 @@ async def startup_event():
         await db.suspicious_logs.create_index([("created_at", -1)])
         await db.ip_logs.create_index([("user_id", 1)])
         await db.ip_logs.create_index([("ts", 1)], expireAfterSeconds=7200)  # auto-purge IP logs after 2h
-        # Category code indexes
-        await db.categories.create_index([("code", 1)], unique=True, sparse=True)
+        # Community creator system indexes
+        await db.community_categories.create_index([("creator_id", 1)])
+        await db.community_categories.create_index([("status", 1)])
+        await db.community_categories.create_index([("monthly_score", -1)])
+        await db.community_questions.create_index([("category_id", 1)])
+        await db.community_likes.create_index([("user_id", 1), ("category_id", 1)], unique=True)
+        await db.payout_requests.create_index([("user_id", 1)])
+        await db.community_notifications.create_index([("user_id", 1)])
+        await db.user_follows.create_index([("follower_id", 1), ("following_id", 1)], unique=True, sparse=True)
+        await db.user_follows.create_index([("following_id", 1)])
+        # Favorites + category code indexes
         await db.community_categories.create_index([("code", 1)], unique=True, sparse=True)
-        # Favorites index
-        await db.users.create_index([("favorites", 1)])
+        await db.user_favorites.create_index([("user_id", 1), ("category_id", 1)], unique=True)
+        await db.user_favorites.create_index([("user_id", 1), ("added_at", -1)])
         logger.info("DB indexes created/verified")
+
+        # Backfill: assign codes to existing community categories that don't have one
+        async for cat in db.community_categories.find({"code": {"$exists": False}}, {"_id": 1, "id": 1}):
+            try:
+                code = _generate_category_code()
+                for _ in range(20):
+                    if not await db.community_categories.find_one({"code": code}):
+                        break
+                    code = _generate_category_code()
+                await db.community_categories.update_one({"_id": cat["_id"]}, {"$set": {"code": code}})
+            except Exception:
+                pass
+        logger.info("Category code backfill complete")
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
 
