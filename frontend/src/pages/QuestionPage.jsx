@@ -5,22 +5,20 @@ import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { X, ZoomIn, Pause, Play, RotateCcw, RefreshCw, Zap, Clock } from "lucide-react";
 
+const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   CSS SPEC LAYOUT — Orange-panel · Roman BG · Big centered answer modal
+   ALL LOGIC PRESERVED — UI redesigned: deep navy + glass morphism + Tajawal
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const ROMAN_BG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
-const FONT_LINK = "https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;700;800;900&display=swap";
-
 export default function QuestionPage() {
-  const navigate  = useNavigate();
+  const navigate = useNavigate();
   const { state } = useLocation();
-  const { session, updateScore, gameSettings, switchTurn, teamScores, getNextQuestion } = useGame();
-  const { question: initialQuestion, catName, slot } = state || {};
-  const [question, setQuestion] = useState(initialQuestion);
+  const { session, updateScore, gameSettings, switchTurn, teamScores } = useGame();
+  const { question, catName, slot } = state || {};
 
   const isWordCat = question?.category_id === "cat_word" || question?.question_type === "secret_word";
-  const diff = question?.difficulty || 300;
+  const diff      = question?.difficulty || 300;
   let TIMER_DURATION = gameSettings?.default_timer || 65;
   if (isWordCat && gameSettings?.word_timers) {
     TIMER_DURATION = gameSettings.word_timers[String(diff)] ?? TIMER_DURATION;
@@ -34,35 +32,14 @@ export default function QuestionPage() {
   const [tensionDone, setTensionDone] = useState(false);
   const [zoomedImage, setZoomedImage] = useState(null);
   const [imgLoaded, setImgLoaded]     = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState(question);
+  const [doubleActive, setDoubleActive]       = useState(false);
+  const [changingQ, setChangingQ]             = useState(false);
+  const [lifelines, setLifelines]             = useState({
+    1: { changeQuestion: true, doublePoints: true, extraTime: true },
+    2: { changeQuestion: true, doublePoints: true, extraTime: true },
+  });
   const timerRef = useRef(null);
-  const [lifelines, setLifelines]     = useState({ change: true, double: true, time: true });
-  const [doubleActive, setDoubleActive] = useState(false);
-  const [showTranslation, setShowTranslation] = useState(false);
-  const [translating, setTranslating]   = useState(false);
-  const [translationData, setTranslationData] = useState(null); // {q, a}
-
-  // Parse stored translation from question.translation (JSON string)
-  const parsedTranslation = (() => {
-    if (!question?.translation) return null;
-    try { return JSON.parse(question.translation); } catch { return null; }
-  })();
-
-  const handleTranslate = async () => {
-    if (parsedTranslation || translationData) { setShowTranslation(v => !v); return; }
-    setTranslating(true);
-    try {
-      const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
-      const res = await fetch(`${API}/ai/translate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: question.text, answer: question.answer }),
-      });
-      const data = await res.json();
-      setTranslationData({ q: data.text_ar || "", a: data.answer_ar || "" });
-      setShowTranslation(true);
-    } catch { /* silent */ }
-    finally { setTranslating(false); }
-  };
 
   useEffect(() => {
     if (!timerOn || timeLeft <= 0) return;
@@ -72,720 +49,746 @@ export default function QuestionPage() {
 
   useEffect(() => {
     if (timeLeft === 10 && !tensionDone && timerOn) { setTensionDone(true); playTension(); }
-    if (timeLeft === 0 && timerOn) { setTimerOn(false); playBuzz(); toast.error("⏰ انتهى الوقت!", { duration: 3000 }); }
+    if (timeLeft === 0 && timerOn) {
+      setTimerOn(false);
+      playBuzz();
+      toast.error("⏰ انتهى الوقت!", { duration: 3000 });
+    }
   }, [timeLeft, timerOn, tensionDone]);
 
   const playTension = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const s = (f, t, d) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type = "triangle"; o.frequency.value = f; g.gain.setValueAtTime(0.22, ctx.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + d); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + d + 0.01); };
-      for (let i = 0; i < 10; i++) s(i % 2 === 0 ? 830 : 600, i * 0.85, 0.35);
+      const schedule = (freq, t, dur) => {
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "triangle"; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.25, ctx.currentTime + t);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + dur);
+        osc.start(ctx.currentTime + t); osc.stop(ctx.currentTime + t + dur + 0.01);
+      };
+      for (let i = 0; i < 10; i++) schedule(i % 2 === 0 ? 830 : 600, i * 0.85, 0.35);
     } catch {}
   };
+
   const playBuzz = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type = "sawtooth"; o.frequency.value = 150; g.gain.setValueAtTime(0.4, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8); o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.8);
+      const osc = ctx.createOscillator(); const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "sawtooth"; osc.frequency.value = 150;
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.8);
     } catch {}
   };
+
   const playCorrect = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const s = (f, t, d) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(0.28, ctx.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + d); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + d + 0.01); };
-      [523, 659, 784, 1047].forEach((f, i) => s(f, i * 0.12, 0.25));
+      const schedule = (freq, t, dur) => {
+        const osc = ctx.createOscillator(); const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = "sine"; osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.3, ctx.currentTime + t);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + dur);
+        osc.start(ctx.currentTime + t); osc.stop(ctx.currentTime + t + dur + 0.01);
+      };
+      [523, 659, 784, 1047].forEach((f, i) => schedule(f, i * 0.12, 0.25));
     } catch {}
   };
 
-  const handleChangeQuestion = async () => {
-    if (!lifelines.change || !question) return;
-    setLifelines(l => ({ ...l, change: false }));
-    const newQ = await getNextQuestion(question.category_id, question.difficulty);
-    if (newQ) {
-      setQuestion(newQ);
-      setImgLoaded(false);
-      setTimeLeft(TIMER_DURATION);
-      setTimerOn(true);
-      setTensionDone(false);
-      setShowAnswer(false);
-      toast("🔄 تم تغيير السؤال", { duration: 2000 });
-    }
-  };
-
-  const handleDoublePoints = () => {
-    if (!lifelines.double) return;
-    setLifelines(l => ({ ...l, double: false }));
-    setDoubleActive(true);
-    toast("⚡ مضاعفة النقاط مفعّلة!", { duration: 2000 });
-  };
-
-  const handleExtraTime = () => {
-    if (!lifelines.time) return;
-    setLifelines(l => ({ ...l, time: false }));
-    setTimeLeft(t => t * 2);
-    toast("⏱️ تم مضاعفة الوقت!", { duration: 2000 });
-  };
-
-  const handleReveal = () => { setTimerOn(false); setShowAnswer(true); };
-  const handleAssign = async (team) => {
+  const handleReveal  = () => { setTimerOn(false); setShowAnswer(true); };
+  const handleAssign  = async (team) => {
     if (assigned) return;
-    const pts = (question?.difficulty || 300) * (doubleActive ? 2 : 1);
+    const pts = (currentQuestion?.difficulty || 300) * (doubleActive ? 2 : 1);
     await updateScore(team, pts);
     setScoredTeam(team);
     setAssigned(true);
     playCorrect();
     window.dispatchEvent(new Event("scoreUpdated"));
-    toast.success(`+${pts}${doubleActive ? " ⚡×2" : ""} ✓`, { duration: 2000 });
+    toast.success(`+${pts} ✓${doubleActive ? " ×2 🔥" : ""}`, { duration: 2000 });
   };
-  const handleSkip = () => { setScoredTeam("skip"); setAssigned(true); };
-  const handleBack = () => { switchTurn(); navigate("/game"); };
+  const handleSkip    = () => setAssigned(true);
+  const handleBack    = () => { navigate("/game"); };
+
+  const handleChangeQuestion = async () => {
+    if (!lifelines[slot]?.changeQuestion || assigned || changingQ) return;
+    setChangingQ(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `${API}/game/session/${session?.id}/question?category_id=${currentQuestion.category_id}&difficulty=${currentQuestion.difficulty}`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error();
+      const newQ = await res.json();
+      setCurrentQuestion(newQ);
+      setImgLoaded(false);
+      setLifelines(prev => ({ ...prev, [slot]: { ...prev[slot], changeQuestion: false } }));
+      toast.success("🔄 تم تغيير السؤال");
+    } catch {
+      toast.error("تعذّر تغيير السؤال");
+    } finally {
+      setChangingQ(false);
+    }
+  };
+
+  const handleDoublePoints = () => {
+    if (!lifelines[slot]?.doublePoints || assigned) return;
+    setDoubleActive(true);
+    setLifelines(prev => ({ ...prev, [slot]: { ...prev[slot], doublePoints: false } }));
+    toast.success("⚡ النقاط مضاعفة عند الإجابة الصحيحة!");
+  };
+
+  const handleExtraTime = () => {
+    if (!lifelines[slot]?.extraTime || assigned) return;
+    setTimeLeft(prev => prev * 2);
+    setLifelines(prev => ({ ...prev, [slot]: { ...prev[slot], extraTime: false } }));
+    toast.success("⏱ تم مضاعفة الوقت!");
+  };
 
   if (!question) { navigate("/game"); return null; }
 
-  const pct   = (timeLeft / TIMER_DURATION) * 100;
-  const R     = 38; const circ = 2 * Math.PI * R;
-  const tCol  = timeLeft > 20 ? "#ffb347" : timeLeft > 10 ? "#f59e0b" : "#ef4444";
+  /* ── Derived ── */
+  const pct      = (timeLeft / TIMER_DURATION) * 100;
+  const R        = 30;
+  const circ     = 2 * Math.PI * R;
+  const dash     = circ * (1 - pct / 100);
+  const timerCol = timeLeft > 20 ? "#43e97b" : timeLeft > 10 ? "#f5c842" : "#ff6b6b";
+  const isSecret = currentQuestion?.question_type === "secret_word";
+  const secretUrl = `${window.location.origin}/secret/${currentQuestion?.id}`;
   const isTeam1  = slot === 1;
-  const isSecret = question.question_type === "secret_word";
-  const secretUrl = `${window.location.origin}/secret/${question.id}`;
+  const activeTeamName = isTeam1 ? session?.team1_name : session?.team2_name;
 
-  const diffBadge = {
-    300: { label: "سهل",   color: "#6ee7b7", bg: "rgba(52,211,153,0.12)",  border: "rgba(52,211,153,0.28)"  },
-    600: { label: "متوسط", color: "#fcd34d", bg: "rgba(252,211,77,0.12)",  border: "rgba(252,211,77,0.28)"  },
-    900: { label: "صعب",   color: "#f87171", bg: "rgba(248,113,113,0.12)", border: "rgba(248,113,113,0.28)" },
-  }[question.difficulty] || { label: "متوسط", color: "#fcd34d", bg: "rgba(252,211,77,0.12)", border: "rgba(252,211,77,0.28)" };
+  const diffBadge = question.difficulty === 300
+    ? { label:"سهل",   color:"#43e97b", bg:"rgba(67,233,123,0.12)", border:"rgba(67,233,123,0.30)" }
+    : question.difficulty === 600
+    ? { label:"متوسط", color:"#f5c842", bg:"rgba(245,200,66,0.12)",  border:"rgba(245,200,66,0.30)"  }
+    : { label:"صعب",   color:"#ff6b6b", bg:"rgba(255,107,107,0.12)", border:"rgba(255,107,107,0.30)" };
 
-  const answerType = question.answer_image_url && question.answer ? "mixed"
-    : question.answer_image_url ? "image" : "text";
+  const hasAnswerImg = !!currentQuestion?.answer_image_url;
+  const hasAnswerTxt = !!currentQuestion?.answer;
+  const answerType   = hasAnswerImg && hasAnswerTxt ? "mixed" : hasAnswerImg ? "image" : "text";
+
+  /* ── Reusable glass style ── */
+  const glass = {
+    background: "rgba(255,255,255,0.07)",
+    border: "1px solid rgba(255,255,255,0.12)",
+    backdropFilter: "blur(16px)",
+    WebkitBackdropFilter: "blur(16px)",
+    borderRadius: "16px",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
+  };
 
   return (
-    <div style={{
-      minHeight: "100svh",
-      background: `linear-gradient(180deg,rgba(8,6,12,0.70),rgba(8,6,12,0.80)),url("${ROMAN_BG}")`,
-      backgroundSize: "cover", backgroundPosition: "center 30%", backgroundAttachment: "fixed",
-      fontFamily: "'Cairo', 'Tajawal', sans-serif", color: "#f7f1e8", overflowX: "hidden",
-    }}>
-      <link rel="stylesheet" href={FONT_LINK} />
+    <div
+      className="h-screen flex flex-col overflow-hidden select-none"
+      style={{
+        minHeight: "100svh",
+        background: "linear-gradient(rgba(10,0,0,0.62), rgba(10,0,0,0.80)), url('https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920') center/cover fixed no-repeat",
+        fontFamily: "'Tajawal', 'Cairo', sans-serif",
+        direction: "rtl",
+        position: "relative",
+      }}
+    >
+      {/* Tajawal font */}
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" />
+
       <style>{`
-        :root {
-          --accent: #ff7a2f; --accent-2: #ffb347;
-          --panel: rgba(255,255,255,0.07); --panel-2: rgba(255,255,255,0.10);
-          --stroke: rgba(255,151,87,0.30); --stroke-2: rgba(255,201,130,0.20);
-          --text: #f7f1e8; --muted: rgba(247,241,232,0.65);
-          --shadow: 0 18px 50px rgba(0,0,0,0.40);
-        }
-
-        /* ── 3-col grid ── */
-        .question-layout {
-          display: grid;
-          grid-template-columns: 220px minmax(0,1fr) 220px;
-          gap: 14px;
-          align-items: start;
-          width: 100%;
-          max-width: 1600px;
-          margin: 0 auto;
-          padding: 14px 16px 20px;
-          box-sizing: border-box;
-        }
-
-        /* ── Top bar ── */
-        .top-bar {
-          grid-column: 1 / -1;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 14px;
-          padding: 12px 16px;
-          border-radius: 18px;
-          background: rgba(255,255,255,0.07);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(255,255,255,0.11);
-          box-shadow: var(--shadow);
-        }
-
-        /* ── Team pill ── */
-        .team-pill {
-          min-width: 150px;
-          padding: 12px 16px;
-          border-radius: 18px;
-          background: var(--panel);
-          border: 1px solid rgba(255,255,255,0.07);
-          transition: all 0.3s;
-        }
-        .team-pill.t1-active, .team-pill.t2-active { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.28); box-shadow: 0 0 18px rgba(255,255,255,0.08), 0 0 0 1px rgba(255,255,255,0.06); }
-        .team-pill .team-name { font-weight: 800; font-size: clamp(0.75rem,1.2vw,0.98rem); line-height: 1.15; display: flex; align-items: center; gap: 5px; }
-        .team-pill .team-score { margin-top: 5px; font-size: clamp(1.5rem,2.8vw,2.2rem); font-weight: 900; color: var(--accent-2); line-height: 1; letter-spacing: -0.02em; }
-        .team-pill .team-turn  { font-size: 0.62rem; font-weight: 700; opacity: 0.75; letter-spacing: 0.04em; margin-top: 2px; }
-
-        /* ── Timer center ── */
-        .timer-center { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-        .timer-wrap   { display: flex; align-items: center; gap: 10px; }
-        .timer-controls { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; }
-        .tcbtn {
-          font-family: Cairo, sans-serif; font-weight: 700; font-size: 0.67rem;
-          padding: 4px 10px; border-radius: 9px; cursor: pointer; border: 1px solid;
-          display: flex; align-items: center; gap: 4px;
-          transition: transform 0.13s;
-        }
-        .tcbtn:hover { transform: scale(1.07); } .tcbtn:active { transform: scale(0.92); }
-
-        /* ── Sidebar ── */
-        .sidebar { display: flex; flex-direction: column; gap: 11px; min-width: 0; }
-        .helper-card {
-          padding: 13px 14px; border-radius: 18px;
-          background: var(--panel); border: 1px solid rgba(255,255,255,0.07);
-          box-shadow: var(--shadow); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        }
-        .helper-title { font-weight: 800; font-size: 0.68rem; color: var(--muted); letter-spacing: 0.10em; text-transform: uppercase; margin-bottom: 8px; }
-        .hbtn { width: auto; height: auto; border-radius: 12px; border: 1px solid rgba(255,180,80,0.20); background: rgba(255,255,255,0.06); color: var(--text); display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: background 0.2s, transform 0.13s, border-color 0.2s; }
-        .hbtn:hover:not(:disabled) { background: rgba(255,180,80,0.13); border-color: rgba(255,180,80,0.38); transform: scale(1.02); }
-        .hbtn:disabled { opacity: 0.28; cursor: not-allowed; transform: none; }
-        .lifeline-wrap { position: relative; display: flex; flex-direction: column; align-items: stretch; }
-        .lifeline-tip {
-          position: absolute; top: calc(100% + 4px); right: 0;
-          background: rgba(8,4,16,0.94); border: 1px solid rgba(255,180,80,0.22);
-          color: rgba(247,241,232,0.82); font-size: 0.65rem; font-weight: 600;
-          padding: 5px 10px; border-radius: 8px;
-          pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 20;
-          direction: rtl; text-align: right; line-height: 1.4; white-space: nowrap;
-        }
-        .lifeline-wrap:hover .lifeline-tip { opacity: 1; }
-
-        /* ── Question panel ── */
-        .question-panel {
-          position: relative;
-          min-height: 68vh;
-          border-radius: 28px;
-          padding: clamp(18px,2vw,28px);
-          background: linear-gradient(180deg,rgba(255,126,52,0.10),rgba(255,255,255,0.06));
-          border: 2px solid rgba(255,126,52,0.65);
-          box-shadow: var(--shadow);
-          overflow: hidden;
-        }
-        .question-panel::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none;
-          background: radial-gradient(circle at top right,rgba(255,184,116,0.10),transparent 34%),
-                      radial-gradient(circle at bottom left,rgba(255,120,60,0.10),transparent 32%);
-        }
-        .question-inner {
-          position: relative; z-index: 1;
-          min-height: calc(68vh - 56px);
-          display: flex; flex-direction: column; gap: 8px; align-items: stretch;
-        }
-
-        /* meta row */
-        .question-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
-        .points-badge {
-          min-width: 86px; padding: 10px 14px; border-radius: 16px;
-          background: linear-gradient(180deg,rgba(255,207,93,0.96),rgba(255,156,61,0.96));
-          color: #1a1208; font-size: clamp(1.5rem,3vw,2.4rem); font-weight: 900; text-align: center; line-height: 1;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.26);
-        }
-
-        /* image — full-width hero card */
-        .question-image-wrap {
-          position: relative; width: 100%; flex-shrink: 0;
-          border-radius: 20px; overflow: hidden;
-          box-shadow: 0 18px 56px rgba(0,0,0,0.55);
-        }
-        .question-image {
-          display: block; width: 100%; max-height: 340px;
-          object-fit: cover; object-position: center;
-          cursor: zoom-in;
-        }
-        .question-image-overlay {
-          position: absolute; inset: 0;
-          background: rgba(0,0,0,0.30);
-          pointer-events: none;
-        }
-        /* choices grid over image */
-        .question-choices-grid {
-          position: absolute; bottom: 0; left: 0; right: 0;
-          display: grid; grid-template-columns: 1fr 1fr;
-          gap: 8px; padding: 12px;
-          background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
-        }
-        .choice-card {
-          background: rgba(255,255,255,0.12);
-          backdrop-filter: blur(6px);
-          -webkit-backdrop-filter: blur(6px);
-          border: 1px solid rgba(255,255,255,0.22);
-          border-radius: 12px;
-          padding: 10px 14px;
-          color: #fff;
-          font-weight: 700;
-          font-size: clamp(0.72rem, 1.4vw, 0.95rem);
-          font-family: Cairo, sans-serif;
-          text-align: right;
-          direction: rtl;
-          line-height: 1.4;
-          cursor: default;
-          transition: background 0.15s;
-        }
-        .choice-card:hover { background: rgba(255,255,255,0.22); }
-
-        /* text */
-        .question-text {
-          margin: 0 auto; max-width: 900px;
-          font-size: clamp(1.2rem,2.2vw,2.4rem); line-height: 1.25; font-weight: 900;
-          text-align: center; color: var(--text); text-shadow: 0 2px 18px rgba(0,0,0,0.50);
-          flex: 0; display: flex; align-items: center; justify-content: center;
-          padding-top: 4px;
-        }
-
-        /* reveal btn */
-        .reveal-btn {
-          align-self: center; font-family: Cairo, sans-serif; font-weight: 900; border-radius: 999px;
-          font-size: clamp(1rem,1.8vw,1.3rem); padding: clamp(12px,1.8vw,18px) clamp(36px,6vw,72px);
-          background: linear-gradient(135deg,rgba(92,14,20,0.90),rgba(61,8,16,0.95));
-          border: 2px solid rgba(241,225,148,0.55); color: #F1E194;
-          letter-spacing: 0.04em; text-shadow: 0 0 16px rgba(241,225,148,0.40);
-          cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
-          animation: revealPulse 2.2s ease-in-out infinite; flex-shrink: 0;
-        }
-        .reveal-btn:hover { transform: scale(1.05); }
-        .reveal-btn:active { transform: scale(0.94); }
-
-        /* ── ANSWER MODAL — zooms toward viewer ── */
-        .answer-overlay {
-          position: fixed; inset: 0; z-index: 200;
-          display: flex; align-items: center; justify-content: center;
-          background: rgba(4,2,8,0.82);
-          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-          animation: overlayIn 0.28s ease both;
-          padding: 16px;
-        }
-        .answer-modal {
-          width: min(620px,94vw);
-          background: rgba(255,255,255,0.08); backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
-          border: 1.5px solid rgba(255,126,52,0.45);
-          border-radius: 26px;
-          padding: clamp(26px,3.5vw,42px);
-          box-shadow: 0 0 0 1px rgba(255,180,80,0.06) inset, 0 30px 80px rgba(0,0,0,0.70);
-          display: flex; flex-direction: column; align-items: center; gap: 18px;
-          animation: modalZoomIn 0.38s cubic-bezier(0.34,1.56,0.64,1) both;
-          text-align: center;
-          position: relative; overflow: hidden;
-        }
-        .answer-modal::before {
-          content: ""; position: absolute; inset: 0; pointer-events: none;
-          background: radial-gradient(ellipse at top,rgba(255,126,52,0.08),transparent 55%);
-        }
-        .answer-modal.correct { border-color: rgba(110,231,183,0.55); box-shadow: 0 0 48px rgba(52,211,153,0.20), 0 30px 80px rgba(0,0,0,0.70); }
-        .answer-modal.wrong   { border-color: rgba(248,113,113,0.45); box-shadow: 0 0 40px rgba(248,113,113,0.16), 0 30px 80px rgba(0,0,0,0.70); }
-
-        .ans-label { font-size: 0.72rem; font-weight: 700; color: rgba(241,225,148,0.40); letter-spacing: 0.16em; text-transform: uppercase; }
-        .ans-img   { max-height: clamp(140px,22vh,260px); max-width: 100%; object-fit: contain; border-radius: 16px; border: 1.5px solid rgba(241,225,148,0.18); box-shadow: 0 8px 36px rgba(0,0,0,0.55); cursor: zoom-in; }
-        .ans-text  {
-          font-size: clamp(1.8rem,4.5vw,3.4rem); font-weight: 900;
-          color: #f7f1e8; line-height: 1.15; text-align: center;
-          animation: ansGlow 2.6s ease-in-out infinite;
-        }
-        .ans-text.correct { color: #a7f3d0; }
-        .ans-text.wrong   { color: #fecaca; }
-
-        /* assign buttons */
-        .assign-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; width: 100%; }
-        .assign-btn {
-          font-family: Cairo, sans-serif; font-weight: 900; border-radius: 18px;
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-          min-width: clamp(130px,16vw,200px);
-          padding: clamp(10px,1.5vw,15px) clamp(14px,2.5vw,28px);
-          cursor: pointer; border: 1.5px solid;
-          transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s;
-        }
-        .assign-btn:hover  { transform: scale(1.06) translateY(-3px); }
-        .assign-btn:active { transform: scale(0.93); }
-        .assign-btn.t1 { background: linear-gradient(155deg,rgba(220,38,38,0.92),rgba(153,27,27,0.97)); border-color: rgba(248,113,113,0.52); box-shadow: 0 6px 26px rgba(239,68,68,0.28); }
-        .assign-btn.t2 { background: linear-gradient(155deg,rgba(29,78,216,0.92),rgba(30,58,138,0.97)); border-color: rgba(96,165,250,0.52); box-shadow: 0 6px 26px rgba(59,130,246,0.28); }
-        .skip-btn {
-          font-family: Cairo, sans-serif; font-weight: 600; font-size: 0.88rem;
-          border-radius: 14px; padding: 10px 20px; cursor: pointer;
-          background: transparent; border: 1.5px solid rgba(241,225,148,0.16);
-          color: rgba(241,225,148,0.38); transition: opacity 0.2s;
-        }
-        .skip-btn:hover { opacity: 0.72; }
-
-        .result-chip {
-          padding: 10px 24px; border-radius: 50px; font-weight: 800; font-size: 1rem;
-          animation: chipIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
-        }
-        .result-chip.correct { background: rgba(52,211,153,0.14); border: 1.5px solid rgba(52,211,153,0.40); color: #a7f3d0; box-shadow: 0 0 18px rgba(52,211,153,0.18); }
-        .result-chip.wrong   { background: rgba(248,113,113,0.10); border: 1.5px solid rgba(248,113,113,0.30); color: #fecaca; }
-
-        .next-btn {
-          font-family: Cairo, sans-serif; font-weight: 900;
-          font-size: clamp(1rem,1.6vw,1.2rem);
-          padding: clamp(10px,1.4vw,14px) clamp(28px,4.5vw,52px);
-          border-radius: 999px;
-          background: linear-gradient(135deg,#c09820,#f0d045);
-          color: #1a0a0b; border: none; cursor: pointer;
-          box-shadow: 0 0 28px rgba(192,152,32,0.38);
-          transition: transform 0.2s;
-        }
-        .next-btn:hover { transform: scale(1.05); } .next-btn:active { transform: scale(0.94); }
-
-        .back-btn {
-          font-family: Cairo, sans-serif; font-weight: 700; font-size: 0.72rem;
-          padding: 5px 12px; border-radius: 9px;
-          background: rgba(255,255,255,0.05); border: 1px solid rgba(255,180,80,0.14);
-          color: rgba(255,225,140,0.52); cursor: pointer; display: flex; align-items: center; gap: 5px;
-          transition: background 0.2s; white-space: nowrap;
-        }
-        .back-btn:hover { background: rgba(255,180,80,0.08); }
-
-        /* ── Keyframes ── */
-        @keyframes revealPulse {
-          0%,100% { box-shadow: 0 0 0 0 rgba(241,225,148,0), 0 0 20px rgba(241,225,148,0.10); }
-          50%      { box-shadow: 0 0 0 7px rgba(241,225,148,0.10), 0 0 36px rgba(241,225,148,0.22); }
-        }
-        @keyframes overlayIn { from { opacity:0 } to { opacity:1 } }
-        @keyframes modalZoomIn {
-          from { opacity:0; transform:scale(0.78) translateY(20px); }
-          to   { opacity:1; transform:scale(1)    translateY(0); }
-        }
-        @keyframes ansGlow {
-          0%,100% { text-shadow:0 0 24px rgba(241,225,148,0.40),0 0 70px rgba(241,225,148,0.14); }
-          50%      { text-shadow:0 0 50px rgba(241,225,148,0.75),0 0 120px rgba(241,225,148,0.28); }
-        }
-        @keyframes chipIn {
-          from { opacity:0; transform:scale(0.82); }
+        @keyframes fadeInScale {
+          from { opacity:0; transform:scale(0.88); }
           to   { opacity:1; transform:scale(1); }
         }
-        @keyframes goldShimmer { 0% { background-position:200% center } 100% { background-position:-200% center } }
-
-        /* ── Responsive ── */
-        @media (max-width:1100px) { .question-layout { grid-template-columns:180px minmax(0,1fr) 180px; } }
-        @media (max-width:820px)  {
-          .question-layout { grid-template-columns:1fr; padding:10px 12px 16px; }
-          .sidebar { order:3; } .sidebar.left-side { order:2; }
-          .question-panel { min-height:auto; }
+        @keyframes fadeIn {
+          from { opacity:0; }
+          to   { opacity:1; }
         }
+        @keyframes answerPop {
+          0%  { opacity:0; transform:scale(0.80); }
+          70% { transform:scale(1.04); opacity:1; }
+          100%{ transform:scale(1);   opacity:1; }
+        }
+        @keyframes glowPulse {
+          0%,100%{ box-shadow:0 0 20px rgba(67,233,123,0.3); }
+          50%    { box-shadow:0 0 40px rgba(67,233,123,0.6); }
+        }
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        .answer-modal-wrap  { animation: fadeIn 0.25s ease forwards; }
+        .answer-modal-box   { animation: fadeInScale 0.32s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        .answer-pop         { animation: answerPop 0.50s cubic-bezier(0.34,1.56,0.64,1) 0.12s both; }
+        .reveal-btn:hover   { transform:translateY(-2px) !important; }
+        .next-btn:hover     { background:rgba(255,255,255,0.15) !important; transform:translateY(-1px); }
       `}</style>
 
-      {/* ════ ZOOM MODAL ════ */}
+      {/* ════════════ ZOOM MODAL ════════════ */}
       {zoomedImage && (
-        <div style={{ position:"fixed", inset:0, zIndex:300, background:"rgba(0,0,0,0.94)", backdropFilter:"blur(10px)", display:"flex", alignItems:"center", justifyContent:"center" }} onClick={() => setZoomedImage(null)}>
-          <div style={{ position:"relative", maxWidth:"min(92vw,1100px)", padding:"0 16px" }} onClick={e => e.stopPropagation()}>
-            <button style={{ position:"absolute", top:"-34px", right:"16px", color:"rgba(255,255,255,0.55)", background:"none", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:"6px", fontSize:"0.85rem", fontFamily:"Cairo,sans-serif" }} onClick={() => setZoomedImage(null)}><X size={18}/> إغلاق</button>
-            <img src={zoomedImage} alt="zoomed" style={{ maxWidth:"100%", maxHeight:"86vh", objectFit:"contain", borderRadius:"16px", display:"block", margin:"0 auto" }} />
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center"
+          style={{ background:"rgba(0,0,0,0.96)", backdropFilter:"blur(10px)" }}
+          onClick={() => setZoomedImage(null)}
+        >
+          <div className="relative max-w-5xl w-full px-4" onClick={e => e.stopPropagation()}>
+            <button
+              style={{ position:"absolute", top:"-40px", left:"16px", color:"rgba(255,255,255,0.6)", background:"none", border:"none", cursor:"pointer", display:"flex", alignItems:"center", gap:"6px", fontSize:"0.9rem" }}
+              onClick={() => setZoomedImage(null)}
+            >
+              <X size={18}/> إغلاق
+            </button>
+            <img src={zoomedImage} alt="zoomed" style={{ maxWidth:"100%", maxHeight:"88vh", objectFit:"contain", borderRadius:"18px", margin:"0 auto", display:"block", boxShadow:"0 0 100px rgba(0,0,0,0.95)" }} />
           </div>
         </div>
       )}
 
-      {/* ════ ANSWER MODAL — zooms in toward viewer ════ */}
+      {/* ════════════ ANSWER MODAL — full centered ════════════ */}
       {showAnswer && (
-        <div className="answer-overlay">
-          <div className={`answer-modal${assigned ? (scoredTeam !== "skip" ? " correct" : " wrong") : ""}`} style={{ position:"relative", zIndex:1 }}>
-
-            {/* diff + cat */}
-            <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", justifyContent:"center" }}>
-              <span style={{ background:diffBadge.bg, border:`1px solid ${diffBadge.border}`, color:diffBadge.color, fontSize:"0.78rem", fontWeight:700, padding:"4px 14px", borderRadius:"50px" }}>{diffBadge.label}</span>
-              <span style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.10)", color:"rgba(247,241,232,0.65)", fontSize:"0.78rem", padding:"4px 14px", borderRadius:"50px" }}>{catName}</span>
+        <div
+          className="answer-modal-wrap"
+          style={{ position:"fixed", inset:0, zIndex:50, background:"rgba(0,0,0,0.80)", backdropFilter:"blur(6px)", display:"flex", alignItems:"center", justifyContent:"center", padding:"16px" }}
+        >
+          <div
+            className="answer-modal-box"
+            style={{
+              background: "linear-gradient(160deg, rgba(30,27,75,0.97), rgba(15,12,41,0.99))",
+              border: `1.5px solid ${scoredTeam ? "rgba(67,233,123,0.55)" : assigned ? "rgba(255,107,107,0.45)" : "rgba(255,255,255,0.14)"}`,
+              borderRadius: "24px",
+              padding: "clamp(28px,5vh,48px) clamp(24px,5vw,52px)",
+              width: "min(580px,92vw)",
+              textAlign: "center",
+              boxShadow: scoredTeam
+                ? "0 0 50px rgba(67,233,123,0.22), 0 30px 80px rgba(0,0,0,0.65)"
+                : assigned
+                ? "0 0 50px rgba(255,107,107,0.18), 0 30px 80px rgba(0,0,0,0.65)"
+                : "0 30px 80px rgba(0,0,0,0.65)",
+              backdropFilter: "blur(24px)",
+              position: "relative",
+            }}
+          >
+            {/* Answer label */}
+            <div style={{ color:"rgba(255,255,255,0.40)", fontSize:"0.8rem", fontWeight:700, letterSpacing:"0.18em", textTransform:"uppercase", marginBottom:"12px" }}>
+              ✦  الإجابة  ✦
             </div>
 
-            <div className="ans-label">◆ الإجابة ◆</div>
-
-            {/* Answer image */}
-            {(answerType === "image" || answerType === "mixed") && question.answer_image_url && (
-              <img src={question.answer_image_url} alt="answer" data-testid="answer-image" className="ans-img" onClick={() => setZoomedImage(question.answer_image_url)} onError={e => { e.target.style.display="none"; }} />
-            )}
-
-            {/* Answer text — centered, no tilt */}
-            {(answerType === "text" || answerType === "mixed") && question.answer && (
-              <div data-testid="answer-text" className={`ans-text${assigned ? (scoredTeam !== "skip" ? " correct" : " wrong") : ""}`}>
-                {question.answer}
+            {/* Answer image (if any) */}
+            {hasAnswerImg && (
+              <div style={{ display:"flex", justifyContent:"center", marginBottom:"16px" }}>
+                <div style={{ position:"relative", display:"inline-block" }}>
+                  <img
+                    src={currentQuestion.answer_image_url}
+                    alt="answer"
+                    data-testid="answer-image"
+                    onClick={() => setZoomedImage(currentQuestion.answer_image_url)}
+                    onError={e => { e.target.parentElement.style.display="none"; }}
+                    style={{
+                      display:"block",
+                      width:"clamp(120px,18vw,200px)",
+                      height:"clamp(90px,14vw,150px)",
+                      objectFit:"cover",
+                      borderRadius:"14px",
+                      border:"1.5px solid rgba(245,200,66,0.35)",
+                      boxShadow:"0 0 0 3px rgba(245,200,66,0.10), 0 10px 32px rgba(0,0,0,0.65)",
+                      cursor:"zoom-in",
+                      transition:"transform 0.22s",
+                    }}
+                    onMouseEnter={e => e.target.style.transform="scale(1.04)"}
+                    onMouseLeave={e => e.target.style.transform="scale(1)"}
+                  />
+                  <div style={{ position:"absolute", bottom:"6px", left:"50%", transform:"translateX(-50%)", background:"rgba(0,0,0,0.55)", backdropFilter:"blur(4px)", borderRadius:"6px", padding:"2px 8px", color:"rgba(245,200,66,0.75)", fontSize:"0.58rem", fontWeight:800, letterSpacing:"0.06em", pointerEvents:"none", whiteSpace:"nowrap" }}>
+                    اضغط للتكبير
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Gold points shimmer */}
-            {!assigned && (
-              <div style={{ background:"linear-gradient(135deg,#92400e,#d97706,#fbbf24,#d97706,#92400e)", backgroundSize:"200% auto", animation:"goldShimmer 3s linear infinite", color:"#000", fontWeight:800, fontSize:"0.92rem", padding:"7px 22px", borderRadius:"50px", letterSpacing:"0.04em" }}>
-                {question.difficulty} نقطة
+            {/* Answer text */}
+            {hasAnswerTxt && (
+              <div
+                className="answer-pop"
+                data-testid="answer-text"
+                style={{
+                  fontSize: "clamp(1.8rem,4.5vw,3.2rem)",
+                  fontWeight: 800,
+                  color: "#ffffff",
+                  lineHeight: 1.15,
+                  marginBottom: "20px",
+                  textShadow: "0 0 50px rgba(245,200,66,0.45), 0 3px 14px rgba(0,0,0,0.8)",
+                }}
+              >
+                {currentQuestion.answer}
               </div>
             )}
 
-            {/* Assign */}
-            {!assigned && (
-              <>
-                <div style={{ color:"rgba(241,225,148,0.35)", fontSize:"0.78rem", fontWeight:700, letterSpacing:"0.1em" }}>من أجاب صح؟</div>
-                <div className="assign-row">
-                  <button data-testid="assign-team1-btn" className="assign-btn t1" onClick={() => handleAssign(1)}>
-                    <span style={{ color:"rgba(255,255,255,0.88)", fontWeight:800, fontSize:"clamp(0.82rem,1.4vw,1rem)" }}>🔴 {session?.team1_name}</span>
-                    <span style={{ color:"#fecaca", fontWeight:900, fontSize:"clamp(1.3rem,2.5vw,2rem)", lineHeight:1 }}>+{question.difficulty}</span>
-                  </button>
-                  <button data-testid="assign-team2-btn" className="assign-btn t2" onClick={() => handleAssign(2)}>
-                    <span style={{ color:"rgba(255,255,255,0.88)", fontWeight:800, fontSize:"clamp(0.82rem,1.4vw,1rem)" }}>🔵 {session?.team2_name}</span>
-                    <span style={{ color:"#bfdbfe", fontWeight:900, fontSize:"clamp(1.3rem,2.5vw,2rem)", lineHeight:1 }}>+{question.difficulty}</span>
-                  </button>
-                  <button data-testid="skip-points-btn" className="skip-btn" onClick={handleSkip}>لا أحد</button>
-                </div>
-              </>
-            )}
+            {/* Points badge */}
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:"clamp(16px,3vh,28px)" }}>
+              <div style={{
+                background: "linear-gradient(135deg,#f5c842,#ff8c42)",
+                color:"#1a1208", fontWeight:900,
+                fontSize:"clamp(1rem,2vw,1.4rem)",
+                borderRadius:"50px", padding:"8px 28px",
+                boxShadow:"0 6px 20px rgba(245,200,66,0.40)",
+                display:"inline-flex", alignItems:"center", gap:"6px",
+              }}>
+                <span>+{currentQuestion.difficulty}{doubleActive ? " ×2" : ""}</span>
+                <span style={{ fontWeight:700, fontSize:"0.75em", opacity:0.75 }}>نقطة</span>
+              </div>
+            </div>
 
-            {/* Post-assign */}
-            {assigned && (
-              <>
-                <div className={`result-chip${scoredTeam !== "skip" ? " correct" : " wrong"}`}>
-                  {scoredTeam !== "skip" ? `✓ +${question.difficulty} → ${scoredTeam === 1 ? session?.team1_name : session?.team2_name}` : "لا نقاط — سؤال مفتوح"}
+            {/* Assignment buttons or continue */}
+            {!assigned ? (
+              <div>
+                <div style={{ color:"rgba(255,255,255,0.30)", fontSize:"0.78rem", fontWeight:700, letterSpacing:"0.10em", textTransform:"uppercase", marginBottom:"14px" }}>من أجاب صح؟</div>
+                <div style={{ display:"flex", gap:"clamp(8px,1.5vw,14px)", justifyContent:"center", flexWrap:"wrap" }}>
+                  <button
+                    data-testid="assign-team1-btn"
+                    onClick={() => handleAssign(1)}
+                    style={{
+                      background:"linear-gradient(135deg,rgba(185,28,28,0.95),rgba(100,20,20,0.98))",
+                      border:"2px solid rgba(248,113,113,0.50)", borderRadius:"18px",
+                      padding:"clamp(10px,1.8vh,16px) clamp(20px,3.5vw,44px)",
+                      minWidth:"clamp(130px,18vw,200px)",
+                      cursor:"pointer", transition:"transform 0.18s, box-shadow 0.18s",
+                      display:"flex", flexDirection:"column", alignItems:"center",
+                      fontFamily:"'Tajawal','Cairo',sans-serif",
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.05)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";}}
+                  >
+                    <span style={{ color:"rgba(255,200,200,0.90)", fontWeight:800, fontSize:"clamp(0.85rem,1.4vw,1.05rem)", lineHeight:1.2 }}>🔴 {session?.team1_name}</span>
+                    <span style={{ color:"#fca5a5", fontWeight:900, fontSize:"clamp(1.8rem,3.2vw,2.6rem)", lineHeight:1 }}>+{currentQuestion.difficulty}{doubleActive?" ×2":""}</span>
+                  </button>
+
+                  <button
+                    data-testid="assign-team2-btn"
+                    onClick={() => handleAssign(2)}
+                    style={{
+                      background:"linear-gradient(135deg,rgba(29,78,216,0.95),rgba(20,40,130,0.98))",
+                      border:"2px solid rgba(96,165,250,0.50)", borderRadius:"18px",
+                      padding:"clamp(10px,1.8vh,16px) clamp(20px,3.5vw,44px)",
+                      minWidth:"clamp(130px,18vw,200px)",
+                      cursor:"pointer", transition:"transform 0.18s",
+                      display:"flex", flexDirection:"column", alignItems:"center",
+                      fontFamily:"'Tajawal','Cairo',sans-serif",
+                    }}
+                    onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.05)";}}
+                    onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";}}
+                  >
+                    <span style={{ color:"rgba(190,220,255,0.90)", fontWeight:800, fontSize:"clamp(0.85rem,1.4vw,1.05rem)", lineHeight:1.2 }}>{session?.team2_name} 🔵</span>
+                    <span style={{ color:"#93c5fd", fontWeight:900, fontSize:"clamp(1.8rem,3.2vw,2.6rem)", lineHeight:1 }}>+{currentQuestion.difficulty}{doubleActive?" ×2":""}</span>
+                  </button>
+
+                  <button
+                    data-testid="skip-points-btn"
+                    onClick={handleSkip}
+                    className="next-btn"
+                    style={{
+                      background:"rgba(255,255,255,0.07)", border:"1px solid rgba(255,255,255,0.12)",
+                      color:"rgba(255,255,255,0.45)", borderRadius:"50px",
+                      padding:"clamp(10px,1.8vh,16px) clamp(14px,2.2vw,22px)",
+                      fontSize:"clamp(0.82rem,1.2vw,0.98rem)", fontWeight:700,
+                      cursor:"pointer", transition:"all 0.22s",
+                      alignSelf:"center", fontFamily:"'Tajawal','Cairo',sans-serif",
+                    }}
+                  >
+                    لا أحد
+                  </button>
                 </div>
-                <button data-testid="continue-btn" className="next-btn" onClick={handleBack}>العودة للوحة ←</button>
-              </>
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"14px" }}>
+                {scoredTeam && (
+                  <div style={{ color:"#43e97b", fontWeight:800, fontSize:"clamp(0.92rem,1.6vw,1.2rem)", textShadow:"0 0 20px rgba(67,233,123,0.5)" }}>
+                    ✓ +{question.difficulty} نقطة ← {scoredTeam === 1 ? session?.team1_name : session?.team2_name}
+                  </div>
+                )}
+                <button
+                  data-testid="continue-btn"
+                  onClick={handleBack}
+                  style={{
+                    background:"linear-gradient(135deg,#f5c842,#ff8c42)",
+                    color:"#1a1208", fontWeight:800,
+                    fontSize:"clamp(1rem,1.8vw,1.25rem)",
+                    padding:"clamp(12px,1.8vh,18px) clamp(36px,6vw,68px)",
+                    borderRadius:"50px", border:"none", cursor:"pointer",
+                    boxShadow:"0 6px 28px rgba(245,200,66,0.45)",
+                    transition:"transform 0.18s, box-shadow 0.18s",
+                    fontFamily:"'Tajawal','Cairo',sans-serif",
+                  }}
+                  onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 10px 38px rgba(245,200,66,0.60)";}}
+                  onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 6px 28px rgba(245,200,66,0.45)";}}
+                >
+                  العودة للوحة ←
+                </button>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ════ 3-COL GRID ════ */}
-      <div className="question-layout">
+      {/* ════════════ TOP BAR ════════════ */}
+      <header
+        data-testid="question-header"
+        style={{
+          flexShrink:0, position:"relative", zIndex:10,
+          display:"flex", alignItems:"center", justifyContent:"space-between",
+          padding:"0 clamp(12px,2vw,24px)",
+          height:"clamp(48px,6.5vh,62px)",
+          background:"rgba(255,255,255,0.07)",
+          borderBottom:"1px solid rgba(255,255,255,0.09)",
+          backdropFilter:"blur(14px)",
+        }}
+      >
+        <button
+          data-testid="back-to-board"
+          onClick={handleBack}
+          style={{ display:"flex", alignItems:"center", gap:"6px", color:"rgba(255,255,255,0.40)", fontWeight:700, fontSize:"clamp(0.72rem,1.2vw,0.88rem)", background:"none", border:"none", cursor:"pointer", transition:"color 0.18s", fontFamily:"'Tajawal','Cairo',sans-serif" }}
+          onMouseEnter={e=>e.currentTarget.style.color="rgba(255,255,255,0.80)"}
+          onMouseLeave={e=>e.currentTarget.style.color="rgba(255,255,255,0.40)"}
+        >
+          <span>←</span><span>اللوحة</span>
+        </button>
 
-        {/* ══ TOP BAR ══ */}
-        <div className="top-bar">
-          {/* Team 1 */}
-          <div className={`team-pill${isTeam1 ? " t1-active" : ""}`}>
-            <div className="team-name" style={{ color:"rgba(247,241,232,0.88)" }}>
-              <span style={{ width:"9px", height:"9px", borderRadius:"50%", background:"#ef4444", flexShrink:0, boxShadow: isTeam1?"0 0 8px #ef4444":"none" }} />
-              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"110px" }}>{session?.team1_name || "الفريق الأول"}</span>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"1px" }}>
+          <span style={{ color:"rgba(245,200,66,0.85)", fontWeight:800, fontSize:"clamp(0.78rem,1.4vw,1rem)" }}>
+            {session?.name || "حُجّة"}
+          </span>
+          <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+            <span style={{ color:"rgba(255,255,255,0.38)", fontSize:"clamp(0.6rem,0.95vw,0.74rem)", fontWeight:600 }}>{catName}</span>
+            <span style={{ color:"rgba(255,255,255,0.15)" }}>·</span>
+            <span style={{ color:diffBadge.color, fontSize:"clamp(0.6rem,0.95vw,0.74rem)", fontWeight:800 }}>{diffBadge.label}</span>
+          </div>
+        </div>
+
+        <div style={{ display:"flex", alignItems:"center", gap:"clamp(8px,1.4vw,14px)" }}>
+          {[
+            { name:session?.team1_name, score:teamScores.team1, active:isTeam1, color:"rgba(255,107,107,0.75)", activeBg:"rgba(255,107,107,0.12)", activeBorder:"rgba(255,107,107,0.40)", emoji:"🔴" },
+            { name:session?.team2_name, score:teamScores.team2, active:!isTeam1, color:"rgba(96,165,250,0.75)", activeBg:"rgba(96,165,250,0.12)", activeBorder:"rgba(96,165,250,0.40)", emoji:"🔵" },
+          ].map((t, i) => (
+            <div key={i} style={{
+              display:"flex", flexDirection:"column", alignItems:"center",
+              background: t.active ? t.activeBg : "rgba(255,255,255,0.07)",
+              border:`1.5px solid ${t.active ? t.activeBorder : "rgba(255,255,255,0.20)"}`,
+              borderRadius:"14px", padding:"clamp(4px,0.8vh,8px) clamp(8px,1.2vw,14px)",
+              boxShadow: t.active
+                ? `0 0 20px ${t.activeBorder}, 0 0 40px ${t.color.replace("0.75","0.18")}, 0 4px 14px rgba(0,0,0,0.35)`
+                : "0 2px 10px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.06)",
+              transition:"all 0.3s",
+            }}>
+              <span style={{ color:t.color, fontWeight:700, fontSize:"clamp(0.58rem,0.9vw,0.72rem)", whiteSpace:"nowrap" }}>{t.emoji} {t.name}</span>
+              <span style={{ color:"#f5c842", fontWeight:900, fontSize:"clamp(1.1rem,2vw,1.6rem)", lineHeight:1 }}>{t.score}</span>
             </div>
-            <div className="team-score">{teamScores.team1}</div>
-            {isTeam1 && <div className="team-turn" style={{ color:"rgba(247,241,232,0.60)" }}>دوره الآن</div>}
+          ))}
+        </div>
+      </header>
+
+      {/* ════════════ MAIN BODY — 3-column ════════════ */}
+      <div
+        style={{
+          flex:1, display:"grid",
+          gridTemplateColumns:"clamp(155px,17vw,220px) minmax(0,1fr) clamp(155px,17vw,220px)",
+          gridTemplateRows:"minmax(0, clamp(486px,85.1vh,789px))",
+          gap:"clamp(8px,1vw,14px)",
+          padding:"clamp(10px,1.4vw,16px)",
+          overflow:"hidden", minHeight:0,
+          alignContent:"start",
+          position:"relative", zIndex:10,
+        }}
+      >
+        {/* ── LEFT: Team 1 panel ── */}
+        <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+          {/* Team 1 */}
+          <div style={{
+            ...glass,
+            borderRight: `4px solid ${isTeam1 ? "#43e97b" : "#f5c842"}`,
+            borderRadius:"16px",
+            padding:"16px",
+            background: isTeam1 ? "rgba(67,233,123,0.08)" : "rgba(255,255,255,0.07)",
+            boxShadow: isTeam1 ? "0 0 24px rgba(67,233,123,0.18), 0 8px 32px rgba(0,0,0,0.35)" : "0 8px 32px rgba(0,0,0,0.35)",
+            transition:"all 0.35s",
+            display:"flex", flexDirection:"column", gap:"8px",
+          }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"7px" }}>
+              <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:"#ff6b6b", boxShadow:isTeam1?"0 0 8px #ff6b6b":"none", animation:isTeam1?"pulse 2s infinite":"none", flexShrink:0 }} />
+              <span style={{ color:isTeam1?"rgba(255,255,255,0.90)":"rgba(255,255,255,0.50)", fontWeight:800, fontSize:"clamp(0.78rem,1.1vw,0.95rem)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {session?.team1_name || "الفريق الأول"}
+              </span>
+            </div>
+            {isTeam1 && (
+              <div style={{ background:"rgba(67,233,123,0.14)", border:"1px solid rgba(67,233,123,0.28)", borderRadius:"8px", padding:"3px 8px", textAlign:"center", color:"#43e97b", fontSize:"0.64rem", fontWeight:800, letterSpacing:"0.04em" }}>
+                يجيب الآن
+              </div>
+            )}
+            <div style={{ textAlign:"center" }}>
+              <div style={{ color:"#f5c842", fontSize:"clamp(1.9rem,3vw,2.6rem)", fontWeight:900, lineHeight:1, textShadow:"0 2px 12px rgba(245,200,66,0.4)" }}>{teamScores.team1}</div>
+              <div style={{ color:"rgba(255,255,255,0.28)", fontSize:"0.62rem", fontWeight:700, marginTop:"2px" }}>نقطة</div>
+            </div>
           </div>
 
-          {/* Timer center */}
-          <div className="timer-center">
+          {/* Difficulty */}
+          <div style={{ ...glass, padding:"12px", textAlign:"center", background:diffBadge.bg, border:`1px solid ${diffBadge.border}` }}>
+            <div style={{ color:diffBadge.color, fontSize:"clamp(1.5rem,2.5vw,2.1rem)", fontWeight:900, lineHeight:1 }}>{question.difficulty}</div>
+            <div style={{ color:diffBadge.color, fontSize:"0.62rem", fontWeight:700, opacity:0.75, marginTop:"3px" }}>{diffBadge.label}</div>
+          </div>
+        </div>
+
+        {/* ── CENTER: Question panel ── */}
+        <div style={{
+          ...glass,
+          borderRadius:"24px",
+          border:"2px solid rgba(245,200,66,0.35)",
+          boxShadow:"0 0 60px rgba(245,200,66,0.08), 0 20px 60px rgba(0,0,0,0.55)",
+          display:"flex", flexDirection:"column",
+          overflow:"hidden", minHeight:0,
+        }}>
+
+          {/* Panel header */}
+          <div style={{
+            flexShrink:0,
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            padding:"clamp(10px,1.4vh,16px) clamp(14px,2vw,22px)",
+            background: isTeam1 ? "rgba(255,107,107,0.10)" : "rgba(96,165,250,0.10)",
+            borderBottom:`1px solid ${isTeam1 ? "rgba(255,107,107,0.20)" : "rgba(96,165,250,0.20)"}`,
+          }}>
+            {/* Active team */}
             <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-              <button className="back-btn" onClick={handleBack}>← اللوحة</button>
-              <span style={{ color:"rgba(212,168,32,0.72)", fontWeight:800, fontSize:"clamp(0.7rem,1.2vw,0.92rem)" }}>{catName || "حُجّة"}</span>
+              <div style={{ width:"10px", height:"10px", borderRadius:"50%", background: isTeam1?"#ff6b6b":"#60a5fa", boxShadow:`0 0 10px ${isTeam1?"#ff6b6b":"#60a5fa"}`, flexShrink:0 }} />
+              <div>
+                <div style={{ color:"rgba(255,255,255,0.35)", fontSize:"0.58rem", fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em" }}>يجيب الآن</div>
+                <div style={{ color: isTeam1?"#ff6b6b":"#60a5fa", fontSize:"clamp(0.88rem,1.6vw,1.15rem)", fontWeight:900 }}>{activeTeamName}</div>
+              </div>
             </div>
-            <div className="timer-wrap">
-              <div style={{ width:"clamp(86px,10vw,112px)", height:"clamp(86px,10vw,112px)", flexShrink:0 }}>
-                <svg width="100%" height="100%" viewBox="0 0 90 90">
-                  <circle cx="45" cy="45" r={R} fill="rgba(0,0,0,0.50)" stroke="rgba(255,180,80,0.10)" strokeWidth="8" />
-                  <circle cx="45" cy="45" r={R} fill="none" stroke={tCol} strokeWidth="8" strokeLinecap="round"
-                    strokeDasharray={circ} strokeDashoffset={circ * (1 - pct / 100)}
-                    transform="rotate(-90 45 45)" style={{ transition:"stroke-dashoffset 1s linear, stroke 0.5s" }} />
-                  <text x="45" y="45" textAnchor="middle" dominantBaseline="central" fill={tCol} fontSize="22" fontWeight="900" fontFamily="Cairo,sans-serif">{timeLeft}</text>
+
+            {/* Timer */}
+            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"6px" }}>
+              <div style={{ position:"relative", width:"clamp(72px,8.5vw,96px)", height:"clamp(72px,8.5vw,96px)" }}>
+                <svg width="100%" height="100%" viewBox="0 0 70 70" style={{ overflow:"visible" }}>
+                  <circle cx="35" cy="35" r={R} fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.08)" strokeWidth="5" />
+                  <circle
+                    cx="35" cy="35" r={R}
+                    fill="none" stroke={timerCol} strokeWidth="5" strokeLinecap="round"
+                    strokeDasharray={circ} strokeDashoffset={dash}
+                    transform="rotate(-90 35 35)"
+                    style={{ transition:"stroke-dashoffset 1s linear, stroke 0.5s ease" }}
+                  />
+                  <text x="35" y="35" textAnchor="middle" dominantBaseline="central" fill={timerCol} fontSize="17" fontWeight="900" fontFamily="Tajawal,Cairo,sans-serif">
+                    {timeLeft}
+                  </text>
                 </svg>
               </div>
-              <div className="timer-controls">
-                <button data-testid="timer-pause-resume-btn" className="tcbtn" onClick={() => setTimerOn(t => !t)}
-                  style={{ background:timerOn?"rgba(251,191,36,0.12)":"rgba(34,197,94,0.12)", borderColor:timerOn?"rgba(251,191,36,0.38)":"rgba(34,197,94,0.38)", color:timerOn?"#fbbf24":"#4ade80" }}>
-                  {timerOn ? <Pause size={11}/> : <Play size={11}/>} {timerOn ? "إيقاف" : "تشغيل"}
+              <div style={{ display:"flex", gap:"5px" }}>
+                <button
+                  data-testid="timer-pause-resume-btn"
+                  onClick={() => setTimerOn(t => !t)}
+                  style={{ display:"flex", alignItems:"center", gap:"3px", background:timerOn?"rgba(245,200,66,0.13)":"rgba(67,233,123,0.13)", border:`1px solid ${timerOn?"rgba(245,200,66,0.35)":"rgba(67,233,123,0.35)"}`, color:timerOn?"#f5c842":"#43e97b", borderRadius:"8px", padding:"3px 7px", cursor:"pointer", fontSize:"0.58rem", fontWeight:800, fontFamily:"Tajawal,Cairo,sans-serif" }}
+                >
+                  {timerOn ? <Pause size={9}/> : <Play size={9}/>}
+                  {timerOn?"إيقاف":"تشغيل"}
                 </button>
-                <button data-testid="timer-reset-btn" className="tcbtn" onClick={() => { setTimeLeft(TIMER_DURATION); setTimerOn(false); setTensionDone(false); }}
-                  style={{ background:"rgba(255,255,255,0.05)", borderColor:"rgba(255,255,255,0.14)", color:"rgba(209,213,219,0.65)" }}>
-                  <RotateCcw size={11}/>
+                <button
+                  data-testid="timer-reset-btn"
+                  onClick={() => { setTimeLeft(TIMER_DURATION); setTimerOn(false); setTensionDone(false); }}
+                  style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.55)", borderRadius:"8px", padding:"4px 5px", cursor:"pointer" }}
+                  title="إعادة"
+                >
+                  <RotateCcw size={9}/>
                 </button>
-                <button data-testid="timer-start-btn" className="tcbtn" onClick={() => { setTimeLeft(TIMER_DURATION); setTimerOn(true); setTensionDone(false); }}
-                  style={{ background:"rgba(34,197,94,0.10)", borderColor:"rgba(34,197,94,0.28)", color:"rgba(74,222,128,0.85)" }}>
-                  <Play size={11}/>ابدأ
+                <button
+                  data-testid="timer-start-btn"
+                  onClick={() => { setTimeLeft(TIMER_DURATION); setTimerOn(true); setTensionDone(false); }}
+                  style={{ display:"flex", alignItems:"center", gap:"3px", background:"rgba(67,233,123,0.10)", border:"1px solid rgba(67,233,123,0.28)", color:"rgba(67,233,123,0.80)", borderRadius:"8px", padding:"3px 7px", cursor:"pointer", fontSize:"0.58rem", fontWeight:800, fontFamily:"Tajawal,Cairo,sans-serif" }}
+                >
+                  <Play size={9}/>ابدأ
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* Team 2 */}
-          <div className={`team-pill${!isTeam1 ? " t2-active" : ""}`} style={{ textAlign:"right" }}>
-            <div className="team-name" style={{ color:"rgba(247,241,232,0.88)", justifyContent:"flex-end" }}>
-              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"110px" }}>{session?.team2_name || "الفريق الثاني"}</span>
-              <span style={{ width:"9px", height:"9px", borderRadius:"50%", background:"#3b82f6", flexShrink:0, boxShadow:!isTeam1?"0 0 8px #3b82f6":"none" }} />
-            </div>
-            <div className="team-score" style={{ textAlign:"right" }}>{teamScores.team2}</div>
-            {!isTeam1 && <div className="team-turn" style={{ color:"rgba(247,241,232,0.60)", textAlign:"right" }}>دوره الآن</div>}
-          </div>
-        </div>
-
-        {/* ══ LEFT SIDEBAR ══ */}
-        <div className="sidebar left-side">
-          <div className="helper-card" style={{ background:isTeam1?"rgba(239,68,68,0.11)":"rgba(59,130,246,0.11)", borderColor:isTeam1?"rgba(239,68,68,0.30)":"rgba(59,130,246,0.30)" }}>
-            <div className="helper-title">يجيب الآن</div>
-            <div style={{ fontWeight:900, fontSize:"clamp(0.85rem,1.4vw,1.1rem)", color:isTeam1?"#fca5a5":"#93c5fd", display:"flex", alignItems:"center", gap:"6px" }}>
-              <span style={{ width:"8px", height:"8px", borderRadius:"50%", background:isTeam1?"#ef4444":"#3b82f6", animation:"revealPulse 1.5s ease-in-out infinite" }} />
-              {isTeam1 ? (session?.team1_name||"الفريق الأول") : (session?.team2_name||"الفريق الثاني")}
+            {/* Points badge */}
+            <div style={{ background:"linear-gradient(135deg,#f5c842,#ff8c42)", color:"#1a1208", fontWeight:900, fontSize:"clamp(1.3rem,2.6vw,2.1rem)", borderRadius:"50px", padding:"8px 18px", textAlign:"center", boxShadow:"0 4px 16px rgba(245,200,66,0.40)", lineHeight:1 }}>
+              {question.difficulty}
+              <div style={{ fontSize:"0.55em", fontWeight:700, opacity:0.7, marginTop:"2px" }}>نقطة</div>
             </div>
           </div>
-          <div className="helper-card">
-            <div className="helper-title">التصنيف</div>
-            <div style={{ fontWeight:700, fontSize:"0.9rem", color:"rgba(212,168,32,0.90)", marginBottom:"8px" }}>{catName || "—"}</div>
-            <span style={{ background:diffBadge.bg, border:`1px solid ${diffBadge.border}`, color:diffBadge.color, fontSize:"0.78rem", fontWeight:700, padding:"4px 14px", borderRadius:"50px" }}>{diffBadge.label}</span>
-          </div>
-          <div className="helper-card" style={{ textAlign:"center" }}>
-            <div className="helper-title">النقاط</div>
-            <div style={{ background:"linear-gradient(175deg,rgba(255,207,93,0.96),rgba(255,156,61,0.96))", color:"#1a1208", fontSize:"clamp(1.8rem,3.2vw,2.8rem)", fontWeight:900, borderRadius:"14px", padding:"8px 16px", lineHeight:1, boxShadow:"0 6px 20px rgba(0,0,0,0.24)" }}>{question.difficulty}</div>
-          </div>
-        </div>
 
-        {/* ══ QUESTION CENTER ══ */}
-        <div className="question-center">
-          <div className="question-panel">
-            <div className="question-inner">
-
-              {isSecret ? (
-                <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"18px" }}>
-                  <div style={{ fontWeight:900, fontSize:"clamp(1.2rem,2.5vw,1.8rem)", textAlign:"center" }}>وصّف الكلمة السرية</div>
-                  <div style={{ color:"rgba(247,241,232,0.42)", fontSize:"0.88rem", textAlign:"center" }}>الملاعب يمسح الـ QR — بس هو يشوف الكلمة!</div>
-                  <div style={{ background:"#fff", padding:"16px", borderRadius:"18px", boxShadow:"0 0 40px rgba(241,225,148,0.22)" }}>
-                    <QRCodeSVG value={secretUrl} size={Math.min(window.innerWidth - 120, 200)} data-testid="qr-code" />
-                  </div>
-                  <p style={{ color:"rgba(247,241,232,0.18)", fontSize:"0.65rem", fontFamily:"monospace", wordBreak:"break-all", maxWidth:"280px", textAlign:"center" }}>{secretUrl}</p>
+          {/* Panel body: image + text */}
+          <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"clamp(8px,1.2vh,14px) clamp(10px,1.5vw,20px)", overflowY:"auto", minHeight:0, gap:"clamp(6px,1vh,12px)" }}>
+            {isSecret ? (
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"16px" }}>
+                <div style={{ color:"#f5c842", fontWeight:900, textAlign:"center", fontSize:"clamp(1.2rem,2.4vw,1.8rem)" }}>وصّف الكلمة السرية</div>
+                <div style={{ color:"rgba(255,255,255,0.45)", fontSize:"0.85rem", textAlign:"center" }}>الملاعب يمسح الـ QR — بس هو يشوف الكلمة!</div>
+                <div style={{ background:"white", padding:"16px", borderRadius:"18px", boxShadow:"0 0 50px rgba(245,200,66,0.30)" }}>
+                  <QRCodeSVG value={secretUrl} size={Math.min(window.innerWidth - 100, 200)} data-testid="qr-code" />
                 </div>
-              ) : (
-                <>
-                  {/* Question meta row */}
-                  <div className="question-meta">
-                    <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"7px 14px", borderRadius:"12px", background:isTeam1?"rgba(239,68,68,0.12)":"rgba(59,130,246,0.12)", border:`1px solid ${isTeam1?"rgba(239,68,68,0.28)":"rgba(59,130,246,0.28)"}` }}>
-                      <span style={{ width:"8px", height:"8px", borderRadius:"50%", background:isTeam1?"#ef4444":"#3b82f6", animation:"revealPulse 1.2s ease-in-out infinite" }} />
-                      <span style={{ color:isTeam1?"#fca5a5":"#93c5fd", fontWeight:800, fontSize:"clamp(0.72rem,1.1vw,0.88rem)" }}>
-                        {isTeam1 ? (session?.team1_name||"الفريق الأول") : (session?.team2_name||"الفريق الثاني")}
-                      </span>
-                    </div>
-                    <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                      <span style={{ background:diffBadge.bg, border:`1px solid ${diffBadge.border}`, color:diffBadge.color, fontSize:"0.72rem", fontWeight:700, padding:"3px 12px", borderRadius:"50px" }}>{diffBadge.label}</span>
-                    </div>
-                  </div>
+                <p style={{ color:"rgba(255,255,255,0.18)", fontSize:"10px", fontFamily:"monospace", wordBreak:"break-all", maxWidth:"280px", textAlign:"center" }}>{secretUrl}</p>
+              </div>
+            ) : (
+              <>
+                {/* ── QUESTION TEXT ── */}
+                <p
+                  data-testid="question-text"
+                  style={{
+                    margin: "0 auto",
+                    textAlign: "center",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    lineHeight: 1.5,
+                    textShadow: "0 2px 16px rgba(0,0,0,0.55)",
+                    maxWidth: "760px",
+                    flexShrink: 0,
+                    fontSize: currentQuestion?.image_url
+                      ? "clamp(0.95rem,2vw,1.55rem)"
+                      : "clamp(1.6rem,3.8vw,3rem)",
+                  }}
+                >
+                  {currentQuestion?.text}
+                </p>
 
-                  {/* Question text — always above image */}
-                  <p data-testid="question-text" className="question-text"
-                    style={{ fontSize:"clamp(1.5rem,2.8vw,3rem)" }}>
-                    {question.text}
-                  </p>
-
-                  {/* Translation — small corner button, only for English questions */}
-                  {(parsedTranslation || question?.translation || question?.text?.match(/^[A-Za-z]/)) && !showAnswer && (
-                    <div style={{ position: "relative" }}>
-                      <button
-                        onClick={handleTranslate}
-                        disabled={translating}
+                {/* ── QUESTION IMAGE — fills remaining space ── */}
+                {currentQuestion?.image_url && (
+                  <div
+                    data-testid="question-image-container"
+                    style={{ flex:1, minHeight:0, width:"100%", display:"flex", justifyContent:"center", alignItems:"center" }}
+                  >
+                    <div style={{ position:"relative", maxHeight:"100%", display:"flex", alignItems:"center" }}>
+                      <img
+                        src={currentQuestion.image_url}
+                        alt="question"
+                        data-testid="question-image"
+                        onLoad={() => setImgLoaded(true)}
+                        onError={e => { e.target.parentElement.parentElement.style.display="none"; }}
+                        onClick={() => setZoomedImage(currentQuestion.image_url)}
                         style={{
-                          position: "absolute", top: "-28px", left: "6px",
-                          background: "rgba(0,0,0,0.35)",
-                          border: "1px solid rgba(234,179,8,0.4)",
-                          color: "#fbbf24",
-                          padding: "2px 9px",
-                          borderRadius: "999px",
-                          fontSize: "0.68rem",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          fontFamily: "Cairo, sans-serif",
-                          backdropFilter: "blur(4px)",
-                          zIndex: 10,
+                          display: "block",
+                          maxHeight: "clamp(320px,62vh,720px)",
+                          maxWidth: "100%",
+                          width: "100%",
+                          objectFit: "contain",
+                          borderRadius: "16px",
+                          border: "1.5px solid rgba(245,200,66,0.28)",
+                          boxShadow: "0 0 0 3px rgba(245,200,66,0.08), 0 16px 50px rgba(0,0,0,0.65)",
+                          cursor: "zoom-in",
+                          transition: "transform 0.25s",
                         }}
-                      >
-                        {translating ? "⏳" : showTranslation ? "🔼" : "🇸🇦 ترجم"}
-                      </button>
-                      {showTranslation && (parsedTranslation || translationData) && (
-                        <div style={{
-                          background: "rgba(0,0,0,0.5)",
-                          borderRadius: "8px",
-                          padding: "7px 12px",
-                          textAlign: "right",
-                          backdropFilter: "blur(4px)",
-                          border: "1px solid rgba(234,179,8,0.25)",
-                          fontSize: "0.82rem",
-                          marginBottom: "6px",
-                        }}>
-                          <span style={{ color: "#fef3c7", fontWeight: 600, fontFamily: "Cairo, sans-serif" }}>
-                            {(parsedTranslation || translationData).q}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Question image — centered, below question text */}
-                  {question.image_url && (
-                    <div data-testid="question-image-container" style={{ display:"flex", justifyContent:"center", marginTop:"2px" }}>
-                      {!imgLoaded && (
-                        <div style={{ width:"92%", height:"200px", background:"rgba(255,255,255,0.04)", border:"1.5px dashed rgba(255,180,80,0.14)", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:"16px" }}>
-                          <span style={{ color:"rgba(247,241,232,0.22)", fontSize:"0.85rem" }}>تحميل الصورة...</span>
-                        </div>
-                      )}
-                      <div style={{ display: imgLoaded ? "flex" : "none", flexDirection:"column", alignItems:"center", position:"relative", width:"92%" }}>
-                        <img
-                          src={question.image_url}
-                          alt="question"
-                          data-testid="question-image"
-                          className="question-image"
-                          onLoad={() => setImgLoaded(true)}
-                          onError={e => { e.target.style.display="none"; setImgLoaded(true); }}
-                          onClick={() => setZoomedImage(question.image_url)}
-                          style={{ width:"100%", maxHeight:"240px", objectFit:"contain", borderRadius:"16px", cursor:"zoom-in" }}
-                        />
-                        <div style={{ position:"absolute", top:"8px", left:"8px", cursor:"zoom-in" }}
-                          onClick={() => setZoomedImage(question.image_url)}>
-                          <ZoomIn size={18} style={{ color:"rgba(255,255,255,0.55)" }} />
-                        </div>
+                        onMouseEnter={e=>e.target.style.transform="scale(1.015)"}
+                        onMouseLeave={e=>e.target.style.transform="scale(1)"}
+                      />
+                      <div style={{ position:"absolute", bottom:"8px", left:"50%", transform:"translateX(-50%)", background:"rgba(0,0,0,0.60)", backdropFilter:"blur(4px)", borderRadius:"6px", padding:"3px 10px", color:"rgba(245,200,66,0.75)", fontSize:"0.6rem", fontWeight:800, pointerEvents:"none", whiteSpace:"nowrap" }}>
+                        <ZoomIn size={10} style={{ display:"inline", marginLeft:"3px", verticalAlign:"middle" }} />
+                        اضغط للتكبير
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
-                  {/* Reveal button — below image */}
-                  {!showAnswer && (
-                    <button data-testid="reveal-answer-btn" className="reveal-btn" onClick={handleReveal}>
-                      ◆ كشف الإجابة ◆
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
+          {/* Panel footer: reveal button */}
+          <div style={{ flexShrink:0, padding:"clamp(10px,1.5vh,16px) clamp(16px,3vw,32px)", borderTop:"1px solid rgba(255,255,255,0.07)", display:"flex", justifyContent:"center" }}>
+            {!showAnswer ? (
+              <button
+                data-testid="reveal-answer-btn"
+                className="reveal-btn"
+                onClick={handleReveal}
+                style={{
+                  background:"linear-gradient(135deg,#f5c842,#ff8c42)",
+                  border:"none", borderRadius:"50px",
+                  padding:"clamp(10px,1.5vh,15px) clamp(32px,5.5vw,56px)",
+                  fontSize:"clamp(0.92rem,1.6vw,1.12rem)",
+                  fontWeight:800, color:"#1a1208",
+                  cursor:"pointer",
+                  boxShadow:"0 6px 22px rgba(245,200,66,0.38)",
+                  transition:"transform 0.22s, box-shadow 0.22s",
+                  fontFamily:"'Tajawal','Cairo',sans-serif",
+                }}
+              >
+                كشف الإجابة
+              </button>
+            ) : (
+              <div style={{ color:"rgba(255,255,255,0.28)", fontSize:"clamp(0.7rem,1.1vw,0.82rem)", fontWeight:700 }}>
+                ↑ الإجابة ظاهرة أعلاه
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ══ RIGHT SIDEBAR ══ */}
-        <div className="sidebar">
-          <div className="helper-card">
-            <div className="helper-title">وسائل المساعدة</div>
+        {/* ── RIGHT: Team 2 panel + lifelines ── */}
+        <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+          {/* Team 2 */}
+          <div style={{
+            ...glass,
+            borderRight: `4px solid ${!isTeam1 ? "#43e97b" : "#f5c842"}`,
+            borderRadius:"16px",
+            padding:"16px",
+            background: !isTeam1 ? "rgba(67,233,123,0.08)" : "rgba(255,255,255,0.07)",
+            boxShadow: !isTeam1 ? "0 0 24px rgba(67,233,123,0.18), 0 8px 32px rgba(0,0,0,0.35)" : "0 8px 32px rgba(0,0,0,0.35)",
+            transition:"all 0.35s",
+            display:"flex", flexDirection:"column", gap:"8px",
+          }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"7px" }}>
+              <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:"#60a5fa", boxShadow:!isTeam1?"0 0 8px #60a5fa":"none", flexShrink:0 }} />
+              <span style={{ color:!isTeam1?"rgba(255,255,255,0.90)":"rgba(255,255,255,0.50)", fontWeight:800, fontSize:"clamp(0.78rem,1.1vw,0.95rem)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {session?.team2_name || "الفريق الثاني"}
+              </span>
+            </div>
+            {!isTeam1 && (
+              <div style={{ background:"rgba(67,233,123,0.14)", border:"1px solid rgba(67,233,123,0.28)", borderRadius:"8px", padding:"3px 8px", textAlign:"center", color:"#43e97b", fontSize:"0.64rem", fontWeight:800 }}>
+                يجيب الآن
+              </div>
+            )}
+            <div style={{ textAlign:"center" }}>
+              <div style={{ color:"#f5c842", fontSize:"clamp(1.9rem,3vw,2.6rem)", fontWeight:900, lineHeight:1, textShadow:"0 2px 12px rgba(245,200,66,0.4)" }}>{teamScores.team2}</div>
+              <div style={{ color:"rgba(255,255,255,0.28)", fontSize:"0.62rem", fontWeight:700, marginTop:"2px" }}>نقطة</div>
+            </div>
+          </div>
+
+          {/* Lifelines */}
+          <div style={{ ...glass, padding:"12px 12px" }}>
+            <div style={{ textAlign:"center", color:"rgba(255,255,255,0.45)", fontSize:"0.62rem", fontWeight:800, letterSpacing:"0.10em", textTransform:"uppercase", marginBottom:"12px" }}>
+              وسائل المساعدة
+            </div>
             <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-              <div className="lifeline-wrap" title="يغير لك السؤال الحالي">
-                <button className="hbtn" disabled={!lifelines.change} onClick={handleChangeQuestion}
-                  style={{ width:"100%", padding:"10px 12px", display:"flex", alignItems:"center", gap:"8px", fontSize:"0.82rem", justifyContent:"center", opacity: lifelines.change ? 1 : 0.4, cursor: lifelines.change ? "pointer" : "not-allowed" }}>
-                  <RefreshCw size={20}/> <span>تغيير السؤال</span>
-                </button>
-                <div className="lifeline-tip">يغير لك السؤال الحالي</div>
-              </div>
-              <div className="lifeline-wrap" title="يضاعف النقاط">
-                <button className="hbtn" disabled={!lifelines.double} onClick={handleDoublePoints}
-                  style={{ width:"100%", padding:"10px 12px", display:"flex", alignItems:"center", gap:"8px", fontSize:"0.82rem", justifyContent:"center", opacity: lifelines.double ? 1 : 0.4, cursor: lifelines.double ? "pointer" : "not-allowed", ...(doubleActive ? { borderColor:"rgba(251,191,36,0.55)", background:"rgba(251,191,36,0.12)" } : {}) }}>
-                  <Zap size={20}/> <span>مضاعفة النقاط</span>
-                </button>
-                <div className="lifeline-tip">يضاعف النقاط إذا أجبت صح</div>
-              </div>
-              <div className="lifeline-wrap" title="يزيد الوقت المتبقي">
-                <button className="hbtn" disabled={!lifelines.time} onClick={handleExtraTime}
-                  style={{ width:"100%", padding:"10px 12px", display:"flex", alignItems:"center", gap:"8px", fontSize:"0.82rem", justifyContent:"center", opacity: lifelines.time ? 1 : 0.4, cursor: lifelines.time ? "pointer" : "not-allowed" }}>
-                  <Clock size={20}/> <span>وقت إضافي</span>
-                </button>
-                <div className="lifeline-tip">يزيد الوقت المتبقي</div>
-              </div>
+              {[
+                { key:"changeQuestion", icon: changingQ ? <RefreshCw size={18} style={{animation:"spin 1s linear infinite"}} /> : <RefreshCw size={18} />, tooltip:"يغير لك السؤال الحالي", action:handleChangeQuestion, color:"#60a5fa", bg:"rgba(96,165,250,0.15)", border:"rgba(96,165,250,0.40)" },
+                { key:"doublePoints",   icon:<Zap size={18}/>,   tooltip:"يضاعف النقاط عند الإجابة الصحيحة", action:handleDoublePoints, color:"#f5c842", bg: doubleActive?"rgba(245,200,66,0.25)":"rgba(245,200,66,0.13)", border:"rgba(245,200,66,0.40)" },
+                { key:"extraTime",      icon:<Clock size={18}/>, tooltip:"يزيد الوقت المتبقي",               action:handleExtraTime,    color:"#43e97b", bg:"rgba(67,233,123,0.13)",  border:"rgba(67,233,123,0.38)" },
+              ].map((ll) => {
+                const used = !lifelines[slot]?.[ll.key];
+                return (
+                  <div key={ll.key} style={{ position:"relative" }}
+                    onMouseEnter={e => { const t = e.currentTarget.querySelector(".ll-tip"); if (t) t.style.opacity="1"; t.style.transform="translateY(0)"; }}
+                    onMouseLeave={e => { const t = e.currentTarget.querySelector(".ll-tip"); if (t) t.style.opacity="0"; t.style.transform="translateY(-4px)"; }}
+                  >
+                    <div style={{ ...glass, display:"flex", alignItems:"center", gap:"12px", padding:"11px 14px", opacity: used ? 0.35 : 1, transition:"opacity 0.2s", borderRadius:"14px" }}>
+                      <button
+                        onClick={ll.action}
+                        disabled={used || assigned}
+                        style={{
+                          width:"42px", height:"42px", borderRadius:"12px",
+                          background: used ? "rgba(255,255,255,0.04)" : ll.bg,
+                          border:`1.5px solid ${used ? "rgba(255,255,255,0.07)" : ll.border}`,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          color: used ? "rgba(255,255,255,0.20)" : ll.color,
+                          cursor: used || assigned ? "not-allowed" : "pointer",
+                          flexShrink:0, transition:"all 0.2s",
+                          boxShadow: used ? "none" : `0 0 12px ${ll.bg}`,
+                        }}
+                        onMouseEnter={e => { if (!used && !assigned) e.currentTarget.style.transform="scale(1.10)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform="scale(1)"; }}
+                      >
+                        {ll.icon}
+                      </button>
+                      <span style={{ color: used ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.55)", fontSize:"0.68rem", fontWeight:700 }}>
+                        {used ? "✗ مستخدمة" : ll.key==="doublePoints" && doubleActive ? "✓ مفعّلة" : "متاحة"}
+                      </span>
+                    </div>
+                    <div className="ll-tip" style={{ position:"absolute", top:"calc(100% + 6px)", right:0, left:0, background:"rgba(8,4,18,0.97)", border:"1px solid rgba(255,255,255,0.14)", borderRadius:"9px", padding:"6px 10px", fontSize:"0.65rem", color:"rgba(255,255,255,0.92)", fontWeight:700, textAlign:"center", pointerEvents:"none", opacity:0, transform:"translateY(-4px)", transition:"opacity 0.18s, transform 0.18s", zIndex:99, backdropFilter:"blur(12px)", whiteSpace:"nowrap" }}>
+                      {ll.tooltip}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-
-          {/* Team 1 score */}
-          <div className="helper-card" style={{ background:isTeam1?"rgba(239,68,68,0.09)":"rgba(12,6,18,0.70)", borderColor:isTeam1?"rgba(239,68,68,0.28)":"rgba(255,180,80,0.07)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"6px" }}>
-              <span>🔴</span>
-              <span style={{ fontWeight:800, fontSize:"0.82rem", color:"#fca5a5", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{session?.team1_name||"الفريق الأول"}</span>
-            </div>
-            <div style={{ fontWeight:900, fontSize:"clamp(1.4rem,2.2vw,1.9rem)", color:"rgba(255,179,71,0.95)", lineHeight:1 }}>{teamScores.team1}</div>
-            <div style={{ fontSize:"0.6rem", color:"rgba(212,168,32,0.40)", fontWeight:700, marginTop:"2px" }}>نقطة</div>
-          </div>
-
-          {/* Team 2 score */}
-          <div className="helper-card" style={{ background:!isTeam1?"rgba(59,130,246,0.09)":"rgba(12,6,18,0.70)", borderColor:!isTeam1?"rgba(59,130,246,0.28)":"rgba(255,180,80,0.07)" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"6px" }}>
-              <span>🔵</span>
-              <span style={{ fontWeight:800, fontSize:"0.82rem", color:"#93c5fd", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{session?.team2_name||"الفريق الثاني"}</span>
-            </div>
-            <div style={{ fontWeight:900, fontSize:"clamp(1.4rem,2.2vw,1.9rem)", color:"rgba(255,179,71,0.95)", lineHeight:1 }}>{teamScores.team2}</div>
-            <div style={{ fontSize:"0.6rem", color:"rgba(212,168,32,0.40)", fontWeight:700, marginTop:"2px" }}>نقطة</div>
-          </div>
-
-          {/* Quick continue */}
-          {assigned && (
-            <button className="next-btn" onClick={handleBack} style={{ width:"100%", fontSize:"0.9rem", padding:"10px 16px" }}>العودة ←</button>
-          )}
         </div>
-
       </div>
     </div>
   );

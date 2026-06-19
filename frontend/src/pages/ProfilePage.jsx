@@ -712,6 +712,9 @@ export default function ProfilePage() {
   };
 
   const handleSave = async () => {
+    if (eUsername.trim().length < 3) { toast.error("اسم المستخدم يجب أن يكون ٣ أحرف على الأقل"); return; }
+    if (eUsername.trim().length > 20) { toast.error("اسم المستخدم يجب أن يكون ٢٠ حرفاً كحد أقصى"); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(eUsername.trim())) { toast.error("اسم المستخدم يحتوي على أحرف غير مسموح بها — استخدم أحرفاً إنجليزية أو أرقاماً أو _"); return; }
     setSaving(true);
     try {
       const interestArr = eInterests.split(/[،,]/).map(s => s.trim()).filter(Boolean);
@@ -721,7 +724,7 @@ export default function ProfilePage() {
         banner_url:   eBanner,
         accent_color: eAccent,
         interests:    interestArr,
-        username:     eUsername !== profile.username ? eUsername : undefined,
+        username:     eUsername.trim() !== profile.username ? eUsername.trim() : undefined,
       }, h);
       await refreshUser();
       await loadProfile();
@@ -937,8 +940,20 @@ export default function ProfilePage() {
       {/* Username */}
       <div>
         <label style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", display: "block", marginBottom: 6, fontWeight: 700 }}>اسم المستخدم</label>
-        <input style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 14px", color: "#f8f2e7", fontSize: 14, fontFamily: "Cairo, sans-serif", outline: "none", boxSizing: "border-box" }}
-          value={eUsername} onChange={e => setEUsername(e.target.value)} />
+        <div style={{ position: "relative" }}>
+          <input
+            style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: `1px solid ${eUsername.trim() && !/^[a-zA-Z0-9_]{3,20}$/.test(eUsername.trim()) ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.15)"}`, borderRadius: 10, padding: "10px 14px", paddingLeft: 40, color: "#f8f2e7", fontSize: 14, fontFamily: "Cairo, sans-serif", outline: "none", boxSizing: "border-box", direction: "ltr" }}
+            value={eUsername}
+            onChange={e => setEUsername(e.target.value)}
+            maxLength={20}
+            placeholder="my_username"
+          />
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.25)", fontSize: 14, pointerEvents: "none" }}>@</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5 }}>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>أحرف إنجليزية، أرقام، أو _ فقط · لا يمكن لأحد آخر استخدامه</span>
+          <span style={{ fontSize: 11, color: eUsername.length > 18 ? "rgba(239,68,68,0.7)" : "rgba(255,255,255,0.25)" }}>{eUsername.length}/20</span>
+        </div>
       </div>
 
       {/* Bio */}
