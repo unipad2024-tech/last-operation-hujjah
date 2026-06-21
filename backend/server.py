@@ -91,9 +91,9 @@ logger = logging.getLogger(__name__)
 
 # ─── Subscription Plans (server-side only – never from frontend) ────────────
 SUBSCRIPTION_PLANS = {
-    "biweekly":    {"name": "أسبوعان",     "amount": 16.99, "currency": "sar", "days": 14},
-    "monthly":     {"name": "شهري",        "amount": 29.99, "currency": "sar", "days": 30},
-    "single_game": {"name": "لعبة واحدة", "amount": 2.99,  "currency": "sar", "days": 1},
+    "biweekly":  {"name": "أسبوعان", "amount": 16.99, "currency": "sar", "days": 14},
+    "monthly":   {"name": "شهري",    "amount": 29.99, "currency": "sar", "days": 30},
+    "two_games": {"name": "لعبتان",  "amount": 5.99,  "currency": "sar", "game_credits": 2},
 }
 
 FREE_CATEGORIES = ["cat_word", "cat_islamic", "cat_music", "cat_flags", "cat_easy", "cat_science"]
@@ -1826,7 +1826,9 @@ async def approve_all_pending(admin: dict = Depends(get_admin)):
 @api_router.post("/game/session")
 async def create_session(body: GameSessionCreate, authorization: Optional[str] = Header(None)):
     user = await get_current_user(authorization)
-    is_trial = not user or user.get("subscription_type") != "premium"
+    is_premium_sub = user and user.get("subscription_type") == "premium"
+    has_credits    = user and user.get("game_credits", 0) > 0
+    is_trial       = not (is_premium_sub or has_credits)
     session = {
         "id": str(uuid.uuid4()),
         "team1_name": body.team1_name,
@@ -1844,6 +1846,13 @@ async def create_session(body: GameSessionCreate, authorization: Optional[str] =
     }
     if body.user_id:
         await db.users.update_one({"id": body.user_id}, {"$inc": {"game_count": 1}})
+        # Consume 1 game credit when starting a session (only for credit users, not premium subscribers)
+        if has_credits and not is_premium_sub:
+            await db.users.update_one(
+                {"id": body.user_id, "game_credits": {"$gt": 0}},
+                {"$inc": {"game_credits": -1}}
+            )
+            logger.info(f"Consumed 1 game credit for user {body.user_id}")
     await db.game_sessions.insert_one(session)
     result = {k: v for k, v in session.items() if k != "_id"}
     return result
@@ -1871,11 +1880,14 @@ async def get_next_question(session_id: str, category_id: str, difficulty: int,
     exclude_ids = list(session.get("used_questions", []))
     is_trial    = session.get("is_trial", False)
 
-    # Premium users: also exclude globally answered questions
+    # Premium users (subscription or credits): also exclude globally answered questions
     user = await get_current_user(authorization)
     is_premium = False
     if user:
-        is_premium = (user.get("subscription_type") == "premium")
+        is_premium = (
+            user.get("subscription_type") == "premium" or
+            user.get("game_credits", 0) > 0
+        )
         if is_premium:
             is_trial = False
             exclude_ids = list(set(exclude_ids + user.get("answered_question_ids", [])))
@@ -2115,18 +2127,25 @@ async def payment_verify(transaction_id: str, user: dict = Depends(require_user)
 
 @api_router.post("/payment/v2/activate")
 async def payment_activate(body: dict, admin: dict = Depends(get_super_admin)):
-    """Manually activate premium for a user (after payment verification)."""
+    """Manually activate premium or credits for a user (after payment verification)."""
     user_id = body.get("user_id")
     transaction_id = body.get("transaction_id")
     plan_id = body.get("plan_id", "monthly")
     if not user_id:
         raise HTTPException(400, "user_id مطلوب")
     plan = SUBSCRIPTION_PLANS.get(plan_id, SUBSCRIPTION_PLANS["monthly"])
-    expires = (datetime.now(timezone.utc) + timedelta(days=plan["days"])).isoformat()
-    await db.users.update_one(
-        {"id": user_id},
-        {"$set": {"subscription_type": "premium", "subscription_expires_at": expires}}
-    )
+    if "game_credits" in plan:
+        credits = plan["game_credits"]
+        await db.users.update_one({"id": user_id}, {"$inc": {"game_credits": credits}})
+        result_msg = f"تم إضافة {credits} رصيد لعبة"
+        expires = None
+    else:
+        expires = (datetime.now(timezone.utc) + timedelta(days=plan["days"])).isoformat()
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {"subscription_type": "premium", "subscription_expires_at": expires}}
+        )
+        result_msg = "تم تفعيل الاشتراك المميز"
     if transaction_id:
         await db.payment_transactions.update_one(
             {"id": transaction_id},
@@ -2137,7 +2156,7 @@ async def payment_activate(body: dict, admin: dict = Depends(get_super_admin)):
     await log_admin_action(admin, "تفعيل اشتراك", "مستخدم",
                            user.get("username", user_id) if user else user_id,
                            f"الخطة: {plan_id}")
-    return {"message": "تم تفعيل الاشتراك المميز", "expires_at": expires}
+    return {"message": result_msg, "expires_at": expires}
 
 @api_router.post("/payment/v2/renew")
 async def payment_renew(body: dict, admin: dict = Depends(get_super_admin)):
@@ -2277,25 +2296,40 @@ async def paylink_verify(transaction_no: str, user: dict = Depends(require_user)
 
     if order_status == "Paid":
         plan     = SUBSCRIPTION_PLANS.get(txn.get("plan_id", "monthly"), SUBSCRIPTION_PLANS["monthly"])
-        expires  = (datetime.now(timezone.utc) + timedelta(days=plan["days"])).isoformat()
-        # Atomic update with condition to prevent duplicate subscription activation
-        result = await db.users.update_one(
-            {"id": user["id"], "subscription_type": {"$ne": "premium"}},
-            {"$set": {"subscription_type": "premium", "subscription_expires_at": expires,
-                      "notify_warning_sent": False, "notify_expired_sent": False}}
-        )
-        if result.modified_count > 0:
-            logger.info(f"Premium activated for user {user['id']} via txn {transaction_no}")
-            if user.get("email"):
-                subject, html = build_subscription_confirmation_email(
-                    user.get("username", ""), plan.get("name", "Premium"), expires
+
+        if "game_credits" in plan:
+            # ── Credits plan (two_games): atomically mark txn paid then add credits ──
+            txn_update = await db.payment_transactions.update_one(
+                {"transaction_no": transaction_no, "payment_status": {"$ne": "paid"}},
+                {"$set": {"payment_status": "paid", "status": "complete", "updated_at": now}}
+            )
+            if txn_update.modified_count > 0:
+                credits = plan["game_credits"]
+                await db.users.update_one(
+                    {"id": user["id"]},
+                    {"$inc": {"game_credits": credits}}
                 )
-                ok = await send_email(user["email"], subject, html)
-                logger.info(f"Subscription confirmation email {'sent' if ok else 'failed'} | user={user['id']}")
-        await db.payment_transactions.update_one(
-            {"transaction_no": transaction_no, "payment_status": {"$ne": "paid"}},
-            {"$set": {"payment_status": "paid", "status": "complete", "updated_at": now}}
-        )
+                logger.info(f"Added {credits} game credits to user {user['id']} via txn {transaction_no}")
+        else:
+            # ── Subscription plan (biweekly/monthly): set premium + expiry ──
+            expires = (datetime.now(timezone.utc) + timedelta(days=plan["days"])).isoformat()
+            result = await db.users.update_one(
+                {"id": user["id"], "subscription_type": {"$ne": "premium"}},
+                {"$set": {"subscription_type": "premium", "subscription_expires_at": expires,
+                          "notify_warning_sent": False, "notify_expired_sent": False}}
+            )
+            if result.modified_count > 0:
+                logger.info(f"Premium activated for user {user['id']} via txn {transaction_no}")
+                if user.get("email"):
+                    subject, html = build_subscription_confirmation_email(
+                        user.get("username", ""), plan.get("name", "Premium"), expires
+                    )
+                    ok = await send_email(user["email"], subject, html)
+                    logger.info(f"Subscription confirmation email {'sent' if ok else 'failed'} | user={user['id']}")
+            await db.payment_transactions.update_one(
+                {"transaction_no": transaction_no, "payment_status": {"$ne": "paid"}},
+                {"$set": {"payment_status": "paid", "status": "complete", "updated_at": now}}
+            )
 
     return {"order_status": order_status, "message": "تم التحقق"}
 
@@ -3849,13 +3883,22 @@ async def delete_staff(staff_id: str, admin: dict = Depends(get_super_admin)):
 @api_router.post("/admin/users/{user_id}/gift-subscription")
 async def gift_subscription(user_id: str, body: GiftSubscription, admin: dict = Depends(get_super_admin)):
     plan = SUBSCRIPTION_PLANS.get(body.plan_id, SUBSCRIPTION_PLANS["monthly"])
-    days = body.days if body.days else plan["days"]
-    expires = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
-    await db.users.update_one(
-        {"id": user_id},
-        {"$set": {"subscription_type": "premium", "subscription_expires_at": expires,
-                  "notify_warning_sent": False, "notify_expired_sent": False}}
-    )
+    expires = None
+    if "game_credits" in plan:
+        credits = plan["game_credits"]
+        await db.users.update_one({"id": user_id}, {"$inc": {"game_credits": credits}})
+        result_msg = f"تم منح {credits} رصيد لعبة"
+        log_detail = f"رصيد لعب: {credits}"
+    else:
+        days = body.days if body.days else plan["days"]
+        expires = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {"subscription_type": "premium", "subscription_expires_at": expires,
+                      "notify_warning_sent": False, "notify_expired_sent": False}}
+        )
+        result_msg = f"تم منح الاشتراك المميز لـ {days} يوم"
+        log_detail = f"مدة {days} يوم حتى {expires[:10]}"
     txn = {
         "id": str(uuid.uuid4()),
         "user_id": user_id,
@@ -3870,14 +3913,13 @@ async def gift_subscription(user_id: str, body: GiftSubscription, admin: dict = 
     await db.payment_transactions.insert_one(txn)
     user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
     await log_admin_action(admin, "هدية اشتراك", "مستخدم",
-                           user.get("username", user_id) if user else user_id,
-                           f"مدة {days} يوم حتى {expires[:10]}")
-    if user and user.get("email"):
+                           user.get("username", user_id) if user else user_id, log_detail)
+    if user and user.get("email") and expires:
         subject, html = build_subscription_confirmation_email(
             user.get("username", ""), plan.get("name", "Premium"), expires
         )
         await send_email(user["email"], subject, html)
-    return {"message": f"تم منح الاشتراك المميز لـ {days} يوم", "expires_at": expires, "user": user}
+    return {"message": result_msg, "expires_at": expires, "user": user}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # EMAIL NOTIFICATION SYSTEM
