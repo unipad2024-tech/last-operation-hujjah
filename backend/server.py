@@ -827,12 +827,12 @@ async def forgot_password(body: ForgotPasswordBody, request: Request):
     user = await db.users.find_one({"email": email}, {"_id": 0, "id": 1, "username": 1, "email": 1})
     if user:
         # Create a short-lived JWT reset token (30 min)
-        reset_token = create_token({"sub": user["id"], "purpose": "password_reset"}, expires_hours=0.5)
+        reset_token = create_token({"sub": user["id"], "purpose": "password_reset"}, expires_hours=2)
         app_url = os.environ.get("APP_URL", "https://hujjahgames.com")
         reset_url = f"{app_url}/reset-password?token={reset_token}"
-        subject, html = build_password_reset_email(user["username"], reset_url, expires_minutes=30)
+        subject, html = build_password_reset_email(user["username"], reset_url, expires_minutes=120)
         ok = await send_email(user["email"], subject, html)
-        logger.info(f"Password reset email {'sent' if ok else 'failed'} | user={user['id']}")
+        logger.info(f"Password reset email {'sent' if ok else 'FAILED'} | user={user['id']} | to={user['email']}")
     return {"message": "إذا كان البريد مسجلاً، ستصلك رسالة إعادة تعيين كلمة المرور"}
 
 @api_router.post("/auth/reset-password")

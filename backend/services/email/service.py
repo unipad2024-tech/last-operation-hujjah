@@ -25,29 +25,40 @@ def _app_url() -> str:
 async def send_email(to_email: str, subject: str, html_body: str) -> bool:
     """
     Send a transactional email via Resend.
-    Returns True on success, False on failure.
-    Never raises — always returns bool so callers don't crash.
+    Tries the configured EMAIL_FROM first; if Resend rejects it (domain not
+    verified / test-mode restriction), retries with the Resend default sender
+    onboarding@resend.dev so delivery still works during development.
+    Returns True on success, False on failure.  Never raises.
     """
     cfg = _cfg()
     api_key = cfg["api_key"]
     if not api_key:
         logger.error("Email skipped — RESEND_API_KEY not set | to=%s | subject=%s", to_email, subject)
         return False
-    try:
-        resend.api_key = api_key
-        params = {
-            "from": cfg["email_from"],
-            "to":   [to_email],
-            "subject": subject,
-            "html": html_body,
-        }
-        response = resend.Emails.send(params)
-        message_id = response.get("id") if response else None
-        logger.info("Email sent | to=%s | subject=%s | id=%s", to_email, subject, message_id)
-        return True
-    except Exception as e:
-        logger.error("Email failed | to=%s | subject=%s | error=%s", to_email, subject, str(e))
-        return False
+
+    resend.api_key = api_key
+    senders = [cfg["email_from"]]
+    # Fallback: Resend's built-in test sender works without domain verification
+    if cfg["email_from"] != "onboarding@resend.dev":
+        senders.append("onboarding@resend.dev")
+
+    for sender in senders:
+        try:
+            params = {
+                "from":    sender,
+                "to":      [to_email],
+                "subject": subject,
+                "html":    html_body,
+            }
+            response = resend.Emails.send(params)
+            message_id = response.get("id") if response else None
+            logger.info("Email sent | from=%s | to=%s | subject=%s | id=%s", sender, to_email, subject, message_id)
+            return True
+        except Exception as e:
+            logger.warning("Email attempt failed | from=%s | to=%s | error=%s", sender, to_email, str(e)[:200])
+
+    logger.error("All email attempts failed | to=%s | subject=%s", to_email, subject)
+    return False
 
 
 # ─── Templates ───────────────────────────────────────────────────────────────
