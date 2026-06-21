@@ -11,6 +11,109 @@ const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-
    ALL LOGIC PRESERVED — UI redesigned: deep navy + glass morphism + Tajawal
    ═══════════════════════════════════════════════════════════════════════════ */
 
+function AudioPlayer({ url }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying]   = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const toggle = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else         { a.play().catch(() => {}); setPlaying(true); }
+  };
+
+  const restart = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.currentTime = 0;
+    a.play().catch(() => {});
+    setPlaying(true);
+  };
+
+  const seek = (e) => {
+    const a = audioRef.current;
+    if (!a || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    a.currentTime = ratio * duration;
+    setProgress(ratio * 100);
+  };
+
+  const fmt = (s) => {
+    if (!s || isNaN(s)) return "0:00";
+    const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div style={{ flex:1, minHeight:0, width:"100%", display:"flex", justifyContent:"center", alignItems:"center" }}>
+      <audio
+        ref={audioRef}
+        src={url}
+        onTimeUpdate={e => {
+          const a = e.target;
+          if (a.duration) setProgress((a.currentTime / a.duration) * 100);
+        }}
+        onLoadedMetadata={e => setDuration(e.target.duration)}
+        onEnded={() => setPlaying(false)}
+      />
+      <div style={{
+        width: "100%", maxWidth: "480px",
+        background: "rgba(10,4,6,0.80)", backdropFilter: "blur(16px)",
+        border: "1.5px solid rgba(245,200,66,0.28)",
+        borderRadius: "20px", padding: "28px 28px 24px",
+        boxShadow: "0 0 0 3px rgba(245,200,66,0.06), 0 16px 50px rgba(0,0,0,0.65)",
+      }}>
+        {/* Waveform icon */}
+        <div style={{ textAlign:"center", marginBottom:"18px" }}>
+          <span style={{ fontSize:"2.4rem", lineHeight:1 }}>🎵</span>
+        </div>
+
+        {/* Progress bar */}
+        <div
+          onClick={seek}
+          style={{ cursor:"pointer", height:"6px", borderRadius:"99px", background:"rgba(255,255,255,0.10)", position:"relative", marginBottom:"10px" }}
+        >
+          <div style={{
+            height:"100%", borderRadius:"99px",
+            width: `${progress}%`,
+            background: "linear-gradient(90deg, #D4BC30, #F5E99A)",
+            transition: "width 0.25s linear",
+          }} />
+        </div>
+
+        {/* Time */}
+        <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.7rem", color:"rgba(245,200,66,0.45)", fontWeight:700, marginBottom:"20px", fontVariantNumeric:"tabular-nums" }}>
+          <span>{fmt(audioRef.current?.currentTime)}</span>
+          <span>{fmt(duration)}</span>
+        </div>
+
+        {/* Controls */}
+        <div style={{ display:"flex", gap:"12px", justifyContent:"center", alignItems:"center" }}>
+          {/* Restart */}
+          <button
+            onClick={restart}
+            style={{ background:"rgba(255,255,255,0.06)", border:"1.5px solid rgba(245,200,66,0.18)", borderRadius:"50%", width:"42px", height:"42px", cursor:"pointer", color:"rgba(245,200,66,0.55)", display:"flex", alignItems:"center", justifyContent:"center" }}
+          >
+            <RotateCcw size={16} />
+          </button>
+          {/* Play / Pause */}
+          <button
+            onClick={toggle}
+            style={{ background:"linear-gradient(135deg,#D4BC30,#F5E99A)", border:"none", borderRadius:"50%", width:"58px", height:"58px", cursor:"pointer", color:"#130104", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 0 24px rgba(245,200,66,0.35)" }}
+          >
+            {playing ? <Pause size={22} /> : <Play size={22} style={{ marginLeft:"2px" }} />}
+          </button>
+          {/* Spacer placeholder for symmetry */}
+          <div style={{ width:"42px" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function QuestionPage() {
   const navigate = useNavigate();
   const { state } = useLocation();
@@ -631,13 +734,18 @@ export default function QuestionPage() {
                     textShadow: "0 2px 16px rgba(0,0,0,0.55)",
                     maxWidth: "760px",
                     flexShrink: 0,
-                    fontSize: currentQuestion?.image_url
+                    fontSize: (currentQuestion?.image_url || currentQuestion?.audio_url)
                       ? "clamp(0.95rem,2vw,1.55rem)"
                       : "clamp(1.6rem,3.8vw,3rem)",
                   }}
                 >
                   {currentQuestion?.text}
                 </p>
+
+                {/* ── AUDIO PLAYER — for audio question type ── */}
+                {currentQuestion?.audio_url && (
+                  <AudioPlayer url={currentQuestion.audio_url} />
+                )}
 
                 {/* ── QUESTION IMAGE — fills remaining space ── */}
                 {currentQuestion?.image_url && (

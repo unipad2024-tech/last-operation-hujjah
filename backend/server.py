@@ -198,6 +198,7 @@ class Question(BaseModel):
     answer: str
     image_url: str = ""
     answer_image_url: str = ""
+    audio_url: str = ""
     question_type: str = "text"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -208,6 +209,7 @@ class QuestionCreate(BaseModel):
     answer: str
     image_url: str = ""
     answer_image_url: str = ""
+    audio_url: str = ""
     question_type: str = "text"
 
 class CommunityCategoryCreate(BaseModel):
@@ -1739,7 +1741,7 @@ async def reject_pending_question(q_id: str, body: dict = {}, admin: dict = Depe
 @api_router.put("/admin/questions/{q_id}/pending")
 async def update_pending_question(q_id: str, body: dict, admin: dict = Depends(get_admin)):
     """Edit a pending question before approval."""
-    allowed = {"text", "answer", "image_url", "answer_image_url", "image_query",
+    allowed = {"text", "answer", "image_url", "answer_image_url", "audio_url", "image_query",
                "difficulty", "category_id", "question_type"}
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
@@ -2347,10 +2349,11 @@ async def paylink_status_check(transaction_no: str):
 # SEED
 # ══════════════════════════════════════════════════════════════════════════════
 
-def q(cat, diff, text, answer, img="", aimg="", qtype="text"):
+def q(cat, diff, text, answer, img="", aimg="", qtype="text", audio=""):
     return {"id": str(uuid.uuid4()), "category_id": cat, "difficulty": diff,
             "text": text, "answer": answer, "image_url": img, "answer_image_url": aimg,
-            "question_type": qtype, "is_experimental": False, "created_at": datetime.now(timezone.utc).isoformat()}
+            "audio_url": audio, "question_type": qtype, "is_experimental": False,
+            "created_at": datetime.now(timezone.utc).isoformat()}
 
 PREMIUM_CATEGORIES_SEED = [
     {"id":"cat_football","name":"كرة القدم",   "icon":"⚽","image_url":"https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=400&q=80","is_special":False,"is_premium":True,"color":"#064e3b","order":11,"description":"أسئلة كرة القدم العالمية"},
@@ -2600,6 +2603,15 @@ async def seed_data(_: dict = Depends(get_super_admin)):
     existing_qs   = await db.questions.count_documents({})
     # Safety: absolutely never delete existing user data
 
+    # Ensure "مسلسلات" group exists with a stable id
+    _series_grp = await db.category_groups.find_one({"name": "مسلسلات"}, {"_id": 0})
+    if not _series_grp:
+        _series_grp = {"id": "grp_series", "name": "مسلسلات", "icon": "📺",
+                       "color": "#991b1b", "order": 9,
+                       "created_at": datetime.now(timezone.utc).isoformat()}
+        await db.category_groups.insert_one(_series_grp)
+    _series_group_id = _series_grp["id"]
+
     categories = [
         {"id":"cat_flags",   "name":"اعلام دول",      "icon":"🏳️","image_url":"https://static.prod-images.emergentagent.com/jobs/2e2396b6-cc98-44c9-bfbe-97e0e9727ada/images/789e9577be35fbf27c01b939a7864cd14c4aa947ecdd1dffb985e8cf92803c56.png","is_special":False,"is_premium":False,"color":"#166534","order":1,"description":"خمّن علم الدولة!","created_at":datetime.now(timezone.utc).isoformat()},
         {"id":"cat_easy",    "name":"معلومات عامة",   "icon":"💡","image_url":"https://static.prod-images.emergentagent.com/jobs/2e2396b6-cc98-44c9-bfbe-97e0e9727ada/images/ef7d4ad149135fb20af44b7c285da0442405131faae6b590a9e3b88bad9deec3.png","is_special":False,"is_premium":False,"color":"#1e40af","order":2,"description":"معلومات للجميع","created_at":datetime.now(timezone.utc).isoformat()},
@@ -2622,6 +2634,8 @@ async def seed_data(_: dict = Depends(get_super_admin)):
         {"id":"cat_food",    "name":"مأكولات",         "icon":"🍕","image_url":"https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&q=80","is_special":False,"is_premium":True,"color":"#c2410c","order":18,"description":"أكلات وطبخ من حول العالم","created_at":datetime.now(timezone.utc).isoformat()},
         {"id":"cat_cars",    "name":"سيارات",          "icon":"🚗","image_url":"https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=400&q=80","is_special":False,"is_premium":True,"color":"#374151","order":19,"description":"عالم السيارات والسباقات","created_at":datetime.now(timezone.utc).isoformat()},
         {"id":"cat_space",   "name":"الفضاء",          "icon":"🚀","image_url":"https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=400&q=80","is_special":False,"is_premium":True,"color":"#0c0a2e","order":20,"description":"الكون والفضاء والنجوم","created_at":datetime.now(timezone.utc).isoformat()},
+        # ── مسلسلات ──────────────────────────────────────────────────────────
+        {"id":"cat_series","name":"خمن المسلسل من الانترو 🎵","icon":"🎵","image_url":"https://images.unsplash.com/photo-1593359677879-a4bb92f4834c?w=400&q=80","is_special":False,"is_premium":True,"color":"#991b1b","order":21,"description":"استمع للموسيقى وخمّن المسلسل","group_id":_series_group_id,"created_at":datetime.now(timezone.utc).isoformat()},
     ]
     # SAFE INSERT: only add categories that don't exist yet (by id)
     existing_cat_ids = {c["id"] async for c in db.categories.find({}, {"_id": 0, "id": 1})}
@@ -3269,6 +3283,10 @@ async def seed_data(_: dict = Depends(get_super_admin)):
         q("cat_space",900,"ما الكوكب الذي يدور بشكل عكسي؟","الزهرة"),
         q("cat_space",900,"كم عدد النجوم في مجرة درب التبانة تقريباً؟","200-400 مليار نجم"),
         q("cat_space",900,"ما اسم المهمة الفضائية التي أوصلت أول إنسان للقمر؟","أبولو 11"),
+        # ── خمن المسلسل من الانترو ───────────────────────────────────────────
+        q("cat_series",300,"استمع للمقطع ثم خمن اسم المسلسل.","Game of Thrones",qtype="audio"),
+        q("cat_series",300,"استمع للمقطع ثم خمن اسم المسلسل.","Breaking Bad",qtype="audio"),
+        q("cat_series",900,"استمع للمقطع ثم خمن اسم المسلسل.","Fargo",qtype="audio"),
     ]
 
     # SAFE INSERT: only add seed questions that don't already exist (by text+category_id)
@@ -3337,6 +3355,8 @@ async def update_settings(body: dict, admin: dict = Depends(get_admin)):
 # ══════════════════════════════════════════════════════════════════════════════
 
 ALLOWED_EXTS = {"jpg", "jpeg", "png", "webp"}
+ALLOWED_AUDIO_EXTS = {"mp3", "wav", "m4a"}
+AUDIO_MAX_MB = 20
 
 def _check_image_magic(data: bytes) -> bool:
     """Verify file starts with known image magic bytes (PNG, JPEG, or WEBP)."""
@@ -3384,6 +3404,27 @@ async def upload_image_user(request: Request, file: UploadFile = File(...), user
     if not _check_image_magic(content):
         raise HTTPException(400, "الملف لا يبدو صورة حقيقية")
     filename = f"{uuid.uuid4()}.{ext}"
+    dest = UPLOAD_DIR / filename
+    dest.write_bytes(content)
+    fwd_proto = request.headers.get("x-forwarded-proto") or str(request.base_url).split("://")[0]
+    fwd_host  = request.headers.get("x-forwarded-host") or request.headers.get("host") or str(request.base_url).split("://")[1].rstrip("/")
+    base = f"{fwd_proto}://{fwd_host.rstrip('/')}"
+    url = f"{base}/api/static/uploads/{filename}"
+    return {"url": url, "filename": filename}
+
+@api_router.post("/upload/audio")
+async def upload_audio(request: Request, file: UploadFile = File(...), admin=Depends(get_admin)):
+    """Upload an audio file (MP3/WAV/M4A) for audio questions. Returns hosted URL."""
+    ext = (file.filename or "file.mp3").rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_AUDIO_EXTS:
+        raise HTTPException(400, "يُسمح فقط بـ MP3 / WAV / M4A")
+    max_bytes = AUDIO_MAX_MB * 1024 * 1024
+    if file.size and file.size > max_bytes:
+        raise HTTPException(400, f"الحجم الأقصى {AUDIO_MAX_MB} ميغابايت")
+    content = await file.read()
+    if len(content) > max_bytes:
+        raise HTTPException(400, f"الحجم الأقصى {AUDIO_MAX_MB} ميغابايت")
+    filename = f"audio_{uuid.uuid4()}.{ext}"
     dest = UPLOAD_DIR / filename
     dest.write_bytes(content)
     fwd_proto = request.headers.get("x-forwarded-proto") or str(request.base_url).split("://")[0]
