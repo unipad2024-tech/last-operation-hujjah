@@ -13,556 +13,290 @@ const CATEGORY_ICONS = {
 
 const emptyQuestion = {
   category_id: "", difficulty: 300, text: "", answer: "",
-  image_url: "", answer_image_url: "", question_type: "text",
+  image_url: "", answer_image_url: "", audio_url: "", question_type: "text",
 };
 
 /* ═════════════════════════════════════════════════════════════════
    SECURITY DASHBOARD — Standalone component
    ═════════════════════════════════════════════════════════════════ */
-
-const SEC = {
-  bg:      "#0d1117",
-  card:    "rgba(255,255,255,0.035)",
-  border:  "rgba(255,255,255,0.07)",
-  text:    "#e5e7eb",
-  muted:   "rgba(229,231,235,0.45)",
-  red:     { bg:"rgba(239,68,68,0.1)",  border:"rgba(239,68,68,0.35)",  text:"#f87171" },
-  amber:   { bg:"rgba(251,191,36,0.1)", border:"rgba(251,191,36,0.3)",  text:"#fcd34d" },
-  green:   { bg:"rgba(52,211,153,0.1)", border:"rgba(52,211,153,0.3)",  text:"#34d399" },
-  blue:    { bg:"rgba(96,165,250,0.1)", border:"rgba(96,165,250,0.3)",  text:"#60a5fa" },
-  purple:  { bg:"rgba(167,139,250,0.1)",border:"rgba(167,139,250,0.3)",text:"#c4b5fd" },
-};
-
-const EVENT_LABELS = {
-  auto_lock_too_many_ips: "قفل تلقائي — IPs متعددة",
-  device_limit_exceeded:  "تجاوز حد الأجهزة",
-  many_ips_flagged:       "عناوين IP مشبوهة",
-  rapid_device_switch:    "تبديل جهاز سريع",
-};
-
-const fmtDate = (iso) => {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = Math.floor((now - d) / 1000);
-  if (diff < 60)   return `منذ ${diff} ث`;
-  if (diff < 3600) return `منذ ${Math.floor(diff/60)} د`;
-  if (diff < 86400)return `منذ ${Math.floor(diff/3600)} س`;
-  return d.toLocaleDateString("ar-SA");
-};
-
-const deviceIcon = (name) => {
-  if (!name) return "🖥";
-  const n = name.toLowerCase();
-  if (n.includes("iphone") || n.includes("android")) return "📱";
-  if (n.includes("ipad"))   return "📲";
-  if (n.includes("mac") || n.includes("windows") || n.includes("linux")) return "💻";
-  return "🖥";
-};
-
-function SecBadge({ children, color = "blue" }) {
-  const c = SEC[color] || SEC.blue;
-  return (
-    <span style={{ background:c.bg, border:`1px solid ${c.border}`, color:c.text,
-                   fontSize:"0.68rem", fontWeight:700, padding:"2px 9px", borderRadius:"9999px",
-                   whiteSpace:"nowrap" }}>
-      {children}
-    </span>
-  );
-}
-
-function SecCard({ children, style = {} }) {
-  return (
-    <div style={{ background:SEC.card, border:`1px solid ${SEC.border}`, borderRadius:"14px",
-                  backdropFilter:"blur(12px)", ...style }}>
-      {children}
-    </div>
-  );
-}
-
-function StatKPI({ icon, label, value, color, sub }) {
-  return (
-    <SecCard style={{ padding:"1.25rem 1.4rem", position:"relative", overflow:"hidden" }}>
-      <div style={{ position:"absolute", top:"-10px", right:"-8px", fontSize:"3.5rem", opacity:0.06 }}>{icon}</div>
-      <div style={{ fontSize:"1.6rem", marginBottom:"0.25rem" }}>{icon}</div>
-      <div style={{ fontSize:"2.1rem", fontWeight:900, color, lineHeight:1 }}>{value ?? "—"}</div>
-      <div style={{ fontSize:"0.76rem", color:SEC.muted, marginTop:"0.3rem", fontWeight:600 }}>{label}</div>
-      {sub && <div style={{ fontSize:"0.68rem", color, opacity:0.6, marginTop:"0.1rem" }}>{sub}</div>}
-    </SecCard>
-  );
-}
-
 function SecurityDashboard({ overview, users, sessions, suspicious, devices, loading,
   expandedUser, setExpandedUser, onLoad, onLoadDevices,
   onRevokeSession, onLock, onUnlock, onRemoveDevice, onClearLogs }) {
 
   const [tab, setTab] = useState("overview");
-  const [search, setSearch] = useState("");
-  const timerRef = useRef(null);
 
   useEffect(() => { if (!overview) onLoad(); }, []);
 
-  // Auto-refresh every 30s
-  useEffect(() => {
-    timerRef.current = setInterval(onLoad, 30_000);
-    return () => clearInterval(timerRef.current);
-  }, [onLoad]);
+  const STATUS_BADGE = (u) => {
+    if (u.is_locked)         return <span style={{ background:"#ef4444",color:"#fff",fontSize:"0.68rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>محظور</span>;
+    if (u.suspicious_count > 3) return <span style={{ background:"#f59e0b",color:"#fff",fontSize:"0.68rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>مشبوه</span>;
+    return <span style={{ background:"#10b981",color:"#fff",fontSize:"0.68rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>آمن</span>;
+  };
 
-  const filteredUsers = users.filter(u =>
-    !search || u.username?.toLowerCase().includes(search.toLowerCase()) ||
-    u.email?.toLowerCase().includes(search.toLowerCase())
+  const STAT_CARD = ({ icon, label, value, color }) => (
+    <div style={{ background:"rgba(255,255,255,0.07)",backdropFilter:"blur(10px)",borderRadius:"1rem",padding:"1.2rem 1.5rem",boxShadow:"0 8px 24px rgba(0,0,0,0.35)",border:"1px solid rgba(255,255,255,0.1)" }}>
+      <div style={{ fontSize:"1.8rem",marginBottom:"0.4rem" }}>{icon}</div>
+      <div style={{ fontSize:"2rem",fontWeight:900,color:color }}>{value ?? "—"}</div>
+      <div style={{ fontSize:"0.78rem",color:"#e2e8f0",marginTop:"0.2rem" }}>{label}</div>
+    </div>
   );
 
-  const TABS = [
-    { key:"overview",   label:"نظرة عامة",  icon:"📊" },
-    { key:"users",      label:`الأجهزة (${users.length})`, icon:"📱" },
-    { key:"sessions",   label:`الجلسات (${sessions.length})`, icon:"🔗" },
-    { key:"suspicious", label:`المخالفات (${suspicious.length})`, icon:"⚠️",
-      alert: suspicious.some(s => ["auto_lock_too_many_ips","device_limit_exceeded"].includes(s.event_type)) },
-  ];
-
-  const POLICIES = [
-    { icon:"📱", text:"حد الأجهزة", val:"2 / مستخدم", color:SEC.purple.text },
-    { icon:"🔗", text:"جلسات متزامنة", val:"2 كحد أقصى", color:SEC.blue.text },
-    { icon:"⏱", text:"انتهاء الجلسة", val:"60 دقيقة", color:SEC.green.text },
-    { icon:"🛑", text:"Rate Limiting", val:"10 محاولة / 5 دقائق", color:SEC.amber.text },
-    { icon:"🔄", text:"تغيير جهاز سريع", val:"تسجيل مشبوه < 30ث", color:SEC.red.text },
-    { icon:"🌐", text:"حد عناوين IP", val:">5 تنبيه · >10 قفل", color:SEC.red.text },
-    { icon:"🗑", text:"تنظيف IP logs", val:"تلقائي كل ساعتين", color:SEC.green.text },
-  ];
-
   return (
-    <div style={{ padding:"clamp(1rem,2.5vw,2rem)", minHeight:"70vh",
-                  fontFamily:"Cairo,sans-serif", color:SEC.text }}>
-
-      {/* ── Header ── */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                    marginBottom:"1.5rem", gap:"1rem", flexWrap:"wrap" }}>
-        <div>
-          <h2 style={{ margin:0, fontSize:"clamp(1.2rem,2.5vw,1.6rem)", fontWeight:900 }}>
-            🛡 لوحة الأمان والمراقبة
-          </h2>
-          <p style={{ margin:"0.25rem 0 0", fontSize:"0.78rem", color:SEC.muted }}>
-            تحديث تلقائي كل 30 ثانية
-          </p>
-        </div>
+    <div style={{ padding:"1.5rem", minHeight:"70vh", fontFamily:"Cairo,sans-serif", color:"#e5e7eb" }}>
+      {/* Header */}
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.5rem" }}>
+        <h2 style={{ fontSize:"1.5rem",fontWeight:900,margin:0 }}>🛡 لوحة الأمان</h2>
         <button
           data-testid="security-refresh-btn"
           onClick={onLoad}
           disabled={loading}
-          style={{ background:SEC.blue.bg, border:`1px solid ${SEC.blue.border}`,
-                   color:SEC.blue.text, borderRadius:"0.75rem", padding:"0.5rem 1.3rem",
-                   cursor:"pointer", fontWeight:700, fontSize:"0.85rem",
-                   opacity: loading ? 0.6 : 1, display:"flex", alignItems:"center", gap:"0.4rem" }}
+          style={{ background:"rgba(59,130,246,0.18)",border:"1px solid rgba(59,130,246,0.4)",color:"#60a5fa",borderRadius:"0.75rem",padding:"0.5rem 1.2rem",cursor:"pointer",fontWeight:700,fontSize:"0.85rem" }}
         >
-          <span style={{ display:"inline-block", animation: loading ? "spin 1s linear infinite" : "none" }}>↻</span>
-          {loading ? "تحميل..." : "تحديث الآن"}
+          {loading ? "⏳ تحميل..." : "↻ تحديث"}
         </button>
       </div>
 
-      {/* ── Tabs ── */}
-      <div style={{ display:"flex", gap:"0.4rem", marginBottom:"1.5rem", flexWrap:"wrap" }}>
-        {TABS.map(t => (
+      {/* Sub-tabs */}
+      <div style={{ display:"flex",gap:"0.5rem",marginBottom:"1.5rem",flexWrap:"wrap" }}>
+        {[
+          { key:"overview",   label:"نظرة عامة" },
+          { key:"users",      label:`المستخدمون (${users.length})` },
+          { key:"sessions",   label:`الجلسات النشطة (${sessions.length})` },
+          { key:"suspicious", label:`سجل المشبوهين (${suspicious.length})` },
+        ].map(t => (
           <button
             key={t.key}
             data-testid={`sec-tab-${t.key}`}
             onClick={() => setTab(t.key)}
             style={{
-              position:"relative",
-              background: tab === t.key ? "rgba(59,130,246,0.2)" : "rgba(255,255,255,0.04)",
-              border: `1.5px solid ${tab === t.key ? "rgba(59,130,246,0.55)" : "rgba(255,255,255,0.1)"}`,
-              color: tab === t.key ? "#93c5fd" : "rgba(229,231,235,0.6)",
-              borderRadius:"0.8rem", padding:"0.45rem 1.1rem", cursor:"pointer",
-              fontWeight:700, fontSize:"0.82rem", transition:"all 0.2s",
-              display:"flex", alignItems:"center", gap:"0.35rem",
+              background: tab === t.key ? "#3b82f6" : "rgba(255,255,255,0.06)",
+              border:`1px solid ${tab === t.key ? "#3b82f6" : "rgba(255,255,255,0.12)"}`,
+              color: tab === t.key ? "#fff" : "rgba(229,231,235,0.7)",
+              borderRadius:"0.75rem",padding:"0.45rem 1rem",cursor:"pointer",fontWeight:700,fontSize:"0.82rem",transition:"all 0.2s",
             }}
           >
-            <span>{t.icon}</span>
-            <span>{t.label}</span>
-            {t.alert && (
-              <span style={{ width:"7px", height:"7px", borderRadius:"50%",
-                             background:"#ef4444", boxShadow:"0 0 6px #ef4444",
-                             position:"absolute", top:"5px", right:"5px" }} />
-            )}
+            {t.label}
           </button>
         ))}
       </div>
 
-      {/* ══════════════ OVERVIEW ══════════════ */}
+      {/* OVERVIEW */}
       {tab === "overview" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:"1.25rem" }}>
-          {/* KPI Grid */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:"0.9rem" }}>
-            <StatKPI icon="👥" label="المستخدمون" value={overview?.total_users}   color="#60a5fa" />
-            <StatKPI icon="📱" label="الأجهزة"    value={overview?.total_devices}  color="#c4b5fd" />
-            <StatKPI icon="🔗" label="الجلسات"    value={overview?.active_sessions} color="#34d399" sub="نشطة الآن" />
-            <StatKPI icon="⚠️" label="مشبوه (24س)" value={overview?.suspicious_24h}  color="#fbbf24" />
-            <StatKPI icon="🔒" label="محظورون"    value={overview?.locked_accounts} color="#f87171" />
+        <div>
+          {/* Security summary row */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"1rem", marginBottom:"1.5rem" }}>
+            <STAT_CARD icon="🔐" label="محاولات دخول فاشلة" value={overview?.failed_logins_24h ?? 0} color="#ef4444" />
+            <STAT_CARD icon="👥" label="جلسات نشطة" value={overview?.active_sessions ?? sessions.length} color="#10b981" />
+            <STAT_CARD icon="📋" label="نشاط المدراء (7 أيام)" value={overview?.admin_actions_7d ?? 0} color="#3b82f6" />
           </div>
-
-          {/* Security health bar */}
-          {overview && (
-            <SecCard style={{ padding:"1.1rem 1.4rem" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"0.6rem" }}>
-                <span style={{ fontWeight:700, fontSize:"0.85rem" }}>صحة الأمان</span>
-                {(() => {
-                  const score = overview.locked_accounts > 0 || overview.suspicious_24h > 5
-                    ? overview.suspicious_24h > 10 ? "خطر" : "تنبيه"
-                    : "جيد";
-                  const c = score === "جيد" ? SEC.green : score === "تنبيه" ? SEC.amber : SEC.red;
-                  return <SecBadge color={score === "جيد" ? "green" : score === "تنبيه" ? "amber" : "red"}>● {score}</SecBadge>;
-                })()}
-              </div>
-              <div style={{ height:"4px", borderRadius:"9999px", background:"rgba(255,255,255,0.06)" }}>
-                <div style={{
-                  height:"100%", borderRadius:"9999px", transition:"width 0.5s",
-                  background: overview.suspicious_24h > 10 ? "#ef4444" : overview.suspicious_24h > 3 ? "#f59e0b" : "#10b981",
-                  width: `${Math.max(10, 100 - (overview.suspicious_24h || 0) * 5)}%`,
-                }} />
-              </div>
-            </SecCard>
-          )}
-
-          {/* Policies */}
-          <SecCard style={{ padding:"1.1rem 1.4rem" }}>
-            <div style={{ fontWeight:700, fontSize:"0.78rem", color:SEC.muted, letterSpacing:"0.08em",
-                          textTransform:"uppercase", marginBottom:"0.85rem" }}>
-              سياسات الحماية النشطة
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:"1rem",marginBottom:"1.5rem" }}>
+            <STAT_CARD icon="👥" label="إجمالي المستخدمين" value={overview?.total_users}   color="#60a5fa" />
+            <STAT_CARD icon="📱" label="الأجهزة المسجلة"   value={overview?.total_devices}  color="#a78bfa" />
+            <STAT_CARD icon="🔗" label="الجلسات النشطة"    value={overview?.active_sessions} color="#34d399" />
+            <STAT_CARD icon="⚠️" label="نشاط مشبوه (24س)"  value={overview?.suspicious_24h}  color="#fbbf24" />
+            <STAT_CARD icon="🔒" label="حسابات محظورة"     value={overview?.locked_accounts} color="#f87171" />
+          </div>
+          <div style={{ background:"rgba(255,255,255,0.04)",borderRadius:"1rem",padding:"1.2rem",border:"1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ fontWeight:700,marginBottom:"0.75rem",color:"rgba(229,231,235,0.65)",fontSize:"0.8rem",textTransform:"uppercase",letterSpacing:"0.08em" }}>
+              سياسة الحماية النشطة
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:"0.5rem" }}>
-              {POLICIES.map((p,i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:"0.6rem",
-                                      padding:"0.5rem 0.7rem", borderRadius:"0.6rem",
-                                      background:"rgba(255,255,255,0.025)" }}>
-                  <span style={{ fontSize:"1rem" }}>{p.icon}</span>
-                  <span style={{ flex:1, fontSize:"0.82rem", color:SEC.text }}>{p.text}</span>
-                  <span style={{ fontSize:"0.75rem", fontWeight:700, color:p.color, whiteSpace:"nowrap" }}>{p.val}</span>
-                </div>
-              ))}
-            </div>
-          </SecCard>
+            {[
+              { icon:"✅", text:"الحد الأقصى للأجهزة: 2 لكل مستخدم" },
+              { icon:"✅", text:"الحد الأقصى للجلسات المتزامنة: 2" },
+              { icon:"✅", text:"انتهاء الجلسة تلقائياً: 60 دقيقة من عدم النشاط" },
+              { icon:"✅", text:"Rate Limiting: 10 محاولات/5 دقائق لكل IP" },
+              { icon:"✅", text:"رصد تغيير الأجهزة السريع" },
+              { icon:"✅", text:"قفل تلقائي عند >10 IPs مختلفة/ساعة" },
+              { icon:"✅", text:"تنظيف سجلات الـ IP تلقائياً كل ساعتين" },
+            ].map((p,i) => (
+              <div key={i} style={{ display:"flex",alignItems:"center",gap:"0.5rem",padding:"0.35rem 0",borderBottom:"1px solid rgba(255,255,255,0.05)",fontSize:"0.85rem" }}>
+                <span>{p.icon}</span><span style={{ color:"rgba(229,231,235,0.8)" }}>{p.text}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* ══════════════ USERS / DEVICES ══════════════ */}
+      {/* USERS */}
       {tab === "users" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
-          {/* Search */}
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="🔍  بحث بالاسم أو البريد..."
-            style={{ background:"rgba(255,255,255,0.04)", border:`1px solid ${SEC.border}`,
-                     borderRadius:"0.75rem", padding:"0.6rem 1rem", color:SEC.text,
-                     fontSize:"0.85rem", outline:"none", fontFamily:"Cairo,sans-serif",
-                     width:"100%", boxSizing:"border-box" }}
-          />
-
-          {filteredUsers.length === 0 && !loading && (
-            <div style={{ textAlign:"center", padding:"3rem", color:SEC.muted }}>
-              {search ? "لا توجد نتائج" : "لا يوجد مستخدمون"}
-            </div>
-          )}
-
-          {filteredUsers.map(u => {
-            const statusColor = u.is_locked ? "red" : u.suspicious_count > 3 ? "amber" : "green";
-            const statusLabel = u.is_locked ? "محظور" : u.suspicious_count > 3 ? "مشبوه" : "آمن";
-            const isOpen = expandedUser === u.id;
-            return (
-              <SecCard key={u.id} style={{ overflow:"hidden" }}>
-                {/* Row */}
-                <div
-                  style={{ display:"flex", alignItems:"center", gap:"0.9rem",
-                           padding:"0.85rem 1.1rem", cursor:"pointer", flexWrap:"wrap" }}
-                  onClick={() => {
-                    const next = isOpen ? null : u.id;
-                    setExpandedUser(next);
-                    if (next && !devices[u.id]) onLoadDevices(u.id);
-                  }}
-                >
-                  {/* Avatar */}
-                  <div style={{ width:"38px", height:"38px", borderRadius:"50%", flexShrink:0,
-                                background:`${SEC[statusColor].bg}`, border:`1.5px solid ${SEC[statusColor].border}`,
-                                display:"flex", alignItems:"center", justifyContent:"center",
-                                fontWeight:900, color:SEC[statusColor].text, fontSize:"1rem" }}>
-                    {(u.username||"؟")[0].toUpperCase()}
-                  </div>
-
-                  {/* Info */}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontWeight:700, fontSize:"0.9rem" }}>{u.username || u.email}</div>
-                    <div style={{ fontSize:"0.72rem", color:SEC.muted, overflow:"hidden",
-                                  textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.email}</div>
-                  </div>
-
-                  {/* Badges */}
-                  <div style={{ display:"flex", gap:"0.45rem", alignItems:"center", flexWrap:"wrap" }}>
-                    <SecBadge color={statusColor}>{statusLabel}</SecBadge>
-                    <SecBadge color="purple">📱 {u.device_count}</SecBadge>
-                    <SecBadge color="blue">🔗 {u.active_sessions}</SecBadge>
-                    {u.suspicious_count > 0 && <SecBadge color="amber">⚠ {u.suspicious_count}</SecBadge>}
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display:"flex", gap:"0.35rem", flexShrink:0 }}>
-                    {u.is_locked ? (
-                      <button data-testid={`unlock-user-${u.id}`}
-                        onClick={e => { e.stopPropagation(); onUnlock(u.id); }}
-                        style={{ background:SEC.green.bg, border:`1px solid ${SEC.green.border}`,
-                                 color:SEC.green.text, borderRadius:"0.55rem", padding:"0.28rem 0.7rem",
-                                 cursor:"pointer", fontSize:"0.73rem", fontWeight:700 }}>
-                        فتح
-                      </button>
-                    ) : (
-                      <button data-testid={`lock-user-${u.id}`}
-                        onClick={e => { e.stopPropagation(); onLock(u.id); }}
-                        style={{ background:SEC.red.bg, border:`1px solid ${SEC.red.border}`,
-                                 color:SEC.red.text, borderRadius:"0.55rem", padding:"0.28rem 0.7rem",
-                                 cursor:"pointer", fontSize:"0.73rem", fontWeight:700 }}>
-                        قفل
-                      </button>
-                    )}
-                    {u.suspicious_count > 0 && (
-                      <button data-testid={`clear-logs-${u.id}`}
-                        onClick={e => { e.stopPropagation(); onClearLogs(u.id); }}
-                        style={{ background:SEC.amber.bg, border:`1px solid ${SEC.amber.border}`,
-                                 color:SEC.amber.text, borderRadius:"0.55rem", padding:"0.28rem 0.7rem",
-                                 cursor:"pointer", fontSize:"0.73rem", fontWeight:700 }}>
-                        مسح
-                      </button>
-                    )}
-                  </div>
-
-                  <span style={{ color:SEC.muted, fontSize:"0.75rem" }}>{isOpen ? "▲" : "▼"}</span>
+        <div style={{ display:"flex",flexDirection:"column",gap:"0.75rem" }}>
+          {users.map(u => (
+            <div key={u.id} style={{ background:"rgba(255,255,255,0.04)",borderRadius:"1rem",border:"1px solid rgba(255,255,255,0.08)",overflow:"hidden" }}>
+              <div
+                style={{ display:"flex",alignItems:"center",gap:"1rem",padding:"0.9rem 1.2rem",cursor:"pointer",flexWrap:"wrap" }}
+                onClick={() => {
+                  const next = expandedUser === u.id ? null : u.id;
+                  setExpandedUser(next);
+                  if (next && !devices[u.id]) onLoadDevices(u.id);
+                }}
+              >
+                <div style={{ width:"36px",height:"36px",borderRadius:"50%",background:"rgba(59,130,246,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:"#60a5fa",fontSize:"1rem",flexShrink:0 }}>
+                  {(u.username||"؟")[0].toUpperCase()}
                 </div>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontWeight:700,color:"#e5e7eb",fontSize:"0.92rem" }}>{u.username || u.email}</div>
+                  <div style={{ color:"rgba(229,231,235,0.45)",fontSize:"0.75rem",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{u.email}</div>
+                </div>
+                <div style={{ display:"flex",gap:"0.6rem",alignItems:"center",flexWrap:"wrap" }}>
+                  {STATUS_BADGE(u)}
+                  <span style={{ background:"rgba(167,139,250,0.15)",border:"1px solid rgba(167,139,250,0.3)",color:"#c4b5fd",fontSize:"0.72rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>📱 {u.device_count} أجهزة</span>
+                  <span style={{ background:"rgba(52,211,153,0.12)",border:"1px solid rgba(52,211,153,0.3)",color:"#6ee7b7",fontSize:"0.72rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>🔗 {u.active_sessions} جلسات</span>
+                  {u.suspicious_count > 0 && (
+                    <span style={{ background:"rgba(251,191,36,0.12)",border:"1px solid rgba(251,191,36,0.3)",color:"#fcd34d",fontSize:"0.72rem",fontWeight:700,padding:"2px 8px",borderRadius:"9999px" }}>⚠ {u.suspicious_count} سجلات</span>
+                  )}
+                </div>
+                <div style={{ display:"flex",gap:"0.4rem",flexShrink:0 }}>
+                  {u.is_locked ? (
+                    <button
+                      data-testid={`unlock-user-${u.id}`}
+                      onClick={e => { e.stopPropagation(); onUnlock(u.id); }}
+                      style={{ background:"rgba(52,211,153,0.15)",border:"1px solid rgba(52,211,153,0.4)",color:"#34d399",borderRadius:"0.6rem",padding:"0.3rem 0.75rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700 }}
+                    >فتح</button>
+                  ) : (
+                    <button
+                      data-testid={`lock-user-${u.id}`}
+                      onClick={e => { e.stopPropagation(); onLock(u.id); }}
+                      style={{ background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.4)",color:"#f87171",borderRadius:"0.6rem",padding:"0.3rem 0.75rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700 }}
+                    >قفل</button>
+                  )}
+                  {u.suspicious_count > 0 && (
+                    <button
+                      data-testid={`clear-logs-${u.id}`}
+                      onClick={e => { e.stopPropagation(); onClearLogs(u.id); }}
+                      style={{ background:"rgba(251,191,36,0.1)",border:"1px solid rgba(251,191,36,0.3)",color:"#fcd34d",borderRadius:"0.6rem",padding:"0.3rem 0.75rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700 }}
+                    >مسح سجلات</button>
+                  )}
+                </div>
+                <span style={{ color:"rgba(229,231,235,0.3)",marginLeft:"auto" }}>{expandedUser === u.id ? "▲" : "▼"}</span>
+              </div>
 
-                {/* Expanded: Devices */}
-                {isOpen && (
-                  <div style={{ borderTop:`1px solid ${SEC.border}`, padding:"0.9rem 1.1rem",
-                                background:"rgba(0,0,0,0.18)" }}>
-                    <div style={{ fontSize:"0.72rem", fontWeight:700, color:SEC.muted,
-                                  letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:"0.65rem" }}>
-                      الأجهزة المسجلة
-                    </div>
-                    {(devices[u.id] || []).length === 0 ? (
-                      <div style={{ color:SEC.muted, fontSize:"0.82rem" }}>لا توجد أجهزة</div>
-                    ) : (
-                      <div style={{ display:"flex", flexDirection:"column", gap:"0.45rem" }}>
-                        {(devices[u.id] || []).map(d => (
-                          <div key={d.device_id}
-                               style={{ display:"flex", alignItems:"center", gap:"0.75rem",
-                                        background:"rgba(255,255,255,0.025)", borderRadius:"0.75rem",
-                                        padding:"0.6rem 0.9rem", border:`1px solid ${SEC.border}` }}>
-                            <span style={{ fontSize:"1.25rem", flexShrink:0 }}>{deviceIcon(d.device_name)}</span>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ fontWeight:700, fontSize:"0.83rem" }}>{d.device_name || "جهاز غير معروف"}</div>
-                              <div style={{ fontSize:"0.68rem", color:SEC.muted }}>
-                                آخر دخول: {fmtDate(d.last_login)}
-                                <span style={{ margin:"0 0.4rem", opacity:0.35 }}>·</span>
-                                IP: <span style={{ fontFamily:"monospace", color:"#93c5fd" }}>{d.last_ip || "—"}</span>
-                                {d.trusted && (
-                                  <><span style={{ margin:"0 0.4rem", opacity:0.35 }}>·</span>
-                                  <span style={{ color:SEC.green.text }}>موثوق ✓</span></>
-                                )}
-                              </div>
-                            </div>
-                            <button data-testid={`remove-device-${d.device_id}`}
-                              onClick={() => onRemoveDevice(d.device_id, u.id)}
-                              style={{ background:SEC.red.bg, border:`1px solid ${SEC.red.border}`,
-                                       color:SEC.red.text, borderRadius:"0.55rem", padding:"0.24rem 0.6rem",
-                                       cursor:"pointer", fontSize:"0.7rem", fontWeight:700, flexShrink:0 }}>
-                              حذف
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+              {/* Expanded: Devices list */}
+              {expandedUser === u.id && (
+                <div style={{ borderTop:"1px solid rgba(255,255,255,0.06)",padding:"1rem 1.2rem",background:"rgba(0,0,0,0.2)" }}>
+                  <div style={{ fontWeight:700,fontSize:"0.8rem",color:"rgba(229,231,235,0.5)",marginBottom:"0.6rem",textTransform:"uppercase",letterSpacing:"0.06em" }}>
+                    الأجهزة المسجلة
                   </div>
-                )}
-              </SecCard>
-            );
-          })}
+                  {(devices[u.id] || []).length === 0 ? (
+                    <div style={{ color:"rgba(229,231,235,0.3)",fontSize:"0.82rem" }}>لا توجد أجهزة مسجلة</div>
+                  ) : (
+                    <div style={{ display:"flex",flexDirection:"column",gap:"0.5rem" }}>
+                      {(devices[u.id] || []).map(d => (
+                        <div key={d.device_id} style={{ display:"flex",alignItems:"center",gap:"0.75rem",background:"rgba(255,255,255,0.03)",borderRadius:"0.75rem",padding:"0.6rem 0.9rem",border:"1px solid rgba(255,255,255,0.06)" }}>
+                          <span style={{ fontSize:"1.3rem" }}>
+                            {d.device_name?.includes("iPhone") ? "📱" : d.device_name?.includes("Android") ? "📱" : d.device_name?.includes("Mac") || d.device_name?.includes("Windows") ? "💻" : "🖥"}
+                          </span>
+                          <div style={{ flex:1 }}>
+                            <div style={{ fontWeight:700,fontSize:"0.85rem",color:"#e5e7eb" }}>{d.device_name}</div>
+                            <div style={{ fontSize:"0.7rem",color:"rgba(229,231,235,0.4)" }}>
+                              آخر دخول: {d.last_login ? new Date(d.last_login).toLocaleDateString("ar-SA") : "—"}
+                              {" · "} IP: {d.last_ip || "—"}
+                            </div>
+                          </div>
+                          <button
+                            data-testid={`remove-device-${d.device_id}`}
+                            onClick={() => onRemoveDevice(d.device_id, u.id)}
+                            style={{ background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.35)",color:"#f87171",borderRadius:"0.6rem",padding:"0.25rem 0.65rem",cursor:"pointer",fontSize:"0.72rem",fontWeight:700 }}
+                          >حذف</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+          {users.length === 0 && !loading && (
+            <div style={{ textAlign:"center",padding:"3rem",color:"rgba(229,231,235,0.3)" }}>لا يوجد مستخدمون</div>
+          )}
         </div>
       )}
 
-      {/* ══════════════ SESSIONS ══════════════ */}
+      {/* SESSIONS */}
       {tab === "sessions" && (
-        <SecCard>
+        <div>
           <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.82rem" }}>
+            <table style={{ width:"100%",borderCollapse:"collapse",fontSize:"0.83rem" }}>
               <thead>
-                <tr style={{ borderBottom:`1px solid ${SEC.border}` }}>
+                <tr style={{ borderBottom:"1px solid rgba(255,255,255,0.1)" }}>
                   {["المستخدم","الجهاز","عنوان IP","بدأت","آخر نشاط",""].map((h,i) => (
-                    <th key={i} style={{ padding:"0.7rem 1rem", textAlign:"right",
-                                         color:SEC.muted, fontWeight:700, fontSize:"0.72rem",
-                                         textTransform:"uppercase", letterSpacing:"0.05em",
-                                         whiteSpace:"nowrap" }}>{h}</th>
+                    <th key={i} style={{ padding:"0.6rem 0.8rem",textAlign:"right",color:"rgba(229,231,235,0.5)",fontWeight:700,fontSize:"0.75rem",textTransform:"uppercase",letterSpacing:"0.05em" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {sessions.map((s, i) => (
-                  <tr key={s.session_id}
-                      style={{ borderBottom:`1px solid rgba(255,255,255,0.03)`,
-                               background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                    <td style={{ padding:"0.65rem 1rem" }}>
-                      <div style={{ fontWeight:700, fontSize:"0.85rem" }}>{s.username || "؟"}</div>
-                      <div style={{ fontSize:"0.68rem", color:SEC.muted }}>{s.email}</div>
-                    </td>
-                    <td style={{ padding:"0.65rem 1rem" }}>
-                      <span style={{ background:"rgba(255,255,255,0.05)", borderRadius:"0.4rem",
-                                     padding:"2px 7px", fontFamily:"monospace", fontSize:"0.75rem",
-                                     color:"rgba(229,231,235,0.7)" }}>
-                        {s.device_id?.slice(0,8)}…
-                      </span>
-                    </td>
-                    <td style={{ padding:"0.65rem 1rem" }}>
-                      <span style={{ fontFamily:"monospace", color:"#93c5fd", fontSize:"0.8rem" }}>
-                        {s.ip_address || "—"}
-                      </span>
-                    </td>
-                    <td style={{ padding:"0.65rem 1rem", color:SEC.muted, fontSize:"0.75rem", whiteSpace:"nowrap" }}>
-                      {fmtDate(s.created_at)}
-                    </td>
-                    <td style={{ padding:"0.65rem 1rem", whiteSpace:"nowrap" }}>
-                      <span style={{ color:SEC.green.text, fontSize:"0.75rem", fontWeight:600 }}>
-                        {fmtDate(s.last_activity)}
-                      </span>
-                    </td>
-                    <td style={{ padding:"0.65rem 1rem" }}>
-                      <button data-testid={`revoke-session-${s.session_id}`}
+                {sessions.map(s => (
+                  <tr key={s.session_id} style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                    <td style={{ padding:"0.6rem 0.8rem" }}><div style={{ fontWeight:700 }}>{s.username || "؟"}</div><div style={{ fontSize:"0.7rem",color:"rgba(229,231,235,0.4)" }}>{s.email}</div></td>
+                    <td style={{ padding:"0.6rem 0.8rem",color:"rgba(229,231,235,0.65)" }}>{s.device_id?.slice(0,8)}…</td>
+                    <td style={{ padding:"0.6rem 0.8rem",fontFamily:"monospace",color:"#93c5fd",fontSize:"0.8rem" }}>{s.ip_address}</td>
+                    <td style={{ padding:"0.6rem 0.8rem",color:"rgba(229,231,235,0.5)",fontSize:"0.78rem" }}>{s.created_at ? new Date(s.created_at).toLocaleString("ar-SA") : "—"}</td>
+                    <td style={{ padding:"0.6rem 0.8rem",color:"rgba(229,231,235,0.5)",fontSize:"0.78rem" }}>{s.last_activity ? new Date(s.last_activity).toLocaleString("ar-SA") : "—"}</td>
+                    <td style={{ padding:"0.6rem 0.8rem" }}>
+                      <button
+                        data-testid={`revoke-session-${s.session_id}`}
                         onClick={() => onRevokeSession(s.session_id)}
-                        style={{ background:SEC.red.bg, border:`1px solid ${SEC.red.border}`,
-                                 color:SEC.red.text, borderRadius:"0.5rem", padding:"0.28rem 0.8rem",
-                                 cursor:"pointer", fontSize:"0.73rem", fontWeight:700 }}>
-                        إلغاء
-                      </button>
+                        style={{ background:"rgba(239,68,68,0.12)",border:"1px solid rgba(239,68,68,0.4)",color:"#f87171",borderRadius:"0.6rem",padding:"0.3rem 0.75rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700 }}
+                      >إلغاء</button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {sessions.length === 0 && (
-              <div style={{ textAlign:"center", padding:"3rem", color:SEC.muted }}>
-                🔗 لا توجد جلسات نشطة
-              </div>
-            )}
+            {sessions.length === 0 && <div style={{ textAlign:"center",padding:"2rem",color:"rgba(229,231,235,0.3)" }}>لا توجد جلسات نشطة</div>}
           </div>
-        </SecCard>
+        </div>
       )}
 
-      {/* ══════════════ SUSPICIOUS / VIOLATIONS ══════════════ */}
+      {/* SUSPICIOUS */}
       {tab === "suspicious" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:"0.55rem" }}>
-          {suspicious.map((s, i) => {
+        <div style={{ display:"flex",flexDirection:"column",gap:"0.6rem" }}>
+          {suspicious.map((s,i) => {
             const isHigh = ["auto_lock_too_many_ips","device_limit_exceeded"].includes(s.event_type);
             const isMed  = ["many_ips_flagged","rapid_device_switch"].includes(s.event_type);
-            const severity = isHigh ? "red" : isMed ? "amber" : "blue";
-            const c = SEC[severity];
-            const label = EVENT_LABELS[s.event_type] || s.event_type;
+            const bgColor = isHigh ? "rgba(239,68,68,0.08)" : isMed ? "rgba(251,191,36,0.06)" : "rgba(255,255,255,0.03)";
+            const bdColor = isHigh ? "rgba(239,68,68,0.25)" : isMed ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.07)";
             return (
-              <div key={i} style={{ background:c.bg, border:`1px solid ${c.border}`,
-                                    borderRadius:"12px", padding:"0.85rem 1.1rem",
-                                    display:"flex", alignItems:"flex-start", gap:"0.9rem" }}>
-                <span style={{ fontSize:"1.1rem", flexShrink:0, marginTop:"1px" }}>
-                  {isHigh ? "🔴" : isMed ? "🟡" : "🔵"}
-                </span>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", gap:"0.55rem", alignItems:"center",
-                                flexWrap:"wrap", marginBottom:"0.35rem" }}>
-                    <span style={{ fontWeight:700, fontSize:"0.88rem" }}>
-                      {s.username || s.user_id?.slice(0,8)}
+              <div key={i} style={{ background:bgColor,border:`1px solid ${bdColor}`,borderRadius:"0.9rem",padding:"0.8rem 1rem",display:"flex",alignItems:"flex-start",gap:"0.9rem" }}>
+                <span style={{ fontSize:"1.1rem",flexShrink:0 }}>{isHigh ? "🔴" : isMed ? "🟡" : "⚪"}</span>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ display:"flex",gap:"0.6rem",alignItems:"center",flexWrap:"wrap",marginBottom:"0.3rem" }}>
+                    <span style={{ fontWeight:700,color:"#e5e7eb",fontSize:"0.88rem" }}>{s.username || s.user_id?.slice(0,8)}</span>
+                    <span style={{ background: isHigh?"rgba(239,68,68,0.15)":isMed?"rgba(251,191,36,0.12)":"rgba(255,255,255,0.05)",
+                                    border:`1px solid ${isHigh?"rgba(239,68,68,0.3)":isMed?"rgba(251,191,36,0.25)":"rgba(255,255,255,0.1)"}`,
+                                    color: isHigh?"#fca5a5":isMed?"#fcd34d":"rgba(229,231,235,0.6)",
+                                    borderRadius:"9999px",padding:"2px 8px",fontSize:"0.7rem",fontWeight:700 }}>
+                      {s.event_type}
                     </span>
-                    <span style={{ background:"rgba(0,0,0,0.25)", border:`1px solid ${c.border}`,
-                                   color:c.text, borderRadius:"9999px", padding:"2px 9px",
-                                   fontSize:"0.7rem", fontWeight:700 }}>
-                      {label}
-                    </span>
-                    {isHigh && <SecBadge color="red">خطر عالٍ</SecBadge>}
-                    {isMed  && <SecBadge color="amber">تنبيه</SecBadge>}
-                    <span style={{ color:SEC.muted, fontSize:"0.7rem", marginLeft:"auto", whiteSpace:"nowrap" }}>
-                      {fmtDate(s.created_at)}
+                    <span style={{ color:"rgba(229,231,235,0.3)",fontSize:"0.72rem",marginLeft:"auto" }}>
+                      {s.created_at ? new Date(s.created_at).toLocaleString("ar-SA") : ""}
                     </span>
                   </div>
-                  {/* Data details */}
-                  {s.data && Object.keys(s.data).length > 0 && (
-                    <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap" }}>
-                      {Object.entries(s.data).map(([k, v]) => (
-                        <span key={k} style={{ background:"rgba(0,0,0,0.3)", borderRadius:"0.4rem",
-                                               padding:"1px 7px", fontSize:"0.68rem",
-                                               fontFamily:"monospace", color:"rgba(229,231,235,0.5)" }}>
-                          {k}: <span style={{ color:c.text }}>{String(v)}</span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  <div style={{ fontSize:"0.75rem",color:"rgba(229,231,235,0.45)",fontFamily:"monospace" }}>
+                    {JSON.stringify(s.data)}
+                  </div>
                 </div>
               </div>
             );
           })}
-          {suspicious.length === 0 && (
-            <div style={{ textAlign:"center", padding:"4rem", color:SEC.muted }}>
-              <div style={{ fontSize:"2.5rem", marginBottom:"0.75rem" }}>✅</div>
-              لا يوجد نشاط مشبوه
-            </div>
-          )}
+          {suspicious.length === 0 && <div style={{ textAlign:"center",padding:"3rem",color:"rgba(229,231,235,0.3)" }}>لا يوجد نشاط مشبوه</div>}
         </div>
       )}
-
-      <style>{`@keyframes spin { from { transform:rotate(0deg) } to { transform:rotate(360deg) } }`}</style>
     </div>
   );
 }
 
 /* ── PendingQuestionCard — standalone component to avoid stale-closure ── */
 function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, onUpdate, selected, onToggleSelect }) {
+  const diffColor = q.difficulty === 300 ? "green" : q.difficulty === 600 ? "amber" : "red";
+  const diffLabel = q.difficulty === 300 ? "سهل" : q.difficulty === 600 ? "متوسط" : "صعب";
   const cat = categories.find(c => c.id === q.category_id);
-
-  const [editText, setEditText]       = useState(false);
-  const [editAnswer, setEditAnswer]   = useState(false);
-  const [editDiff, setEditDiff]       = useState(false);
-  const [editCat, setEditCat]         = useState(false);
-  const [editImg, setEditImg]         = useState(false);
-  const [editAnsImg, setEditAnsImg]   = useState(false);
-  const [tmpText, setTmpText]         = useState(q.text || "");
-  const [tmpAnswer, setTmpAnswer]     = useState(q.answer || "");
-  const [tmpDiff, setTmpDiff]         = useState(q.difficulty || 300);
-  const [tmpCatId, setTmpCatId]       = useState(q.category_id || "");
-  const [tmpImg, setTmpImg]           = useState(q.image_url || "");
-  const [tmpAnsImg, setTmpAnsImg]     = useState(q.answer_image_url || "");
-  const [saving, setSaving]           = useState(false);
-  const [translating, setTranslating] = useState(false);
-
-  // Parse stored translation {q, a}
-  const parsedTr = (() => { try { return q.translation ? JSON.parse(q.translation) : null; } catch { return null; } })();
-  const [tmpTrQ, setTmpTrQ] = useState(parsedTr?.q || "");
-  const [tmpTrA, setTmpTrA] = useState(parsedTr?.a || "");
-
-  const saveTranslation = async (trQ, trA) => {
-    const val = JSON.stringify({ q: trQ, a: trA });
-    await saveField("translation", val);
-    onUpdate(q.id, { translation: val });
-  };
-
-  const handleAutoTranslate = async () => {
-    setTranslating(true);
-    try {
-      const r = await axios.post(`${API}/ai/translate`, { text: q.text, answer: q.answer }, { headers });
-      const newQ = r.data.text_ar || "";
-      const newA = r.data.answer_ar || "";
-      setTmpTrQ(newQ); setTmpTrA(newA);
-      await saveTranslation(newQ, newA);
-      toast.success("تمت الترجمة");
-    } catch { toast.error("فشل الترجمة"); }
-    finally { setTranslating(false); }
-  };
-
-  const diffColors = {
-    300: { bg: "rgba(52,211,153,0.12)", border: "rgba(52,211,153,0.4)", text: "#34d399", label: "سهل" },
-    600: { bg: "rgba(251,191,36,0.12)", border: "rgba(251,191,36,0.4)", text: "#fbbf24", label: "متوسط" },
-    900: { bg: "rgba(239,68,68,0.12)",  border: "rgba(239,68,68,0.4)",  text: "#f87171", label: "صعب" },
-  };
-  const dc = diffColors[q.difficulty] || diffColors[300];
+  const [editImg, setEditImg] = useState(false);
+  const [editAnsImg, setEditAnsImg] = useState(false);
+  const [tmpImg, setTmpImg] = useState(q.image_url || "");
+  const [tmpAnsImg, setTmpAnsImg] = useState(q.answer_image_url || "");
+  const [saving, setSaving] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [localQ, setLocalQ] = useState({ text: q.text, answer: q.answer, difficulty: q.difficulty, category_id: q.category_id });
 
   const saveField = async (field, val) => {
     setSaving(true);
@@ -574,318 +308,219 @@ function PendingQuestionCard({ q, i, categories, headers, onApprove, onReject, o
     finally { setSaving(false); }
   };
 
-  const BG     = "#111827";
-  const BORDER = "rgba(255,255,255,0.08)";
-  const TEXT   = "#f3f4f6";
-  const MUTED  = "rgba(243,244,246,0.45)";
+  const saveEditMode = async () => {
+    setSaving(true);
+    try {
+      await axios.patch(`${API}/admin/questions/pending/${q.id}`, localQ, { headers });
+      onUpdate(q.id, localQ);
+      toast.success("تم الحفظ");
+      setEditMode(false);
+    } catch { toast.error("خطأ في الحفظ"); }
+    finally { setSaving(false); }
+  };
 
   return (
     <div
       data-testid={`pending-q-${i}`}
-      style={{
-        background: selected ? "rgba(99,102,241,0.08)" : BG,
-        border: `1.5px solid ${selected ? "rgba(99,102,241,0.55)" : BORDER}`,
-        borderRadius: "14px",
-        overflow: "hidden",
-        transition: "border-color 0.2s",
-      }}
+      className={`bg-white border rounded-2xl overflow-hidden border-${diffColor}-200`}
+      style={{ outline: selected ? "2px solid #3b82f6" : "none" }}
     >
-      {/* Difficulty strip */}
-      <div style={{ height: "3px", background: dc.text, opacity: 0.7 }} />
-
-      <div style={{ padding: "14px 16px" }}>
-        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
-
+      <div className={`h-1 w-full bg-${diffColor}-400`} />
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
           {/* Checkbox */}
-          <div style={{ paddingTop: "2px" }}>
+          <div className="pt-1 shrink-0">
             <input
               type="checkbox"
               checked={!!selected}
-              onChange={() => onToggleSelect(q.id)}
-              style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#818cf8" }}
+              onChange={() => onToggleSelect && onToggleSelect(q.id)}
+              style={{ width: "16px", height: "16px", cursor: "pointer" }}
             />
           </div>
-
-          {/* Content */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-
-            {/* Tags row */}
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "10px", alignItems: "center" }}>
-              {/* Difficulty badge — click to edit */}
-              {editDiff ? (
-                <select
-                  value={tmpDiff}
-                  onChange={e => setTmpDiff(Number(e.target.value))}
-                  onBlur={() => { saveField("difficulty", tmpDiff); setEditDiff(false); }}
-                  autoFocus
-                  style={{ background: dc.bg, border: `1px solid ${dc.border}`, color: dc.text,
-                           fontSize: "0.72rem", fontWeight: 700, padding: "2px 8px", borderRadius: "9999px",
-                           outline: "none", cursor: "pointer" }}
-                >
-                  <option value={300}>سهل · 300</option>
-                  <option value={600}>متوسط · 600</option>
-                  <option value={900}>صعب · 900</option>
-                </select>
-              ) : (
-                <span
-                  onClick={() => setEditDiff(true)}
-                  title="انقر لتغيير الصعوبة"
-                  style={{ background: dc.bg, border: `1px solid ${dc.border}`, color: dc.text,
-                           fontSize: "0.72rem", fontWeight: 700, padding: "2px 9px", borderRadius: "9999px",
-                           cursor: "pointer", whiteSpace: "nowrap" }}
-                >
-                  {dc.label} · {q.difficulty} ✎
+          {/* Left: content */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className={`text-[11px] font-black px-2 py-0.5 rounded-full bg-${diffColor}-100 text-${diffColor}-800`}>
+                {diffLabel} · {q.difficulty}
+              </span>
+              {cat && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary/60 font-bold">
+                  {cat.icon} {cat.name}
                 </span>
               )}
-              {editCat ? (
-                <select
-                  value={tmpCatId}
-                  onChange={e => setTmpCatId(e.target.value)}
-                  onBlur={() => { if (tmpCatId) saveField("category_id", tmpCatId); setEditCat(false); }}
-                  autoFocus
-                  style={{ background: "rgba(30,20,40,0.95)", border: "1px solid rgba(139,92,246,0.5)", color: "#c4b5fd",
-                           fontSize: "0.72rem", fontWeight: 700, padding: "2px 8px", borderRadius: "9999px",
-                           outline: "none", cursor: "pointer" }}
-                >
-                  <option value="">اختر فئة...</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.icon || ""} {c.name}</option>)}
-                </select>
-              ) : (
-                <span
-                  onClick={() => { setTmpCatId(q.category_id || ""); setEditCat(true); }}
-                  title="انقر لتغيير الفئة"
-                  style={{ background: cat ? "rgba(139,92,246,0.12)" : "rgba(239,68,68,0.12)",
-                           border: `1px solid ${cat ? "rgba(139,92,246,0.35)" : "rgba(239,68,68,0.4)"}`,
-                           color: cat ? "#c4b5fd" : "#f87171",
-                           fontSize: "0.72rem", fontWeight: 700, padding: "2px 9px", borderRadius: "9999px",
-                           cursor: "pointer", whiteSpace: "nowrap" }}
-                >
-                  {cat ? `${cat.icon || ""} ${cat.name}` : "⚠️ بدون فئة"} ✎
-                </span>
-              )}
+              <button
+                onClick={() => { setLocalQ({ text: q.text, answer: q.answer, difficulty: q.difficulty, category_id: q.category_id }); setEditMode(!editMode); }}
+                style={{ fontSize: "0.75rem", color: "#6366f1", border: "1px solid #c7d2fe", borderRadius: "0.4rem", padding: "1px 8px", background: "transparent", cursor: "pointer", fontFamily: "Cairo,sans-serif", fontWeight: 700 }}
+              >
+                {editMode ? "✕ إلغاء التعديل" : "✏️ تعديل"}
+              </button>
             </div>
 
-            {/* Question text — click to edit inline */}
-            {editText ? (
-              <div style={{ marginBottom: "8px" }}>
+            {editMode ? (
+              <div style={{ marginBottom: "0.75rem" }}>
                 <textarea
-                  value={tmpText}
-                  onChange={e => setTmpText(e.target.value)}
+                  value={localQ.text}
+                  onChange={e => setLocalQ(p => ({ ...p, text: e.target.value }))}
                   rows={3}
-                  autoFocus
-                  style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(99,102,241,0.5)",
-                           borderRadius: "10px", color: TEXT, padding: "8px 12px", fontSize: "0.9rem", fontFamily: "Cairo,sans-serif",
-                           outline: "none", resize: "vertical" }}
+                  style={{ width: "100%", border: "2px solid #6366f1", borderRadius: "0.5rem", padding: "0.4rem 0.6rem", fontSize: "0.9rem", fontFamily: "Cairo,sans-serif", outline: "none", resize: "vertical", marginBottom: "0.4rem" }}
+                  placeholder="نص السؤال..."
                 />
-                <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                  <button
-                    onClick={() => { saveField("text", tmpText); setEditText(false); }}
-                    disabled={saving}
-                    style={{ background: "rgba(52,211,153,0.2)", border: "1px solid rgba(52,211,153,0.5)", color: "#34d399",
-                             fontSize: "0.75rem", fontWeight: 700, padding: "4px 12px", borderRadius: "8px", cursor: "pointer" }}
-                  >✓ حفظ</button>
-                  <button onClick={() => { setTmpText(q.text); setEditText(false); }}
-                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: MUTED,
-                             fontSize: "0.75rem", padding: "4px 10px", borderRadius: "8px", cursor: "pointer" }}
-                  >إلغاء</button>
-                </div>
-              </div>
-            ) : (
-              <div
-                onClick={() => { setTmpText(q.text); setEditText(true); }}
-                title="انقر للتعديل"
-                style={{ color: TEXT, fontWeight: 700, fontSize: "0.92rem", marginBottom: "6px",
-                         cursor: "text", lineHeight: 1.5, fontFamily: "Cairo,sans-serif",
-                         padding: "4px 6px", borderRadius: "6px", transition: "background 0.15s" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-              >
-                {q.text} <span style={{ color: "rgba(99,102,241,0.5)", fontSize: "0.7rem" }}>✎</span>
-              </div>
-            )}
-
-            {/* Answer — click to edit inline */}
-            {editAnswer ? (
-              <div style={{ marginBottom: "8px" }}>
-                <input
-                  type="text"
-                  value={tmpAnswer}
-                  onChange={e => setTmpAnswer(e.target.value)}
-                  autoFocus
-                  style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(251,191,36,0.5)",
-                           borderRadius: "10px", color: "#fbbf24", padding: "8px 12px", fontSize: "0.88rem",
-                           fontFamily: "Cairo,sans-serif", outline: "none" }}
-                />
-                <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                  <button
-                    onClick={() => { saveField("answer", tmpAnswer); setEditAnswer(false); }}
-                    disabled={saving}
-                    style={{ background: "rgba(52,211,153,0.2)", border: "1px solid rgba(52,211,153,0.5)", color: "#34d399",
-                             fontSize: "0.75rem", fontWeight: 700, padding: "4px 12px", borderRadius: "8px", cursor: "pointer" }}
-                  >✓ حفظ</button>
-                  <button onClick={() => { setTmpAnswer(q.answer); setEditAnswer(false); }}
-                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: MUTED,
-                             fontSize: "0.75rem", padding: "4px 10px", borderRadius: "8px", cursor: "pointer" }}
-                  >إلغاء</button>
-                </div>
-              </div>
-            ) : (
-              <div
-                onClick={() => { setTmpAnswer(q.answer); setEditAnswer(true); }}
-                title="انقر لتعديل الإجابة"
-                style={{ fontSize: "0.83rem", marginBottom: "10px", cursor: "text",
-                         padding: "4px 6px", borderRadius: "6px", transition: "background 0.15s" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-              >
-                <span style={{ color: MUTED }}>الإجابة: </span>
-                <span style={{ color: "#fbbf24", fontWeight: 900, fontFamily: "Cairo,sans-serif" }}>{q.answer}</span>
-                <span style={{ color: "rgba(251,191,36,0.4)", fontSize: "0.68rem", marginRight: "4px" }}>✎</span>
-              </div>
-            )}
-
-            {/* Choices — shown when question has MCQ options (from AI extraction) */}
-            {q.choices && Object.keys(q.choices).length > 0 && (
-              <div style={{ marginBottom: "10px" }}>
-                <div style={{ color: MUTED, fontSize: "0.68rem", fontWeight: 700, marginBottom: "6px" }}>
-                  الخيارات — انقر على الصحيح ليصبح الإجابة
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  {Object.entries(q.choices).map(([key, val]) => {
-                    const isSelected = q.answer === val;
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => saveField("answer", val)}
-                        disabled={saving}
-                        style={{
-                          display: "flex", alignItems: "center", gap: "8px", textAlign: "right",
-                          background: isSelected ? "rgba(52,211,153,0.15)" : "rgba(255,255,255,0.04)",
-                          border: `1.5px solid ${isSelected ? "rgba(52,211,153,0.55)" : "rgba(255,255,255,0.1)"}`,
-                          borderRadius: "8px", padding: "6px 12px", cursor: "pointer",
-                          color: isSelected ? "#34d399" : TEXT, fontSize: "0.83rem",
-                          fontFamily: "Cairo,sans-serif", transition: "all 0.15s", width: "100%",
-                        }}
-                      >
-                        <span style={{
-                          background: isSelected ? "rgba(52,211,153,0.25)" : "rgba(255,255,255,0.08)",
-                          borderRadius: "6px", padding: "1px 7px", fontWeight: 900, fontSize: "0.78rem",
-                          color: isSelected ? "#34d399" : MUTED, flexShrink: 0,
-                        }}>{key}</span>
-                        {val}
-                        {isSelected && <span style={{ marginRight: "auto", fontSize: "0.75rem" }}>✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Translation section — shown for English questions */}
-            {(q.translation || q.text?.match(/^[A-Za-z]/)) && (
-              <div style={{ marginBottom: "10px", padding: "10px 12px", background: "rgba(234,179,8,0.07)", borderRadius: "10px", border: "1px solid rgba(234,179,8,0.2)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-                  <span style={{ color: "#fbbf24", fontSize: "0.7rem", fontWeight: 800 }}>🇸🇦 الترجمة العربية</span>
-                  <button
-                    onClick={handleAutoTranslate}
-                    disabled={translating}
-                    style={{ background: "rgba(234,179,8,0.15)", border: "1px solid rgba(234,179,8,0.4)", color: "#fbbf24",
-                             fontSize: "0.68rem", fontWeight: 700, padding: "2px 10px", borderRadius: "6px", cursor: "pointer" }}
+                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                  <input
+                    value={localQ.answer}
+                    onChange={e => setLocalQ(p => ({ ...p, answer: e.target.value }))}
+                    placeholder="الإجابة..."
+                    style={{ flex: 1, border: "2px solid #6366f1", borderRadius: "0.5rem", padding: "0.4rem 0.6rem", fontSize: "0.85rem", fontFamily: "Cairo,sans-serif", outline: "none" }}
+                  />
+                  <select
+                    value={localQ.difficulty}
+                    onChange={e => setLocalQ(p => ({ ...p, difficulty: parseInt(e.target.value) }))}
+                    style={{ border: "2px solid #6366f1", borderRadius: "0.5rem", padding: "0.4rem 0.6rem", fontSize: "0.85rem", fontFamily: "Cairo,sans-serif", outline: "none" }}
                   >
-                    {translating ? "⏳..." : "✨ ترجم تلقائياً"}
+                    <option value={300}>300 - سهل</option>
+                    <option value={600}>600 - متوسط</option>
+                    <option value={900}>900 - صعب</option>
+                  </select>
+                  <select
+                    value={localQ.category_id || ""}
+                    onChange={e => setLocalQ(p => ({ ...p, category_id: e.target.value }))}
+                    style={{ border: "2px solid #6366f1", borderRadius: "0.5rem", padding: "0.4rem 0.6rem", fontSize: "0.85rem", fontFamily: "Cairo,sans-serif", outline: "none", maxWidth: "160px" }}
+                  >
+                    <option value="">-- الفئة --</option>
+                    {(categories || []).map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={saveEditMode}
+                    disabled={saving}
+                    style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: "0.5rem", padding: "0.4rem 1rem", fontWeight: 700, cursor: "pointer", fontFamily: "Cairo,sans-serif", opacity: saving ? 0.6 : 1 }}
+                  >
+                    {saving ? "..." : "حفظ"}
                   </button>
                 </div>
-                <input
-                  value={tmpTrQ}
-                  onChange={e => setTmpTrQ(e.target.value)}
-                  onBlur={() => saveTranslation(tmpTrQ, tmpTrA)}
-                  placeholder="ترجمة نص السؤال بالعربي..."
-                  style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(234,179,8,0.25)",
-                           borderRadius: "8px", color: "#fef3c7", padding: "6px 10px", fontSize: "0.82rem",
-                           fontFamily: "Cairo,sans-serif", outline: "none", marginBottom: "5px", boxSizing: "border-box" }}
-                />
-                <input
-                  value={tmpTrA}
-                  onChange={e => setTmpTrA(e.target.value)}
-                  onBlur={() => saveTranslation(tmpTrQ, tmpTrA)}
-                  placeholder="ترجمة الإجابة بالعربي..."
-                  style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(234,179,8,0.25)",
-                           borderRadius: "8px", color: "#fef9c3", padding: "6px 10px", fontSize: "0.82rem",
-                           fontFamily: "Cairo,sans-serif", outline: "none", boxSizing: "border-box" }}
-                />
               </div>
+            ) : (
+              <>
+                <div className="font-bold text-primary mb-1">{q.text}</div>
+                <div className="text-sm text-primary/60 mb-3">
+                  الإجابة: <span className="font-black text-primary">{q.answer}</span>
+                </div>
+              </>
             )}
 
             {/* Images row */}
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-              {/* Question image */}
-              <div>
-                <div style={{ color: MUTED, fontSize: "0.68rem", fontWeight: 700, marginBottom: "4px" }}>صورة السؤال</div>
+            <div className="flex gap-3 flex-wrap">
+              {/* Question Image */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-black text-primary/50">صورة السؤال</span>
                 {q.image_url && !editImg ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <img src={q.image_url} alt="سؤال" style={{ height: "48px", width: "72px", borderRadius: "8px", objectFit: "cover", border: "1px solid rgba(255,255,255,0.1)" }} onError={e => e.target.style.display="none"} />
-                    <button onClick={() => { setTmpImg(q.image_url||""); setEditImg(true); }}
-                      style={{ fontSize: "0.68rem", color: MUTED, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", padding: "3px 8px", borderRadius: "6px", cursor: "pointer" }}>تغيير</button>
+                  <div className="flex flex-col gap-2">
+                    <div className="rounded-xl overflow-hidden border border-primary/15 bg-black/10" style={{ maxHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <img
+                        src={q.image_url}
+                        alt="سؤال"
+                        style={{ maxHeight: "200px", maxWidth: "100%", objectFit: "contain", display: "block" }}
+                        onError={e => e.target.parentElement.style.display = "none"}
+                      />
+                    </div>
+                    <button
+                      onClick={() => { setTmpImg(q.image_url || ""); setEditImg(true); }}
+                      className="text-xs text-primary/50 hover:text-primary border border-primary/20 px-2 py-1 rounded-lg transition-all self-start"
+                    >
+                      تغيير
+                    </button>
                   </div>
                 ) : editImg ? (
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                    <input data-testid={`pending-q-img-input-${q.id}`} value={tmpImg} onChange={e=>setTmpImg(e.target.value)} placeholder="رابط الصورة..."
-                      style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:"8px", color:TEXT, padding:"4px 8px", fontSize:"0.75rem", outline:"none", width:"140px" }} />
-                    <button onClick={()=>{ saveField("image_url",tmpImg); setEditImg(false); }} disabled={saving}
-                      style={{ background:"rgba(52,211,153,0.2)", border:"1px solid rgba(52,211,153,0.4)", color:"#34d399", fontSize:"0.72rem", fontWeight:700, padding:"4px 8px", borderRadius:"6px", cursor:"pointer" }}>✓</button>
-                    <button onClick={()=>setEditImg(false)} style={{ color:MUTED, fontSize:"0.72rem", cursor:"pointer", padding:"4px" }}>✕</button>
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      data-testid={`pending-q-img-input-${q.id}`}
+                      value={tmpImg}
+                      onChange={e => setTmpImg(e.target.value)}
+                      placeholder="رابط الصورة..."
+                      className="border border-primary/20 rounded-lg px-2 py-1 text-xs outline-none w-40"
+                    />
+                    <button
+                      onClick={() => { saveField("image_url", tmpImg); setEditImg(false); }}
+                      disabled={saving}
+                      className="text-xs bg-green-600 text-white px-2 py-1 rounded-lg font-black disabled:opacity-50"
+                    >✓</button>
+                    <button onClick={() => setEditImg(false)} className="text-xs text-primary/50 px-1">✕</button>
                   </div>
                 ) : (
-                  <button onClick={()=>{ setTmpImg(""); setEditImg(true); }}
-                    style={{ fontSize:"0.72rem", color:MUTED, background:"rgba(255,255,255,0.04)", border:"1px dashed rgba(255,255,255,0.14)", padding:"5px 10px", borderRadius:"8px", cursor:"pointer" }}>+ إضافة صورة</button>
+                  <button
+                    onClick={() => { setTmpImg(""); setEditImg(true); }}
+                    className="text-xs text-primary/40 border border-dashed border-primary/20 px-3 py-1.5 rounded-lg hover:border-primary/40 transition-all"
+                  >
+                    + إضافة صورة
+                  </button>
                 )}
               </div>
 
-              {/* Answer image */}
-              <div>
-                <div style={{ color: MUTED, fontSize: "0.68rem", fontWeight: 700, marginBottom: "4px" }}>صورة الإجابة</div>
+              {/* Answer Image */}
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-black text-primary/50">صورة الإجابة</span>
                 {q.answer_image_url && !editAnsImg ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <img src={q.answer_image_url} alt="إجابة" style={{ height: "48px", width: "72px", borderRadius: "8px", objectFit: "cover", border: "1px solid rgba(96,165,250,0.2)" }} onError={e => e.target.style.display="none"} />
-                    <button onClick={() => { setTmpAnsImg(q.answer_image_url||""); setEditAnsImg(true); }}
-                      style={{ fontSize: "0.68rem", color: MUTED, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", padding: "3px 8px", borderRadius: "6px", cursor: "pointer" }}>تغيير</button>
+                  <div className="flex flex-col gap-2">
+                    <div className="rounded-xl overflow-hidden border border-blue-200/30 bg-black/10" style={{ maxHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <img
+                        src={q.answer_image_url}
+                        alt="إجابة"
+                        style={{ maxHeight: "200px", maxWidth: "100%", objectFit: "contain", display: "block" }}
+                        onError={e => e.target.parentElement.style.display = "none"}
+                      />
+                    </div>
+                    <button
+                      onClick={() => { setTmpAnsImg(q.answer_image_url || ""); setEditAnsImg(true); }}
+                      className="text-xs text-primary/50 hover:text-primary border border-primary/20 px-2 py-1 rounded-lg transition-all self-start"
+                    >
+                      تغيير
+                    </button>
                   </div>
                 ) : editAnsImg ? (
-                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-                    <input data-testid={`pending-q-ans-img-input-${q.id}`} value={tmpAnsImg} onChange={e=>setTmpAnsImg(e.target.value)} placeholder="رابط صورة الإجابة..."
-                      style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(96,165,250,0.25)", borderRadius:"8px", color:TEXT, padding:"4px 8px", fontSize:"0.75rem", outline:"none", width:"140px" }} />
-                    <button onClick={()=>{ saveField("answer_image_url",tmpAnsImg); setEditAnsImg(false); }} disabled={saving}
-                      style={{ background:"rgba(96,165,250,0.2)", border:"1px solid rgba(96,165,250,0.4)", color:"#60a5fa", fontSize:"0.72rem", fontWeight:700, padding:"4px 8px", borderRadius:"6px", cursor:"pointer" }}>✓</button>
-                    <button onClick={()=>setEditAnsImg(false)} style={{ color:MUTED, fontSize:"0.72rem", cursor:"pointer", padding:"4px" }}>✕</button>
+                  <div className="flex gap-1.5 items-center">
+                    <input
+                      data-testid={`pending-q-ans-img-input-${q.id}`}
+                      value={tmpAnsImg}
+                      onChange={e => setTmpAnsImg(e.target.value)}
+                      placeholder="رابط صورة الإجابة..."
+                      className="border border-blue-200 rounded-lg px-2 py-1 text-xs outline-none w-40"
+                    />
+                    <button
+                      onClick={() => { saveField("answer_image_url", tmpAnsImg); setEditAnsImg(false); }}
+                      disabled={saving}
+                      className="text-xs bg-blue-600 text-white px-2 py-1 rounded-lg font-black disabled:opacity-50"
+                    >✓</button>
+                    <button onClick={() => setEditAnsImg(false)} className="text-xs text-primary/50 px-1">✕</button>
                   </div>
                 ) : (
-                  <button onClick={()=>{ setTmpAnsImg(""); setEditAnsImg(true); }}
-                    style={{ fontSize:"0.72rem", color:MUTED, background:"rgba(255,255,255,0.04)", border:"1px dashed rgba(96,165,250,0.2)", padding:"5px 10px", borderRadius:"8px", cursor:"pointer" }}>+ صورة إجابة</button>
+                  <button
+                    onClick={() => { setTmpAnsImg(""); setEditAnsImg(true); }}
+                    className="text-xs text-primary/40 border border-dashed border-blue-200 px-3 py-1.5 rounded-lg hover:border-blue-400 transition-all"
+                  >
+                    + إضافة صورة إجابة
+                  </button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Actions column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
+          {/* Right: actions */}
+          <div className="flex flex-col gap-2 shrink-0">
             <button
               data-testid={`approve-q-${q.id}`}
               onClick={() => onApprove(q.id)}
-              style={{ background: "rgba(52,211,153,0.18)", border: "1.5px solid rgba(52,211,153,0.5)", color: "#34d399",
-                       padding: "8px 16px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
-                       cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(52,211,153,0.28)"}
-              onMouseLeave={e => e.currentTarget.style.background = "rgba(52,211,153,0.18)"}
-            >✓ نشر</button>
+              className="bg-green-600 text-white px-4 py-2 rounded-xl font-black text-sm hover:bg-green-700 transition-all whitespace-nowrap"
+            >
+              ✓ نشر
+            </button>
             <button
               data-testid={`reject-q-${q.id}`}
               onClick={() => onReject(q.id)}
-              style={{ background: "rgba(239,68,68,0.12)", border: "1.5px solid rgba(239,68,68,0.35)", color: "#f87171",
-                       padding: "8px 16px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
-                       cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s" }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.22)"}
-              onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.12)"}
-            >✕ رفض</button>
+              className="bg-red-100 text-red-600 px-4 py-2 rounded-xl font-black text-sm hover:bg-red-200 transition-all whitespace-nowrap"
+            >
+              ✕ رفض
+            </button>
           </div>
         </div>
       </div>
@@ -986,16 +621,6 @@ export default function AdminDashboard() {
   const [logsTotal, setLogsTotal] = useState(0);
   const [logsLoading, setLogsLoading] = useState(false);
 
-  // Community state
-  const [communityAnalytics, setCommunityAnalytics] = useState(null);
-  const [communityPending, setCommunityPending] = useState([]);
-  const [communityPayouts, setCommunityPayouts] = useState([]);
-  const [communityLoading, setCommunityLoading] = useState(false);
-  const [processingEarnings, setProcessingEarnings] = useState(false);
-  const [earningsResult, setEarningsResult] = useState(null);
-  const [rejectingCat, setRejectingCat] = useState(null); // cat id being rejected
-  const [rejectReason, setRejectReason] = useState("");
-
   // Staff management state
   const [staffList, setStaffList] = useState([]);
   const [showStaffForm, setShowStaffForm] = useState(false);
@@ -1015,22 +640,10 @@ export default function AdminDashboard() {
   const [aiDiff, setAiDiff] = useState(300);
   const [aiCount, setAiCount] = useState(12);
   const [aiPrompt, setAiPrompt] = useState("");
-
-  // Template detection keywords (mirrors backend CATEGORY_TEMPLATES keys)
-  const TEMPLATE_KEYS = ["أحياء","كيمياء","فيزياء","رياضيات","كمي","لفظي","Block","إسلاميات","تاريخ","كرة القدم"];
-  const getTemplateLabel = (catId) => {
-    const cat = categories.find(c => c.id === catId);
-    if (!cat) return null;
-    return TEMPLATE_KEYS.find(k => cat.name?.includes(k)) || null;
-  };
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiQuestions, setAiQuestions] = useState([]);
   const [aiSaving, setAiSaving] = useState(false);
   const [aiFetchingImages, setAiFetchingImages] = useState(false);
-
-  // Tournament history
-  const [tournaments, setTournaments]       = useState([]);
-  const [tournamentsLoading, setTournamentsLoading] = useState(false);
 
   // Category groups
   const [categoryGroups, setCategoryGroups] = useState([]);
@@ -1050,7 +663,8 @@ export default function AdminDashboard() {
   const [importUploading, setImportUploading]   = useState(false);
   const [importCustomPrompt, setImportCustomPrompt] = useState("");
   const importFileRef = useRef(null);
-  const [selectedPending, setSelectedPending]   = useState(new Set());
+  const [selectedPending, setSelectedPending] = useState(new Set());
+  const [pendingFilter, setPendingFilter] = useState({ search: "", difficulty: "all", category: "all" });
 
   useEffect(() => {
     if (!token) { navigate("/admin"); return; }
@@ -1126,21 +740,6 @@ export default function AdminDashboard() {
     } catch { toast.error("خطأ في تحميل قائمة الموظفين"); }
   }, []);
 
-  const loadCommunity = useCallback(async () => {
-    setCommunityLoading(true);
-    try {
-      const [ana, pend, pays] = await Promise.all([
-        axios.get(`${API}/admin/community/analytics`, { headers }),
-        axios.get(`${API}/admin/community/pending`, { headers }),
-        axios.get(`${API}/admin/community/payouts`, { headers }),
-      ]);
-      setCommunityAnalytics(ana.data);
-      setCommunityPending(pend.data);
-      setCommunityPayouts(pays.data);
-    } catch { toast.error("خطأ في تحميل بيانات المجتمع"); }
-    finally { setCommunityLoading(false); }
-  }, []);
-
   const loadPendingQuestions = useCallback(async () => {
     setPendingLoading(true);
     try {
@@ -1156,7 +755,6 @@ export default function AdminDashboard() {
     setImportUploading(true);
     const fd = new FormData();
     fd.append("file", file);
-    if (selectedCat) fd.append("category_id", selectedCat);
     if (importCustomPrompt.trim()) fd.append("extra_prompt", importCustomPrompt.trim());
     try {
       const { data } = await axios.post(`${API}/admin/questions/import`, fd, {
@@ -1176,6 +774,8 @@ export default function AdminDashboard() {
       toast.success("تمت الموافقة ونشر السؤال");
       setPendingQuestions(prev => prev.filter(q => q.id !== qId));
       setPendingTotal(t => t - 1);
+      // أعد تحميل الأسئلة حتى تظهر في تاب الأسئلة فوراً
+      axios.get(`${API}/questions`).then(r => setQuestions(r.data)).catch(() => {});
     } catch { toast.error("خطأ في الموافقة"); }
   };
 
@@ -1196,49 +796,21 @@ export default function AdminDashboard() {
       toast.success(data.message);
       setPendingQuestions([]);
       setPendingTotal(0);
-      setSelectedPending(new Set());
       const { data: qs } = await axios.get(`${API}/questions`);
       setQuestions(qs);
     } catch { toast.error("خطأ في الموافقة الجماعية"); }
   };
 
-  const handleBulkApprove = async () => {
+  const handleBulkAction = async (action) => {
+    if (selectedPending.size === 0) return;
     const ids = [...selectedPending];
-    if (!ids.length) return;
-    if (!window.confirm(`نشر ${ids.length} سؤال؟`)) return;
-    let done = 0;
-    for (const id of ids) {
-      try { await axios.post(`${API}/admin/questions/${id}/approve`, {}, { headers }); done++; } catch {}
-    }
-    setPendingQuestions(prev => prev.filter(q => !selectedPending.has(q.id)));
-    setPendingTotal(t => Math.max(0, t - done));
-    setSelectedPending(new Set());
-    toast.success(`تم نشر ${done} سؤال`);
-  };
-
-  const handleBulkReject = async () => {
-    const ids = [...selectedPending];
-    if (!ids.length) return;
-    if (!window.confirm(`رفض وحذف ${ids.length} سؤال؟`)) return;
-    let done = 0;
-    for (const id of ids) {
-      try { await axios.post(`${API}/admin/questions/${id}/reject`, {}, { headers }); done++; } catch {}
-    }
-    setPendingQuestions(prev => prev.filter(q => !selectedPending.has(q.id)));
-    setPendingTotal(t => Math.max(0, t - done));
-    setSelectedPending(new Set());
-    toast.success(`تم رفض ${done} سؤال`);
-  };
-
-  const [debugAIResult, setDebugAIResult] = useState(null);
-  const handleDebugAI = async () => {
-    setDebugAIResult("loading");
     try {
-      const { data } = await axios.get(`${API}/admin/debug/ai`, { headers });
-      setDebugAIResult(JSON.stringify(data, null, 2));
-    } catch (e) {
-      setDebugAIResult("خطأ: " + (e?.response?.data?.detail || e.message));
-    }
+      const { data } = await axios.post(`${API}/admin/questions/pending/bulk`, { action, ids }, { headers });
+      toast.success(data.message);
+      setPendingQuestions(prev => prev.filter(q => !selectedPending.has(q.id)));
+      setPendingTotal(t => t - ids.length);
+      setSelectedPending(new Set());
+    } catch { toast.error("خطأ في العملية"); }
   };
 
   const handleBulkFetchImages = async () => {
@@ -1288,6 +860,30 @@ export default function AdminDashboard() {
     }
   };
 
+  const [audioUploading, setAudioUploading] = useState(false);
+  const uploadAudio = async (file, onSuccess) => {
+    if (!file) return;
+    const allowed = ["audio/mpeg", "audio/wav", "audio/x-m4a", "audio/mp4", "audio/ogg"];
+    if (!allowed.includes(file.type) && !file.name.match(/\.(mp3|wav|m4a|ogg)$/i)) {
+      toast.error("يُسمح فقط بـ MP3 / WAV / M4A");
+      return;
+    }
+    setAudioUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const { data } = await axios.post(`${API}/upload/audio`, fd, {
+        headers: { ...headers, "Content-Type": "multipart/form-data" },
+      });
+      onSuccess(data.url);
+      toast.success("تم رفع الملف الصوتي!");
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "خطأ في رفع الملف الصوتي");
+    } finally {
+      setAudioUploading(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === "users") loadUsers();
     if (activeTab === "analytics") loadAnalytics();
@@ -1295,14 +891,6 @@ export default function AdminDashboard() {
     if (activeTab === "logs") loadLogs();
     if (activeTab === "staff") loadStaff();
     if (activeTab === "pending") loadPendingQuestions();
-    if (activeTab === "community") loadCommunity();
-    if (activeTab === "tournaments") {
-      setTournamentsLoading(true);
-      axios.get(`${API}/admin/tournaments`, { headers })
-        .then(({ data }) => setTournaments(data.items || []))
-        .catch(() => {})
-        .finally(() => setTournamentsLoading(false));
-    }
   }, [activeTab]);
 
   // ── Auto-save state ──
@@ -1485,26 +1073,23 @@ export default function AdminDashboard() {
         prompt_description: aiPrompt.trim() || undefined,
       }, { headers });
       setAiQuestions(data.questions);
-      const templateMsg = data.template_used ? ` (قالب: ${data.template_used.slice(0, 25)})` : "";
-      toast.success(`تم توليد ${data.count} سؤال${templateMsg}`);
-      // Images already fetched server-side — but do a client-side pass for any missing
-      const missing = data.questions.filter(q => !q.image_url && q.image_query);
-      if (missing.length > 0) {
-        setAiFetchingImages(true);
-        const imageResults = await Promise.allSettled(
-          data.questions.map((q) => q.image_url ? null : fetchUnsplashForQuestion(q.image_query))
-        );
-        setAiQuestions(prev =>
-          prev.map((q, i) => {
-            const res = imageResults[i];
-            if (res?.status === "fulfilled" && res.value && !q.image_url) {
-              return { ...q, image_url: res.value.url, _img_thumb: res.value.url };
-            }
-            return q;
-          })
-        );
-        setAiFetchingImages(false);
-      }
+      toast.success(`تم توليد ${data.count} سؤال! جاري جلب الصور...`);
+      // Fetch Unsplash images in parallel — collect ALL results before updating state
+      setAiFetchingImages(true);
+      const imageResults = await Promise.allSettled(
+        data.questions.map((q) => fetchUnsplashForQuestion(q.image_query))
+      );
+      // Apply all results at once to avoid race conditions
+      setAiQuestions(prev =>
+        prev.map((q, i) => {
+          const res = imageResults[i];
+          if (res?.status === "fulfilled" && res.value) {
+            return { ...q, ...res.value };
+          }
+          return q;
+        })
+      );
+      setAiFetchingImages(false);
       toast.success("جاهز! راجع الأسئلة والصور");
     } catch (e) {
       toast.error(e?.response?.data?.detail || "خطأ في التوليد");
@@ -1646,15 +1231,10 @@ export default function AdminDashboard() {
     } catch { toast.error("خطأ في الحذف"); }
   };
 
-  const [questionSearch, setQuestionSearch] = useState("");
-
   const filteredQuestions = questions.filter((q) => {
     const catMatch = selectedCat ? q.category_id === selectedCat : true;
     const diffMatch = selectedDifficulty === "all" ? true : q.difficulty === parseInt(selectedDifficulty);
-    const searchMatch = !questionSearch.trim() ||
-      q.text?.toLowerCase().includes(questionSearch.toLowerCase()) ||
-      q.answer?.toLowerCase().includes(questionSearch.toLowerCase());
-    return catMatch && diffMatch && searchMatch;
+    return catMatch && diffMatch;
   });
 
   const getCatName = (id) => categories.find(c => c.id === id)?.name || id;
@@ -1669,6 +1249,49 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background text-primary" dir="rtl">
+      <style>{`
+        .admin-card {
+          background: white;
+          border: 1px solid rgba(0,0,0,0.08);
+          border-radius: 1rem;
+          padding: 1.25rem 1.5rem;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+          transition: box-shadow 0.2s;
+        }
+        .admin-card:hover {
+          box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        }
+        .admin-kpi {
+          background: linear-gradient(135deg, #fefefe, #f8f9fa);
+          border: 1px solid rgba(0,0,0,0.07);
+          border-radius: 1rem;
+          padding: 1.2rem 1.4rem;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+        .admin-kpi-value {
+          font-size: 2.2rem;
+          font-weight: 900;
+          line-height: 1;
+          margin-bottom: 0.3rem;
+        }
+        .admin-kpi-label {
+          font-size: 0.8rem;
+          color: rgba(0,0,0,0.5);
+          font-weight: 700;
+        }
+        .admin-kpi-sub {
+          font-size: 0.72rem;
+          color: rgba(0,0,0,0.35);
+          margin-top: 0.2rem;
+        }
+        .bulk-action-bar {
+          animation: slideDown 0.2s ease;
+        }
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
       {/* Top Bar */}
       <div className="bg-primary text-secondary px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -1695,14 +1318,13 @@ export default function AdminDashboard() {
             { key: "pending", label: `مراجعة الأسئلة${pendingTotal > 0 ? ` (${pendingTotal})` : ""}`, forAll: true },
             { key: "users", label: "المستخدمون", superOnly: true },
             { key: "security", label: "🛡 الأمان", superOnly: true },
-            { key: "analytics", label: "الإحصاءات", forAll: true },
-            { key: "settings", label: "الإعدادات", forAll: true },
+            { key: "analytics", label: "الإحصاءات", superOnly: true },
+            { key: "settings", label: "الإعدادات", superOnly: true },
             { key: "ai", label: "توليد AI", forAll: true },
             { key: "experimental", label: "وضع التجربة", forAll: true },
-            { key: "logs", label: "سجل النشاط", forAll: true },
+            { key: "logs", label: "سجل النشاط", superOnly: true },
             { key: "staff", label: "الموظفون", superOnly: true },
-            { key: "community", label: "🏘 المجتمع", forAll: true },
-            { key: "tournaments", label: "🏆 البطولات", forAll: true },
+            { key: "community", label: "🏛️ المجتمع", superOnly: true },
           ]
             .filter(t => t.forAll || (t.superOnly && isSuperAdmin))
             .map((tab) => (
@@ -1714,7 +1336,7 @@ export default function AdminDashboard() {
                   if (tab.key === "experimental") { loadSettings(); loadExpQuestions(); }
                   if (tab.key === "settings") loadSettings();
                 }}
-                className={`text-sm px-3 py-1 rounded-lg font-bold transition-all ${activeTab === tab.key ? "bg-secondary text-primary" : "text-secondary/60 hover:text-secondary"}`}
+                className={`text-sm px-3 py-1 rounded-lg font-bold tracking-wide transition-all ${activeTab === tab.key ? "bg-secondary text-primary" : "text-secondary/60 hover:text-secondary"}`}
               >
                 {tab.label}
               </button>
@@ -1886,8 +1508,8 @@ export default function AdminDashboard() {
 
           {/* Main Content */}
           <div className="flex-1 p-6">
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-              <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-4">
                 <h2 className="text-2xl font-black">
                   {selectedCat ? getCatName(selectedCat) : "كل الأسئلة"}
                 </h2>
@@ -1903,15 +1525,6 @@ export default function AdminDashboard() {
                     </button>
                   ))}
                 </div>
-                {/* Search */}
-                <input
-                  data-testid="question-search-input"
-                  value={questionSearch}
-                  onChange={e => setQuestionSearch(e.target.value)}
-                  placeholder="🔍 ابحث في الأسئلة..."
-                  className="border border-primary/20 focus:border-primary rounded-xl px-3 py-1.5 text-sm outline-none bg-white"
-                  style={{ fontFamily: "Cairo, sans-serif", minWidth: "180px" }}
-                />
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-primary/40 text-sm">{filteredQuestions.length} سؤال</span>
@@ -1948,47 +1561,6 @@ export default function AdminDashboard() {
                 >
                   🖼️ جلب صور
                 </button>
-                <button
-                  onClick={handleDebugAI}
-                  className="text-sm text-gray-500 hover:text-gray-700 border border-gray-200 hover:border-gray-400 px-3 py-1.5 rounded-lg transition-all font-bold"
-                  title="تشخيص مفاتيح AI"
-                >
-                  🔍 تشخيص AI
-                </button>
-
-                {/* Debug AI Result Modal */}
-                {debugAIResult && debugAIResult !== "loading" && (
-                  <div style={{
-                    position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
-                    zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
-                  }} onClick={() => setDebugAIResult(null)}>
-                    <div style={{
-                      background: "#1a1a2e", border: "1.5px solid rgba(99,102,241,0.4)",
-                      borderRadius: "16px", padding: "24px", maxWidth: "700px", width: "100%",
-                      maxHeight: "80vh", overflow: "auto"
-                    }} onClick={e => e.stopPropagation()}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                        <span style={{ color: "#a5b4fc", fontWeight: 900, fontSize: "1rem" }}>🔍 تشخيص AI Keys</span>
-                        <button onClick={() => setDebugAIResult(null)} style={{ color: "#6b7280", background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer" }}>✕</button>
-                      </div>
-                      <textarea
-                        readOnly
-                        value={debugAIResult}
-                        style={{
-                          width: "100%", minHeight: "300px", background: "#0f0f1a",
-                          color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.1)",
-                          borderRadius: "10px", padding: "12px", fontSize: "0.78rem",
-                          fontFamily: "monospace", resize: "vertical", outline: "none"
-                        }}
-                        onClick={e => e.target.select()}
-                      />
-                      <p style={{ color: "#6b7280", fontSize: "0.72rem", marginTop: "8px" }}>انقر على النص لتحديده كله ثم انسخه</p>
-                    </div>
-                  </div>
-                )}
-                {debugAIResult === "loading" && (
-                  <span style={{ fontSize: "0.8rem", color: "#6b7280" }}>⏳ جاري التشخيص...</span>
-                )}
                 <button
                   data-testid="add-question-btn"
                   onClick={() => {
@@ -2161,7 +1733,7 @@ export default function AdminDashboard() {
 
       {/* ── SECURITY TAB ── */}
       {activeTab === "security" && (
-        <div style={{ background: "#0d1117", minHeight: "calc(100vh - 64px)" }}>
+        <div style={{ background: "linear-gradient(160deg,#0f172a,#1e1b4b)", minHeight: "70vh", borderRadius: "1rem", margin: "0.5rem" }}>
         <SecurityDashboard
           overview={secOverview}
           users={secUsers}
@@ -2183,284 +1755,249 @@ export default function AdminDashboard() {
       )}
 
       {/* ── ANALYTICS TAB ── */}
-      {activeTab === "analytics" && (() => {
-        const A_BG    = "#0d1117";
-        const A_CARD  = "rgba(255,255,255,0.035)";
-        const A_BORDER= "rgba(255,255,255,0.08)";
-        const A_TEXT  = "#f3f4f6";
-        const A_MUTED = "rgba(243,244,246,0.45)";
-
-        const ACard = ({ children, style = {} }) => (
-          <div style={{ background: A_CARD, border: `1px solid ${A_BORDER}`, borderRadius: "16px",
-                        backdropFilter: "blur(12px)", ...style }}>
-            {children}
+      {activeTab === "analytics" && (
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-black">الإحصاءات</h2>
+            {isSuperAdmin && (
+              <a
+                data-testid="export-db-btn"
+                href={`${API}/admin/export-db`}
+                download="hujjah_db_export.zip"
+                onClick={e => {
+                  e.preventDefault();
+                  fetch(`${API}/admin/export-db`, { headers })
+                    .then(r => r.blob())
+                    .then(blob => {
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url; a.download = "hujjah_db_export.zip"; a.click();
+                      URL.revokeObjectURL(url);
+                    })
+                    .catch(() => toast.error("خطأ في التصدير"));
+                }}
+                className="flex items-center gap-2 bg-primary text-secondary px-5 py-2.5 rounded-xl font-black text-sm hover:scale-[1.02] transition-all shadow-md cursor-pointer"
+              >
+                <span>💾</span>
+                <span>تصدير قاعدة البيانات</span>
+              </a>
+            )}
           </div>
-        );
-
-        const AKPI = ({ icon, label, value, sub, color, accent }) => (
-          <ACard style={{ padding: "20px 22px", position: "relative", overflow: "hidden" }}>
-            <div style={{ position: "absolute", top: -8, right: -6, fontSize: "3.8rem", opacity: 0.055 }}>{icon}</div>
-            <div style={{ fontSize: "2rem", marginBottom: "6px" }}>{icon}</div>
-            <div style={{ fontSize: "2rem", fontWeight: 900, color, lineHeight: 1 }}>{value ?? "—"}</div>
-            <div style={{ fontSize: "0.78rem", color: A_MUTED, marginTop: "5px", fontWeight: 700 }}>{label}</div>
-            {sub && <div style={{ fontSize: "0.7rem", color, opacity: 0.6, marginTop: "3px" }}>{sub}</div>}
-            {accent && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "3px",
-                                     background: color, opacity: 0.4, borderRadius: "0 0 16px 16px" }} />}
-          </ACard>
-        );
-
-        const SectionLabel = ({ children }) => (
-          <div style={{ fontSize: "0.72rem", fontWeight: 800, color: A_MUTED, letterSpacing: "0.12em",
-                        textTransform: "uppercase", marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ flex: 1, height: "1px", background: A_BORDER }} />
-            {children}
-            <div style={{ flex: 1, height: "1px", background: A_BORDER }} />
-          </div>
-        );
-
-        if (!analytics) return (
-          <div style={{ padding: "64px", background: A_BG, minHeight: "calc(100vh - 64px)", textAlign: "center" }}>
-            <div style={{ fontSize: "3rem", marginBottom: "16px" }}>📊</div>
-            <div style={{ color: A_MUTED, fontSize: "1rem" }}>جاري تحميل الإحصاءات...</div>
-          </div>
-        );
-
-        const convRate = analytics.users.total > 0
-          ? Math.round((analytics.users.premium / analytics.users.total) * 100) : 0;
-        const maxCatCount = Math.max(...(analytics.questions.by_category || []).map(c => c.count), 1);
-        const diffTotal = (analytics.questions.by_difficulty?.["300"] || 0) +
-                          (analytics.questions.by_difficulty?.["600"] || 0) +
-                          (analytics.questions.by_difficulty?.["900"] || 0);
-        const trend = analytics.revenue?.trend || [];
-        const maxTrend = Math.max(...trend.map(t => t.amount), 1);
-
-        return (
-          <div style={{ padding: "clamp(16px,2.5vw,28px)", background: A_BG, minHeight: "calc(100vh - 64px)",
-                        fontFamily: "Cairo, sans-serif", color: A_TEXT }}>
-            {/* ── Header ── */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "28px", gap: "12px", flexWrap: "wrap" }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: "clamp(1.3rem,2.5vw,1.8rem)", fontWeight: 900 }}>📊 لوحة التحليلات</h2>
-                <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: A_MUTED }}>نظرة شاملة على أداء المنصة</p>
+          {!analytics ? (
+            <div className="text-center py-16 text-primary/30">جاري التحميل...</div>
+          ) : (
+            <div className="space-y-6">
+              {/* ── KPI Grid ── */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:"1rem" }}>
+                <div className="admin-kpi">
+                  <div className="admin-kpi-value" style={{ color:"#2563eb" }}>{analytics.users.total}</div>
+                  <div className="admin-kpi-label">إجمالي المستخدمين</div>
+                  <div className="admin-kpi-sub">{analytics.users.recent_7d} مسجّل هذا الأسبوع</div>
+                </div>
+                <div className="admin-kpi">
+                  <div className="admin-kpi-value" style={{ color:"#d97706" }}>{analytics.users.premium}</div>
+                  <div className="admin-kpi-label">المشتركون المميزون</div>
+                  <div className="admin-kpi-sub">{analytics.users.free} مستخدم مجاني</div>
+                </div>
+                <div className="admin-kpi">
+                  <div className="admin-kpi-value" style={{ color:"#059669" }}>{analytics.users.active_24h ?? analytics.sessions?.active_24h ?? 0}</div>
+                  <div className="admin-kpi-label">نشطون اليوم</div>
+                  <div className="admin-kpi-sub">{analytics.users.active_7d ?? 0} نشط خلال 7 أيام</div>
+                </div>
+                <div className="admin-kpi">
+                  <div className="admin-kpi-value" style={{ color:"#7c3aed" }}>{analytics.users.conversion_rate ?? 0}%</div>
+                  <div className="admin-kpi-label">معدل التحويل</div>
+                  <div className="admin-kpi-sub">مجاني → مميز</div>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button onClick={loadAnalytics}
-                  style={{ background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa",
-                           padding: "9px 18px", borderRadius: "12px", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}>
-                  ↻ تحديث
-                </button>
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => {
-                      fetch(`${API}/admin/export-db`, { headers })
-                        .then(r => r.blob())
-                        .then(blob => {
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url; a.download = "hujjah_db_export.zip"; a.click();
-                          URL.revokeObjectURL(url);
-                        })
-                        .catch(() => toast.error("خطأ في التصدير"));
-                    }}
-                    style={{ background: "rgba(255,255,255,0.06)", border: `1.5px solid ${A_BORDER}`, color: A_TEXT,
-                             padding: "9px 18px", borderRadius: "12px", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer",
-                             display: "flex", alignItems: "center", gap: "8px" }}
-                  >
-                    <span>💾</span><span>تصدير DB</span>
-                  </button>
+
+              {/* ── Revenue Section ── */}
+              <div className="admin-card">
+                <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"1rem", flexWrap:"wrap" }}>
+                  <div>
+                    <div style={{ fontSize:"0.75rem", fontWeight:700, color:"rgba(0,0,0,0.4)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"0.4rem" }}>إجمالي الإيرادات</div>
+                    <div style={{ fontSize:"2.5rem", fontWeight:900, color:"#f1e194", WebkitTextStroke:"1px #92681e" }}>{analytics.revenue.total} <span style={{ fontSize:"1.2rem" }}>{analytics.revenue.currency}</span></div>
+                  </div>
+                  {analytics.subscriptions && (
+                    <div style={{ textAlign:"center" }}>
+                      <div style={{ fontSize:"0.75rem", fontWeight:700, color:"rgba(0,0,0,0.4)", marginBottom:"0.4rem" }}>الاشتراكات</div>
+                      <div style={{ display:"flex", gap:"0.75rem" }}>
+                        <div style={{ background:"#dcfce7", borderRadius:"0.5rem", padding:"0.4rem 0.75rem", textAlign:"center" }}>
+                          <div style={{ fontWeight:900, fontSize:"1.3rem", color:"#16a34a" }}>{analytics.subscriptions.active}</div>
+                          <div style={{ fontSize:"0.7rem", color:"#15803d" }}>نشطة</div>
+                        </div>
+                        <div style={{ background:"#fee2e2", borderRadius:"0.5rem", padding:"0.4rem 0.75rem", textAlign:"center" }}>
+                          <div style={{ fontWeight:900, fontSize:"1.3rem", color:"#dc2626" }}>{analytics.subscriptions.expired}</div>
+                          <div style={{ fontSize:"0.7rem", color:"#b91c1c" }}>منتهية</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 30-day revenue trend bar chart */}
+                {analytics.revenue.trend_30d?.length > 0 && (() => {
+                  const maxAmount = Math.max(...analytics.revenue.trend_30d.map(d => d.amount), 1);
+                  return (
+                    <div style={{ marginTop:"1.2rem" }}>
+                      <div style={{ fontSize:"0.75rem", fontWeight:700, color:"rgba(0,0,0,0.4)", marginBottom:"0.5rem" }}>اتجاه الإيرادات — 30 يوماً</div>
+                      <div style={{ display:"flex", alignItems:"flex-end", gap:"3px", height:"70px" }}>
+                        {analytics.revenue.trend_30d.map((d, i) => (
+                          <div key={i} title={`${d.date}: ${d.amount} SAR`} style={{
+                            flex:1, background: d.amount > 0 ? "rgba(241,225,148,0.8)" : "rgba(0,0,0,0.06)",
+                            height:`${Math.max(4, (d.amount / maxAmount) * 100)}%`,
+                            borderRadius:"3px 3px 0 0", transition:"height 0.3s"
+                          }} />
+                        ))}
+                      </div>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.65rem", color:"rgba(0,0,0,0.3)", marginTop:"0.25rem" }}>
+                        <span>{analytics.revenue.trend_30d[0]?.date}</span>
+                        <span>{analytics.revenue.trend_30d[analytics.revenue.trend_30d.length-1]?.date}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Recent transactions */}
+                {analytics.revenue.recent_transactions?.length > 0 && (
+                  <div style={{ marginTop:"1rem" }}>
+                    <div style={{ fontSize:"0.75rem", fontWeight:700, color:"rgba(0,0,0,0.4)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:"0.5rem" }}>آخر المعاملات</div>
+                    {analytics.revenue.recent_transactions.map((txn, i) => (
+                      <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"0.4rem 0", borderBottom:"1px solid rgba(0,0,0,0.04)", fontSize:"0.85rem" }}>
+                        <span style={{ color:"rgba(0,0,0,0.55)" }}>{txn.email || txn.gifted_by || "—"}</span>
+                        <span style={{ fontWeight:700, color: txn.payment_status === "paid" ? "#16a34a" : txn.payment_status === "gift" ? "#d97706" : "#dc2626" }}>
+                          {txn.payment_status === "gift" ? "هدية" : `${txn.amount} ${txn.currency || ""}`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-            </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-
-              {/* ═══ SECTION: المستخدمون ═══ */}
-              <SectionLabel>👥 المستخدمون</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "12px", marginTop: "-10px" }}>
-                <AKPI icon="👥" label="إجمالي المستخدمين" value={analytics.users.total}    color="#60a5fa" accent sub={`+${analytics.users.new_7d} هذا الأسبوع`} />
-                <AKPI icon="⭐" label="مشتركون مميزون"   value={analytics.users.premium}   color="#fbbf24" accent sub={`${analytics.users.free} مجاني`} />
-                <AKPI icon="🔥" label="نشطون (24 ساعة)"  value={analytics.users.active_24h} color="#f87171" accent />
-                <AKPI icon="📅" label="نشطون (7 أيام)"   value={analytics.users.active_7d}  color="#a78bfa" accent />
-                <AKPI icon="🗓" label="نشطون (30 يوم)"   value={analytics.users.active_30d} color="#34d399" accent />
-                <AKPI icon="📈" label="معدل التحويل"     value={`${convRate}%`}              color="#22d3ee" accent sub="مجاني → مميز" />
-              </div>
-
-              {/* ═══ SECTION: الجلسات والأسئلة ═══ */}
-              <SectionLabel>🎮 الجلسات والمحتوى</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "12px", marginTop: "-10px" }}>
-                <AKPI icon="🎮" label="جلسات اليوم"    value={analytics.sessions.active_24h} color="#a78bfa" accent />
-                <AKPI icon="📋" label="جلسات الأسبوع"  value={analytics.sessions.active_7d}  color="#60a5fa" accent />
-                <AKPI icon="📚" label="إجمالي الأسئلة" value={analytics.questions.total}      color="#34d399" accent />
-                <AKPI icon="⏳" label="قيد المراجعة"   value={analytics.questions.pending}    color="#f59e0b" accent />
-                <AKPI icon="📦" label="الفئات النشطة"  value={analytics.categories.active}   color="#22d3ee" accent />
-                <AKPI icon="🔒" label="فئات مميزة"     value={analytics.categories.premium}  color="#fbbf24" accent />
-              </div>
-
-              {/* ═══ SECTION: الإيرادات ═══ */}
-              <SectionLabel>💰 الإيرادات</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "-10px" }}>
-
-                {/* Revenue total + conversion */}
-                <ACard style={{ padding: "22px" }}>
-                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "rgba(251,191,36,0.55)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "10px" }}>
-                    إجمالي الإيرادات
-                  </div>
-                  <div style={{ fontSize: "2.6rem", fontWeight: 900, color: "#fbbf24", lineHeight: 1 }}>
-                    {analytics.revenue.total.toLocaleString()}
-                  </div>
-                  <div style={{ color: "rgba(251,191,36,0.5)", fontSize: "0.85rem", marginTop: "4px" }}>ريال سعودي</div>
-
-                  <div style={{ marginTop: "18px" }}>
-                    <div style={{ fontSize: "0.7rem", color: A_MUTED, fontWeight: 700, marginBottom: "10px" }}>آخر المعاملات</div>
-                    {(analytics.revenue.recent_transactions || []).slice(0, 5).map((txn, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
-                                            padding: "7px 0", borderBottom: `1px solid ${A_BORDER}`, fontSize: "0.78rem" }}>
-                        <span style={{ color: A_MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "130px" }}>
-                          {txn.email || txn.gifted_by || "—"}
-                        </span>
-                        <span style={{ fontWeight: 900, flexShrink: 0,
-                                       color: txn.payment_status === "paid" ? "#34d399" : txn.payment_status === "gift" ? "#fbbf24" : "#f87171" }}>
-                          {txn.payment_status === "gift" ? "هدية 🎁" : `${txn.amount} ر.س`}
-                        </span>
-                      </div>
-                    ))}
-                    {(analytics.revenue.recent_transactions || []).length === 0 && (
-                      <div style={{ color: A_MUTED, fontSize: "0.78rem", textAlign: "center", padding: "12px 0" }}>لا توجد معاملات بعد</div>
-                    )}
-                  </div>
-                </ACard>
-
-                {/* Revenue trend chart */}
-                <ACard style={{ padding: "22px" }}>
-                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "rgba(251,191,36,0.55)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>
-                    منحنى الإيرادات (30 يوم)
-                  </div>
-                  {trend.length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "32px 0", color: A_MUTED, fontSize: "0.82rem" }}>
-                      لا توجد بيانات إيرادات بعد
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: "3px", height: "100px", paddingBottom: "8px" }}>
-                      {trend.map((t, i) => (
-                        <div key={i} title={`${t.date}: ${t.amount} ر.س`}
-                          style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", cursor: "default" }}>
-                          <div style={{
-                            width: "100%", borderRadius: "4px 4px 0 0",
-                            background: t.amount > 0 ? "linear-gradient(to top,#d97706,#fbbf24)" : "rgba(255,255,255,0.04)",
-                            height: `${Math.max(4, (t.amount / maxTrend) * 88)}px`,
-                            transition: "height 0.4s ease",
-                            minHeight: "4px",
-                          }} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: "6px" }}>
-                    <span style={{ fontSize: "0.65rem", color: A_MUTED }}>{trend[0]?.date?.slice(5) || "—"}</span>
-                    <span style={{ fontSize: "0.65rem", color: A_MUTED }}>{trend[trend.length - 1]?.date?.slice(5) || "—"}</span>
-                  </div>
-                </ACard>
-              </div>
-
-              {/* ═══ SECTION: الأسئلة ═══ */}
-              <SectionLabel>📚 المحتوى والأسئلة</SectionLabel>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px", marginTop: "-10px" }}>
-
-                {/* Questions by difficulty */}
-                <ACard style={{ padding: "22px" }}>
-                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: A_MUTED, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "16px" }}>
-                    الأسئلة حسب الصعوبة
-                  </div>
+              {/* ── User Activity Row ── */}
+              <div className="admin-card">
+                <div style={{ fontWeight:700, marginBottom:"0.75rem", fontSize:"0.85rem", color:"rgba(0,0,0,0.5)", textTransform:"uppercase", letterSpacing:"0.06em" }}>نشاط المستخدمين</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"0.75rem" }}>
                   {[
-                    { key: "300", label: "سهل",   color: "#34d399", bg: "rgba(52,211,153,0.15)"  },
-                    { key: "600", label: "متوسط", color: "#fbbf24", bg: "rgba(251,191,36,0.15)"  },
-                    { key: "900", label: "صعب",   color: "#f87171", bg: "rgba(239,68,68,0.15)"   },
-                  ].map(({ key, label, color, bg }) => {
-                    const count = analytics.questions.by_difficulty?.[key] || 0;
-                    const pct = diffTotal > 0 ? Math.round((count / diffTotal) * 100) : 0;
-                    return (
-                      <div key={key} style={{ marginBottom: "14px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                          <span style={{ fontSize: "0.82rem", color, fontWeight: 700 }}>{key} — {label}</span>
-                          <span style={{ fontSize: "0.9rem", fontWeight: 900, color }}>{count} <span style={{ fontSize: "0.65rem", opacity: 0.6 }}>({pct}%)</span></span>
-                        </div>
-                        <div style={{ height: "8px", background: "rgba(255,255,255,0.06)", borderRadius: "9999px", overflow: "hidden" }}>
-                          <div style={{ height: "100%", borderRadius: "9999px", background: color,
-                                        width: `${pct}%`, transition: "width 0.6s ease" }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div style={{ marginTop: "6px", fontSize: "0.72rem", color: A_MUTED, textAlign: "center" }}>
-                    الإجمالي: {diffTotal} سؤال
-                  </div>
-                </ACard>
-
-                {/* Weak categories */}
-                <ACard style={{ padding: "22px" }}>
-                  <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "rgba(251,191,36,0.55)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "14px" }}>
-                    ⚠️ فئات تحتاج محتوى (&lt;6 أسئلة)
-                  </div>
-                  {(analytics.questions.weak_categories || []).length === 0 ? (
-                    <div style={{ textAlign: "center", padding: "24px 0", color: "#34d399", fontSize: "0.9rem" }}>
-                      ✅ كل الفئات لديها محتوى كافٍ
+                    { label:"نشط آخر 24 ساعة", value: analytics.users.active_24h ?? 0, color:"#059669" },
+                    { label:"نشط آخر 7 أيام", value: analytics.users.active_7d ?? 0, color:"#2563eb" },
+                    { label:"نشط آخر 30 يوم", value: analytics.users.active_30d ?? 0, color:"#7c3aed" },
+                  ].map(item => (
+                    <div key={item.label} style={{ background:"rgba(0,0,0,0.03)", borderRadius:"0.75rem", padding:"0.75rem 1rem", textAlign:"center" }}>
+                      <div style={{ fontSize:"1.8rem", fontWeight:900, color:item.color }}>{item.value}</div>
+                      <div style={{ fontSize:"0.72rem", color:"rgba(0,0,0,0.45)", fontWeight:700, marginTop:"0.2rem" }}>{item.label}</div>
                     </div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "180px", overflowY: "auto" }}>
-                      {(analytics.questions.weak_categories || []).map(cat => (
-                        <div key={cat.id} style={{ display: "flex", alignItems: "center", gap: "10px",
-                                                    padding: "8px 12px", borderRadius: "10px",
-                                                    background: cat.count === 0 ? "rgba(239,68,68,0.1)" : "rgba(251,191,36,0.07)",
-                                                    border: `1px solid ${cat.count === 0 ? "rgba(239,68,68,0.3)" : "rgba(251,191,36,0.2)"}` }}>
-                          <span style={{ fontSize: "1rem" }}>{cat.icon || "🎯"}</span>
-                          <span style={{ flex: 1, fontSize: "0.82rem", color: A_TEXT, fontWeight: 700 }}>{cat.name}</span>
-                          <span style={{ fontSize: "0.75rem", fontWeight: 900,
-                                         color: cat.count === 0 ? "#f87171" : "#fbbf24" }}>
-                            {cat.count} سؤال
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </ACard>
+                  ))}
+                </div>
               </div>
 
-              {/* ═══ SECTION: الأسئلة بالفئات ═══ */}
-              <SectionLabel>📊 الأسئلة بالفئات</SectionLabel>
-              <ACard style={{ padding: "22px", marginTop: "-10px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                  {(analytics.questions.by_category || [])
-                    .sort((a, b) => b.count - a.count)
-                    .slice(0, 15)
-                    .map(cat => (
-                      <div key={cat.id} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <span style={{ fontSize: "0.85rem", width: "20px", textAlign: "center", flexShrink: 0 }}>{cat.icon || "🎯"}</span>
-                        <span style={{ color: A_TEXT, fontSize: "0.82rem", width: "130px", flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>
-                          {cat.name}
-                        </span>
-                        <div style={{ flex: 1, background: "rgba(255,255,255,0.06)", borderRadius: "9999px", height: "8px", overflow: "hidden" }}>
-                          <div style={{
-                            height: "100%", borderRadius: "9999px",
-                            background: cat.count < 6
-                              ? "linear-gradient(90deg,#ef4444,#f87171)"
-                              : "linear-gradient(90deg,#6366f1,#818cf8)",
-                            width: `${Math.max(2, (cat.count / maxCatCount) * 100)}%`,
-                            transition: "width 0.6s ease",
-                          }} />
+              {/* ── Questions Breakdown ── */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1rem" }}>
+                {/* By category */}
+                <div className="admin-card">
+                  <div style={{ fontWeight:700, marginBottom:"0.75rem", fontSize:"0.85rem" }}>الأسئلة بالفئات</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:"0.5rem" }}>
+                    {analytics.questions.by_category.map((cat) => {
+                      const maxCat = Math.max(...analytics.questions.by_category.map(c => c.count), 1);
+                      return (
+                        <div key={cat.id} style={{ display:"flex", alignItems:"center", gap:"0.5rem" }}>
+                          <span style={{ fontSize:"0.8rem", color:"rgba(0,0,0,0.6)", width:"8rem", flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cat.name}</span>
+                          <div style={{ flex:1, background:"rgba(0,0,0,0.07)", borderRadius:"9999px", height:"8px", overflow:"hidden" }}>
+                            <div style={{ width:`${Math.min(100,(cat.count/maxCat)*100)}%`, height:"100%", background:"#5B0E14", borderRadius:"9999px" }} />
+                          </div>
+                          <span style={{ fontSize:"0.75rem", fontWeight:900, color:"rgba(0,0,0,0.45)", width:"2rem", textAlign:"left" }}>{cat.count}</span>
                         </div>
-                        <span style={{ color: cat.count < 6 ? "#f87171" : "#818cf8", fontSize: "0.78rem", fontWeight: 900, width: "32px", textAlign: "left", flexShrink: 0 }}>
-                          {cat.count}
-                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* By difficulty */}
+                <div className="admin-card">
+                  <div style={{ fontWeight:700, marginBottom:"0.75rem", fontSize:"0.85rem" }}>الأسئلة بالصعوبة</div>
+                  {analytics.questions.by_difficulty ? (
+                    <div style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
+                      {[
+                        { label:"سهل (300)", count: analytics.questions.by_difficulty["300"], color:"#16a34a", bg:"#dcfce7" },
+                        { label:"متوسط (600)", count: analytics.questions.by_difficulty["600"], color:"#d97706", bg:"#fef3c7" },
+                        { label:"صعب (900)", count: analytics.questions.by_difficulty["900"], color:"#dc2626", bg:"#fee2e2" },
+                      ].map(item => {
+                        const maxDiff = Math.max(analytics.questions.by_difficulty["300"]||0, analytics.questions.by_difficulty["600"]||0, analytics.questions.by_difficulty["900"]||0, 1);
+                        return (
+                          <div key={item.label}>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.8rem", marginBottom:"0.2rem" }}>
+                              <span style={{ fontWeight:700, color:item.color }}>{item.label}</span>
+                              <span style={{ fontWeight:900 }}>{item.count ?? 0}</span>
+                            </div>
+                            <div style={{ background:"rgba(0,0,0,0.07)", borderRadius:"9999px", height:"10px", overflow:"hidden" }}>
+                              <div style={{ width:`${Math.min(100,((item.count||0)/maxDiff)*100)}%`, height:"100%", background:item.color, borderRadius:"9999px", transition:"width 0.4s" }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ color:"rgba(0,0,0,0.3)", fontSize:"0.85rem" }}>لا توجد بيانات</div>
+                  )}
+
+                  {/* Subscriptions bar */}
+                  {analytics.subscriptions && (
+                    <div style={{ marginTop:"1.5rem" }}>
+                      <div style={{ fontWeight:700, marginBottom:"0.5rem", fontSize:"0.85rem" }}>الاشتراكات</div>
+                      {(() => {
+                        const total = (analytics.subscriptions.active || 0) + (analytics.subscriptions.expired || 0);
+                        const pct = total > 0 ? Math.round((analytics.subscriptions.active / total) * 100) : 0;
+                        return (
+                          <>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.75rem", marginBottom:"0.3rem" }}>
+                              <span style={{ color:"#16a34a", fontWeight:700 }}>نشطة: {analytics.subscriptions.active}</span>
+                              <span style={{ color:"#dc2626", fontWeight:700 }}>منتهية: {analytics.subscriptions.expired}</span>
+                            </div>
+                            <div style={{ background:"#fee2e2", borderRadius:"9999px", height:"12px", overflow:"hidden" }}>
+                              <div style={{ width:`${pct}%`, height:"100%", background:"#16a34a", borderRadius:"9999px", transition:"width 0.4s" }} />
+                            </div>
+                            <div style={{ fontSize:"0.7rem", color:"rgba(0,0,0,0.4)", marginTop:"0.2rem", textAlign:"center" }}>{pct}% نشطة</div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Categories Stats ── */}
+              {analytics.categories && (
+                <div className="admin-card">
+                  <div style={{ fontWeight:700, marginBottom:"0.75rem", fontSize:"0.85rem" }}>الفئات</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:"0.75rem" }}>
+                    {[
+                      { label: "إجمالي الفئات", value: analytics.categories.total, color:"#2563eb" },
+                      { label: "الفئات النشطة", value: analytics.categories.active, color:"#059669" },
+                      { label: "الفئات المعطّلة", value: analytics.categories.inactive, color:"#dc2626" },
+                      { label: "الفئات المميزة", value: analytics.categories.premium, color:"#d97706" },
+                    ].map((kpi) => (
+                      <div key={kpi.label} style={{ background:"rgba(0,0,0,0.03)", borderRadius:"0.75rem", padding:"0.75rem", textAlign:"center" }}>
+                        <div style={{ fontSize:"1.6rem", fontWeight:900, color:kpi.color }}>{kpi.value}</div>
+                        <div style={{ fontSize:"0.72rem", color:"rgba(0,0,0,0.45)", fontWeight:700, marginTop:"0.2rem" }}>{kpi.label}</div>
                       </div>
                     ))}
+                  </div>
+                  {analytics.categories?.most_popular?.name && (
+                    <div style={{ marginTop:"1rem", background:"#fefce8", border:"1px solid #fde68a", borderRadius:"0.75rem", padding:"0.75rem 1rem", display:"flex", alignItems:"center", gap:"0.75rem" }}>
+                      <span style={{ fontSize:"1.5rem" }}>🏆</span>
+                      <div>
+                        <div style={{ fontSize:"0.7rem", fontWeight:700, color:"#92400e", textTransform:"uppercase", letterSpacing:"0.06em" }}>الفئة الأكثر أسئلة</div>
+                        <div style={{ fontWeight:900, fontSize:"1.05rem", color:"#78350f" }}>{analytics.categories.most_popular.name}</div>
+                        <div style={{ fontSize:"0.75rem", color:"#a16207" }}>{analytics.categories.most_popular.count} سؤال</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </ACard>
-
+              )}
             </div>
-            <style>{`@keyframes analyticsIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }`}</style>
-          </div>
-        );
-      })()}
+          )}
+        </div>
+      )}
 
       {/* ── SETTINGS TAB ── */}
       {activeTab === "settings" && (
@@ -2531,6 +2068,34 @@ export default function AdminDashboard() {
           <p className="text-center text-primary/30 text-xs mt-3">
             ملاحظة: التايمر الافتراضي 65 ثانية · ولا كلمة: سهل 80s، متوسط 60s، صعب 45s
           </p>
+
+          {/* Send Welcome Emails */}
+          <div className="bg-white border border-primary/10 rounded-2xl p-6 mt-6">
+            <h3 className="font-black text-lg mb-1">إيميل الترحيب</h3>
+            <p className="text-primary/50 text-sm mb-4">إرسال إيميل ترحيب لجميع المستخدمين المسجلين</p>
+            <button
+              onClick={async () => {
+                if (!window.confirm("تأكيد: إرسال إيميل ترحيب لجميع المستخدمين؟")) return;
+                try {
+                  const res = await fetch(`${API}/admin/send-welcome-emails`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${token}` },
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    toast.error(`خطأ: ${data.detail || res.status}`);
+                    return;
+                  }
+                  toast.success(`✓ أُرسل: ${data.sent} | فشل: ${data.failed}`);
+                } catch {
+                  toast.error("حدث خطأ أثناء الإرسال");
+                }
+              }}
+              className="w-full bg-primary text-secondary py-3 rounded-xl font-black text-lg hover:scale-[1.02] transition-all"
+            >
+              📧 إرسال إيميل ترحيب للكل
+            </button>
+          </div>
 
           {/* Trial Mode - Free Categories */}
           <div className="bg-white border border-primary/10 rounded-2xl p-6 mt-6">
@@ -2779,83 +2344,26 @@ export default function AdminDashboard() {
                 <p className="text-primary/50 text-sm">أسئلة في انتظار الموافقة قبل نشرها</p>
               </div>
             </div>
-            <button
-              data-testid="reload-pending-btn"
-              onClick={loadPendingQuestions}
-              disabled={pendingLoading}
-              className="border border-primary/20 text-primary/60 px-4 py-2 rounded-xl font-bold text-sm hover:border-primary/50 transition-all"
-            >
-              {pendingLoading ? "⏳" : "↺"} تحديث
-            </button>
-          </div>
-
-          {/* Bulk action bar — always visible when questions exist */}
-          {pendingQuestions.length > 0 && !pendingLoading && (
-            <div style={{
-              background: selectedPending.size > 0 ? "rgba(99,102,241,0.14)" : "rgba(255,255,255,0.03)",
-              border: `1.5px solid ${selectedPending.size > 0 ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.08)"}`,
-              borderRadius: "14px", padding: "12px 18px", marginBottom: "18px",
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap",
-              transition: "all 0.2s",
-            }}>
-              {/* Select all toggle */}
-              <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", userSelect: "none" }}>
-                <input
-                  type="checkbox"
-                  checked={selectedPending.size === pendingQuestions.length && pendingQuestions.length > 0}
-                  onChange={() => {
-                    if (selectedPending.size === pendingQuestions.length) setSelectedPending(new Set());
-                    else setSelectedPending(new Set(pendingQuestions.map(q => q.id)));
-                  }}
-                  style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#818cf8" }}
-                />
-                <span style={{ color: selectedPending.size > 0 ? "#a5b4fc" : "rgba(243,244,246,0.5)", fontWeight: 700, fontSize: "0.88rem" }}>
-                  {selectedPending.size > 0
-                    ? `${selectedPending.size} محدد من ${pendingQuestions.length}`
-                    : "تحديد الكل"}
-                </span>
-              </label>
-
-              {/* Action buttons */}
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            <div className="flex gap-3">
+              <button
+                data-testid="reload-pending-btn"
+                onClick={loadPendingQuestions}
+                disabled={pendingLoading}
+                className="border border-primary/20 text-primary/60 px-4 py-2 rounded-xl font-bold text-sm hover:border-primary/50 transition-all"
+              >
+                {pendingLoading ? "⏳" : "↺"} تحديث
+              </button>
+              {pendingTotal > 0 && (
                 <button
-                  onClick={handleBulkApprove}
-                  disabled={selectedPending.size === 0}
-                  style={{
-                    background: selectedPending.size > 0 ? "rgba(52,211,153,0.18)" : "rgba(255,255,255,0.04)",
-                    border: `1.5px solid ${selectedPending.size > 0 ? "rgba(52,211,153,0.5)" : "rgba(255,255,255,0.08)"}`,
-                    color: selectedPending.size > 0 ? "#34d399" : "rgba(255,255,255,0.2)",
-                    padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
-                    cursor: selectedPending.size > 0 ? "pointer" : "not-allowed", transition: "all 0.15s",
-                  }}>
-                  ✓ موافقة على المحدد
-                </button>
-                <button
+                  data-testid="approve-all-btn"
                   onClick={handleApproveAll}
-                  disabled={pendingTotal === 0}
-                  style={{
-                    background: "rgba(52,211,153,0.08)", border: "1.5px solid rgba(52,211,153,0.25)",
-                    color: "rgba(52,211,153,0.6)",
-                    padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
-                    cursor: "pointer", transition: "all 0.15s",
-                  }}>
-                  ✓✓ موافقة على الكل ({pendingTotal})
+                  className="bg-green-600 text-white px-5 py-2 rounded-xl font-black text-sm hover:bg-green-700 transition-all"
+                >
+                  ✓ موافقة على الكل ({pendingTotal})
                 </button>
-                <button
-                  onClick={handleBulkReject}
-                  disabled={selectedPending.size === 0}
-                  style={{
-                    background: selectedPending.size > 0 ? "rgba(239,68,68,0.12)" : "rgba(255,255,255,0.04)",
-                    border: `1.5px solid ${selectedPending.size > 0 ? "rgba(239,68,68,0.4)" : "rgba(255,255,255,0.08)"}`,
-                    color: selectedPending.size > 0 ? "#f87171" : "rgba(255,255,255,0.2)",
-                    padding: "7px 18px", borderRadius: "10px", fontWeight: 900, fontSize: "0.82rem",
-                    cursor: selectedPending.size > 0 ? "pointer" : "not-allowed", transition: "all 0.15s",
-                  }}>
-                  ✕ حذف المحدد
-                </button>
-              </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Import section */}
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 mb-6">
@@ -2907,7 +2415,6 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-
           {/* Pending list */}
           {pendingLoading ? (
             <div className="text-center py-16 text-primary/40">
@@ -2920,9 +2427,73 @@ export default function AdminDashboard() {
               <div className="font-bold">لا توجد أسئلة معلقة</div>
               <div className="text-sm mt-1">جميع الأسئلة المستوردة تمت مراجعتها</div>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {pendingQuestions.map((q, i) => (
+          ) : (() => {
+            const filteredPending = pendingQuestions.filter(q => {
+              const searchMatch = !pendingFilter.search || q.text?.includes(pendingFilter.search) || q.answer?.includes(pendingFilter.search);
+              const diffMatch = pendingFilter.difficulty === "all" || String(q.difficulty) === pendingFilter.difficulty;
+              const catMatch = pendingFilter.category === "all" || q.category_id === pendingFilter.category;
+              return searchMatch && diffMatch && catMatch;
+            });
+            return (
+            <>
+              {/* Filter bar */}
+              <div style={{ display:"flex", gap:"0.75rem", marginBottom:"1rem", flexWrap:"wrap", alignItems:"center" }}>
+                <input
+                  placeholder="بحث في الأسئلة..."
+                  value={pendingFilter.search}
+                  onChange={e => setPendingFilter(p => ({...p, search: e.target.value}))}
+                  style={{ border:"1px solid rgba(0,0,0,0.15)", borderRadius:"0.5rem", padding:"0.4rem 0.75rem", fontSize:"0.85rem", outline:"none", minWidth:"180px", fontFamily:"Cairo,sans-serif" }}
+                />
+                <select value={pendingFilter.difficulty} onChange={e => setPendingFilter(p => ({...p, difficulty: e.target.value}))}
+                  style={{ border:"1px solid rgba(0,0,0,0.15)", borderRadius:"0.5rem", padding:"0.4rem 0.75rem", fontSize:"0.85rem", fontFamily:"Cairo,sans-serif" }}>
+                  <option value="all">كل الصعوبات</option>
+                  <option value="300">سهل (300)</option>
+                  <option value="600">متوسط (600)</option>
+                  <option value="900">صعب (900)</option>
+                </select>
+                <select value={pendingFilter.category} onChange={e => setPendingFilter(p => ({...p, category: e.target.value}))}
+                  style={{ border:"1px solid rgba(0,0,0,0.15)", borderRadius:"0.5rem", padding:"0.4rem 0.75rem", fontSize:"0.85rem", fontFamily:"Cairo,sans-serif" }}>
+                  <option value="all">كل الفئات</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                {(pendingFilter.search || pendingFilter.difficulty !== "all" || pendingFilter.category !== "all") && (
+                  <button onClick={() => setPendingFilter({ search:"", difficulty:"all", category:"all" })}
+                    style={{ fontSize:"0.8rem", color:"#6b7280", border:"1px solid #d1d5db", borderRadius:"0.5rem", padding:"0.4rem 0.75rem", background:"transparent", cursor:"pointer", fontFamily:"Cairo,sans-serif" }}>
+                    مسح الفلتر
+                  </button>
+                )}
+                <span style={{ fontSize:"0.8rem", color:"rgba(0,0,0,0.4)", marginRight:"auto" }}>
+                  يعرض {filteredPending.length} من {pendingQuestions.length}
+                </span>
+              </div>
+
+              {/* Bulk action bar */}
+              {selectedPending.size > 0 && (
+                <div className="bulk-action-bar" style={{ background:"#1e293b", color:"#fff", borderRadius:"1rem", padding:"0.75rem 1rem", marginBottom:"1rem", display:"flex", gap:"0.75rem", alignItems:"center" }}>
+                  <span style={{ fontWeight:700 }}>{selectedPending.size} سؤال محدد</span>
+                  <button onClick={() => handleBulkAction("approve")} style={{ background:"#16a34a", color:"#fff", border:"none", borderRadius:"0.5rem", padding:"0.4rem 1rem", fontWeight:700, cursor:"pointer", fontFamily:"Cairo,sans-serif" }}>✓ موافقة</button>
+                  <button onClick={() => handleBulkAction("reject")} style={{ background:"#dc2626", color:"#fff", border:"none", borderRadius:"0.5rem", padding:"0.4rem 1rem", fontWeight:700, cursor:"pointer", fontFamily:"Cairo,sans-serif" }}>✕ رفض</button>
+                  <button onClick={() => handleBulkAction("delete")} style={{ background:"#7f1d1d", color:"#fff", border:"none", borderRadius:"0.5rem", padding:"0.4rem 1rem", fontWeight:700, cursor:"pointer", fontFamily:"Cairo,sans-serif" }}>🗑 حذف</button>
+                  <button onClick={() => setSelectedPending(new Set())} style={{ marginRight:"auto", background:"transparent", color:"#94a3b8", border:"none", cursor:"pointer", fontFamily:"Cairo,sans-serif" }}>إلغاء</button>
+                </div>
+              )}
+
+              {/* Select all */}
+              <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"0.75rem" }}>
+                <input
+                  type="checkbox"
+                  checked={filteredPending.length > 0 && selectedPending.size === filteredPending.length}
+                  onChange={e => {
+                    if (e.target.checked) setSelectedPending(new Set(filteredPending.map(q => q.id)));
+                    else setSelectedPending(new Set());
+                  }}
+                  style={{ width:"16px", height:"16px", cursor:"pointer" }}
+                />
+                <span style={{ fontSize:"0.8rem", color:"rgba(0,0,0,0.5)" }}>تحديد الكل ({filteredPending.length})</span>
+              </div>
+
+              <div className="space-y-3">
+              {filteredPending.map((q, i) => (
                 <PendingQuestionCard
                   key={q.id}
                   q={q}
@@ -2933,15 +2504,17 @@ export default function AdminDashboard() {
                   onReject={handleRejectQuestion}
                   onUpdate={(id, fields) => setPendingQuestions(prev => prev.map(pq => pq.id === id ? { ...pq, ...fields } : pq))}
                   selected={selectedPending.has(q.id)}
-                  onToggleSelect={(id) => setSelectedPending(prev => {
+                  onToggleSelect={id => setSelectedPending(prev => {
                     const next = new Set(prev);
-                    next.has(id) ? next.delete(id) : next.add(id);
+                    if (next.has(id)) next.delete(id); else next.add(id);
                     return next;
                   })}
                 />
               ))}
-            </div>
-          )}
+              </div>
+            </>
+            );
+          })()}
         </div>
       )}
 
@@ -2968,16 +2541,8 @@ export default function AdminDashboard() {
                   className="w-full border-2 border-primary/20 focus:border-primary rounded-xl px-3 py-2.5 text-sm font-bold outline-none bg-white"
                 >
                   <option value="">اختر فئة...</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.icon || ""} {c.name}</option>)}
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.icon || ""} {c.name}{c.is_premium ? " ⭐" : ""}</option>)}
                 </select>
-                {aiCatId && (
-                  <div className="mt-1.5 text-[11px] font-bold">
-                    {getTemplateLabel(aiCatId)
-                      ? <span className="text-emerald-600">✓ قالب متخصص: {getTemplateLabel(aiCatId)}</span>
-                      : <span className="text-primary/40">قالب عام</span>
-                    }
-                  </div>
-                )}
               </div>
               <div>
                 <label className="text-sm font-bold text-primary/70 mb-2 block">الصعوبة</label>
@@ -3085,99 +2650,96 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </div>
-              <div className="space-y-3 max-h-[700px] overflow-y-auto pr-1">
-                {aiQuestions.map((q, i) => {
-                  const diffColor = q.difficulty === 300
-                    ? { border: "#bbf7d0", bg: "#f0fdf4", badge: "#dcfce7", badgeText: "#166534" }
-                    : q.difficulty === 600
-                    ? { border: "#fde68a", bg: "#fffbeb", badge: "#fef3c7", badgeText: "#92400e" }
-                    : { border: "#fecaca", bg: "#fff5f5", badge: "#fee2e2", badgeText: "#991b1b" };
-                  return (
-                    <div key={q.id} data-testid={`ai-question-${i}`}
-                      style={{ border: `1.5px solid ${diffColor.border}`, background: diffColor.bg, borderRadius: 14 }}
-                      className="overflow-hidden">
-                      {/* Header row */}
-                      <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
-                        <span style={{ background: diffColor.badge, color: diffColor.badgeText }}
-                          className="text-[10px] font-black px-2 py-0.5 rounded-full">
-                          {q.difficulty === 300 ? "سهل" : q.difficulty === 600 ? "متوسط" : "صعب"} · {q.difficulty}
-                        </span>
-                        <button onClick={() => setAiQuestions(aiQuestions.filter((_, idx) => idx !== i))}
-                          className="text-red-400/50 hover:text-red-500 text-lg font-black leading-none px-1">×</button>
+              <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                {aiQuestions.map((q, i) => (
+                  <div key={q.id} data-testid={`ai-question-${i}`}
+                    className={`rounded-xl border overflow-hidden ${q.difficulty === 300 ? "border-green-200 bg-green-50" : q.difficulty === 600 ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"}`}>
+                    <div className="flex">
+                      {/* Image Preview */}
+                      <div className="w-28 shrink-0 bg-black/10 relative overflow-hidden">
+                        {q._img_thumb || q.image_url ? (
+                          <img
+                            src={q._img_thumb || q.image_url}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            style={{ minHeight: "100px" }}
+                            onError={e => e.target.style.display = "none"}
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full min-h-[100px] text-primary/20 text-xs text-center p-2">
+                            {q.image_query ? "⏳" : "لا صورة"}
+                          </div>
+                        )}
+                        {q._img_credit && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 py-0.5 truncate">
+                            © {q._img_credit}
+                          </div>
+                        )}
                       </div>
-
-                      {/* Images row */}
-                      <div className="flex gap-2 px-3 pb-2">
-                        {/* Question image */}
-                        <div className="relative w-24 h-16 rounded-lg overflow-hidden bg-black/8 shrink-0 flex items-center justify-center">
-                          {q.image_url ? (
-                            <img src={q.image_url} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display = "none"} />
-                          ) : (
-                            <span className="text-[9px] text-black/25 text-center">{aiFetchingImages ? "⏳" : "صورة السؤال"}</span>
-                          )}
-                          <span className="absolute bottom-0 left-0 right-0 text-center text-[7px] bg-black/40 text-white py-0.5">سؤال</span>
+                      {/* Content */}
+                      <div className="flex-1 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${q.difficulty === 300 ? "bg-green-200 text-green-800" : q.difficulty === 600 ? "bg-amber-200 text-amber-800" : "bg-red-200 text-red-800"}`}>
+                            {q.difficulty === 300 ? "سهل" : q.difficulty === 600 ? "متوسط" : "صعب"} • {q.difficulty}
+                          </span>
+                          <button
+                            onClick={() => setAiQuestions(aiQuestions.filter((_, idx) => idx !== i))}
+                            className="text-red-400/60 hover:text-red-500 text-xl font-black leading-none"
+                            title="حذف هذا السؤال"
+                          >
+                            ×
+                          </button>
                         </div>
-                        {/* Answer image */}
-                        <div className="relative w-24 h-16 rounded-lg overflow-hidden bg-black/8 shrink-0 flex items-center justify-center">
-                          {q.answer_image_url ? (
-                            <img src={q.answer_image_url} alt="" className="w-full h-full object-cover" onError={e => e.target.style.display = "none"} />
-                          ) : (
-                            <span className="text-[9px] text-black/25 text-center">{aiFetchingImages ? "⏳" : "صورة الإجابة"}</span>
-                          )}
-                          <span className="absolute bottom-0 left-0 right-0 text-center text-[7px] bg-black/40 text-white py-0.5">إجابة</span>
-                        </div>
-                        {/* Question text */}
                         <textarea
                           value={q.text}
-                          onChange={(e) => { const u = [...aiQuestions]; u[i] = { ...q, text: e.target.value }; setAiQuestions(u); }}
-                          rows={3}
-                          className="flex-1 bg-white border border-black/10 rounded-lg px-2.5 py-2 text-sm font-bold outline-none resize-none"
-                          style={{ fontFamily: "Cairo, sans-serif" }}
+                          onChange={(e) => {
+                            const updated = [...aiQuestions];
+                            updated[i] = { ...q, text: e.target.value };
+                            setAiQuestions(updated);
+                          }}
+                          rows={2}
+                          className="w-full bg-white border border-primary/10 rounded-lg px-3 py-2 text-sm font-bold outline-none resize-none"
                           placeholder="نص السؤال"
                         />
-                      </div>
-
-                      {/* Answer + image queries row */}
-                      <div className="flex gap-2 px-3 pb-3">
-                        <input
-                          value={q.answer}
-                          onChange={(e) => { const u = [...aiQuestions]; u[i] = { ...q, answer: e.target.value }; setAiQuestions(u); }}
-                          className="w-32 bg-white border-2 border-green-300 rounded-lg px-2.5 py-1.5 text-sm font-black outline-none text-green-800"
-                          placeholder="الإجابة"
-                        />
-                        <input
-                          value={q.image_query || ""}
-                          onChange={(e) => { const u = [...aiQuestions]; u[i] = { ...q, image_query: e.target.value }; setAiQuestions(u); }}
-                          className="flex-1 bg-white border border-black/10 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                          placeholder="🔍 بحث صورة السؤال (EN)"
-                        />
-                        <input
-                          value={q.answer_image_query || ""}
-                          onChange={(e) => { const u = [...aiQuestions]; u[i] = { ...q, answer_image_query: e.target.value }; setAiQuestions(u); }}
-                          className="flex-1 bg-white border border-black/10 rounded-lg px-2.5 py-1.5 text-xs outline-none"
-                          placeholder="🔍 بحث صورة الإجابة (EN)"
-                        />
-                        <button
-                          onClick={async () => {
-                            const [qRes, aRes] = await Promise.all([
-                              fetchUnsplashForQuestion(q.image_query),
-                              fetchUnsplashForQuestion(q.answer_image_query),
-                            ]);
-                            setAiQuestions(prev => prev.map((item, idx) => idx !== i ? item : {
-                              ...item,
-                              ...(qRes ? { image_url: qRes.url, _img_thumb: qRes.url } : {}),
-                              ...(aRes ? { answer_image_url: aRes.url } : {}),
-                            }));
-                          }}
-                          title="جلب صورتين جديدتين"
-                          className="bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1.5 rounded-lg text-sm font-bold disabled:opacity-30 transition-all shrink-0"
-                        >
-                          🖼️
-                        </button>
+                        <div className="flex gap-2">
+                          <input
+                            value={q.answer}
+                            onChange={(e) => {
+                              const updated = [...aiQuestions];
+                              updated[i] = { ...q, answer: e.target.value };
+                              setAiQuestions(updated);
+                            }}
+                            className="flex-1 bg-white border border-primary/10 rounded-lg px-3 py-2 text-sm outline-none"
+                            placeholder="الإجابة"
+                          />
+                          <input
+                            value={q.image_query || ""}
+                            onChange={(e) => {
+                              const updated = [...aiQuestions];
+                              updated[i] = { ...q, image_query: e.target.value };
+                              setAiQuestions(updated);
+                            }}
+                            className="flex-1 bg-white border border-primary/10 rounded-lg px-3 py-2 text-xs outline-none"
+                            placeholder="كلمة بحث الصورة (انجليزي)"
+                          />
+                          <button
+                            onClick={async () => {
+                              const result = await fetchUnsplashForQuestion(q.image_query);
+                              if (result) {
+                                setAiQuestions(prev => prev.map((item, idx) => idx === i ? { ...item, ...result } : item));
+                              }
+                            }}
+                            disabled={!q.image_query}
+                            title="جلب صورة جديدة"
+                            className="bg-primary/10 hover:bg-primary/20 text-primary px-2 py-1 rounded-lg text-xs font-bold disabled:opacity-30 transition-all"
+                          >
+                            🖼️
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -3193,251 +2755,6 @@ export default function AdminDashboard() {
       )}
 
       {/* ── EXPERIMENTAL MODE TAB ── */}
-      {activeTab === "community" && (
-        <div style={{ padding: "24px 0", fontFamily: "Cairo, sans-serif", direction: "rtl", background: "#111827", borderRadius: 20, padding: 24, marginTop: 8, color: "#f8f2e7" }}>
-
-          {/* Analytics row */}
-          {communityAnalytics && (
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
-              {[
-                { v: communityAnalytics.approved_categories,       l: "فئات معتمدة",       c: "#73f0a8" },
-                { v: communityAnalytics.pending_categories,        l: "قيد المراجعة",       c: "#ffd86b" },
-                { v: communityAnalytics.pending_payout_requests,   l: "طلبات سحب معلقة",   c: "#ff8b95" },
-                { v: communityAnalytics.monthly_unprocessed_plays, l: `ألعاب ${communityAnalytics.current_month}`, c: "#93c5fd" },
-                { v: `${communityAnalytics.total_paid_sar?.toFixed(0)} ر`, l: "إجمالي المسحوب", c: "#f2b85b" },
-              ].map(({ v, l, c }) => (
-                <div key={l} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: "14px 18px", flex: "1 1 140px" }}>
-                  <div style={{ fontSize: 28, fontWeight: 900, color: c, lineHeight: 1 }}>{v}</div>
-                  <div style={{ fontSize: 12, color: "#d8cdb8", marginTop: 5 }}>{l}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Process monthly earnings */}
-          <div style={{ background: "rgba(242,184,91,0.06)", border: "1px solid rgba(242,184,91,0.25)", borderRadius: 18, padding: 20, marginBottom: 24 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: "#f2b85b", marginBottom: 6 }}>معالجة الأرباح الشهرية</div>
-            <div style={{ fontSize: 13, color: "#d8cdb8", marginBottom: 16 }}>
-              يحسب عدد اللاععين الفريدين لكل منشئ هذا الشهر ويضيف الرصيد لمحافظهم.
-              اضغط مرة واحدة فقط آخر كل شهر.
-            </div>
-            {earningsResult && (
-              <div style={{ background: "rgba(115,240,168,0.08)", border: "1px solid rgba(115,240,168,0.2)", borderRadius: 12, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#73f0a8" }}>
-                ✅ {earningsResult.message} — {earningsResult.creators_paid} منشئ، {earningsResult.total_sar_awarded} ريال
-              </div>
-            )}
-            <button
-              onClick={async () => {
-                if (!window.confirm("تأكيد معالجة أرباح الشهر الحالي؟")) return;
-                setProcessingEarnings(true); setEarningsResult(null);
-                try {
-                  const { data } = await axios.post(`${API}/admin/community/process-monthly-earnings`, {}, { headers });
-                  setEarningsResult(data);
-                  toast.success(data.message);
-                  loadCommunity();
-                } catch (e) { toast.error(e?.response?.data?.detail || "خطأ في المعالجة"); }
-                finally { setProcessingEarnings(false); }
-              }}
-              disabled={processingEarnings}
-              style={{ background: "linear-gradient(90deg,#f2b85b,#ff8f3d)", color: "#1a0f10", border: "none", borderRadius: 12, padding: "12px 24px", fontWeight: 800, cursor: "pointer", fontSize: 14, fontFamily: "Cairo, sans-serif", opacity: processingEarnings ? 0.6 : 1 }}
-            >
-              {processingEarnings ? "⏳ جاري المعالجة..." : "💰 معالجة أرباح هذا الشهر"}
-            </button>
-          </div>
-
-          {/* Pending categories */}
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, color: "#f8f2e7" }}>
-              فئات قيد المراجعة ({communityPending.length})
-            </div>
-            {communityLoading ? (
-              <div style={{ color: "#d8cdb8", padding: 20 }}>جاري التحميل...</div>
-            ) : communityPending.length === 0 ? (
-              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: 24, color: "#d8cdb8", textAlign: "center" }}>لا توجد فئات تنتظر المراجعة</div>
-            ) : communityPending.map(cat => (
-              <div key={cat.id} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 16, marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 800, color: "#f8f2e7", marginBottom: 4 }}>{cat.name}</div>
-                    {cat.description && <div style={{ fontSize: 12, color: "#d8cdb8", marginBottom: 6 }}>{cat.description}</div>}
-                    <div style={{ display: "flex", gap: 16, fontSize: 12, color: "#d8cdb8", flexWrap: "wrap" }}>
-                      <span>👤 {cat.creator_username}</span>
-                      <span>📝 {cat.questions_count} سؤال</span>
-                      <span>📅 {cat.submitted_at ? new Date(cat.submitted_at).toLocaleDateString("ar-SA") : "—"}</span>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      onClick={async () => {
-                        try {
-                          await axios.post(`${API}/admin/community/${cat.id}/approve`, {}, { headers });
-                          toast.success("تمت الموافقة");
-                          setCommunityPending(p => p.filter(c => c.id !== cat.id));
-                          loadCommunity();
-                        } catch (e) { toast.error(e?.response?.data?.detail || "خطأ"); }
-                      }}
-                      style={{ background: "rgba(64,212,140,0.15)", color: "#73f0a8", border: "1px solid rgba(64,212,140,0.3)", borderRadius: 10, padding: "8px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}
-                    >✓ موافقة</button>
-                    <button
-                      onClick={() => { setRejectingCat(cat.id); setRejectReason(""); }}
-                      style={{ background: "rgba(255,95,109,0.12)", color: "#ff8b95", border: "1px solid rgba(255,95,109,0.25)", borderRadius: 10, padding: "8px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}
-                    >✕ رفض</button>
-                  </div>
-                </div>
-                {rejectingCat === cat.id && (
-                  <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <input
-                      value={rejectReason}
-                      onChange={e => setRejectReason(e.target.value)}
-                      placeholder="سبب الرفض (اختياري)"
-                      style={{ flex: 1, minWidth: 200, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "10px 14px", color: "#f8f2e7", fontSize: 13, fontFamily: "Cairo, sans-serif", outline: "none" }}
-                    />
-                    <button
-                      onClick={async () => {
-                        try {
-                          await axios.post(`${API}/admin/community/${cat.id}/reject`, { reason: rejectReason }, { headers });
-                          toast.success("تم الرفض");
-                          setCommunityPending(p => p.filter(c => c.id !== cat.id));
-                          setRejectingCat(null);
-                          loadCommunity();
-                        } catch (e) { toast.error(e?.response?.data?.detail || "خطأ"); }
-                      }}
-                      style={{ background: "#ff5f6d", color: "#fff", border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 800, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}
-                    >تأكيد الرفض</button>
-                    <button
-                      onClick={() => setRejectingCat(null)}
-                      style={{ background: "rgba(255,255,255,0.08)", color: "#d8cdb8", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "10px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13, fontFamily: "Cairo, sans-serif" }}
-                    >إلغاء</button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Payout requests */}
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14, color: "#f8f2e7" }}>
-              طلبات السحب ({communityPayouts.length})
-            </div>
-            {communityPayouts.length === 0 ? (
-              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: 24, color: "#d8cdb8", textAlign: "center" }}>لا توجد طلبات سحب</div>
-            ) : communityPayouts.map(p => (
-              <div key={p.id} style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${p.status === "pending" ? "rgba(255,204,102,0.25)" : "rgba(255,255,255,0.1)"}`, borderRadius: 16, padding: 16, marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 20, fontWeight: 900, color: "#f2b85b" }}>{p.amount} ريال</div>
-                    <div style={{ fontSize: 12, color: "#d8cdb8", marginTop: 4 }}>
-                      👤 {p.username} · {p.account_name} · {p.iban}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#d8cdb8", marginTop: 2 }}>{new Date(p.created_at).toLocaleDateString("ar-SA")}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                    <span style={{
-                      background: { pending: "rgba(255,204,102,0.15)", approved: "rgba(64,212,140,0.15)", paid: "rgba(64,212,140,0.2)", rejected: "rgba(255,95,109,0.15)" }[p.status],
-                      color: { pending: "#ffd86b", approved: "#73f0a8", paid: "#40d48c", rejected: "#ff8b95" }[p.status],
-                      padding: "5px 12px", borderRadius: 999, fontWeight: 700, fontSize: 12
-                    }}>{{ pending: "معلق", approved: "موافق عليه", paid: "تم التحويل", rejected: "مرفوض" }[p.status]}</span>
-                    {p.status === "pending" && (
-                      <>
-                        <button onClick={async () => {
-                          try {
-                            await axios.patch(`${API}/admin/community/payouts/${p.id}`, { status: "approved" }, { headers });
-                            toast.success("تمت الموافقة");
-                            setCommunityPayouts(prev => prev.map(x => x.id === p.id ? { ...x, status: "approved" } : x));
-                          } catch { toast.error("خطأ"); }
-                        }} style={{ background: "rgba(64,212,140,0.15)", color: "#73f0a8", border: "1px solid rgba(64,212,140,0.3)", borderRadius: 10, padding: "7px 12px", fontWeight: 700, cursor: "pointer", fontSize: 12, fontFamily: "Cairo, sans-serif" }}>موافقة</button>
-                        <button onClick={async () => {
-                          try {
-                            await axios.patch(`${API}/admin/community/payouts/${p.id}`, { status: "rejected" }, { headers });
-                            toast.success("تم الرفض والإعادة للرصيد");
-                            setCommunityPayouts(prev => prev.map(x => x.id === p.id ? { ...x, status: "rejected" } : x));
-                          } catch { toast.error("خطأ"); }
-                        }} style={{ background: "rgba(255,95,109,0.12)", color: "#ff8b95", border: "1px solid rgba(255,95,109,0.25)", borderRadius: 10, padding: "7px 12px", fontWeight: 700, cursor: "pointer", fontSize: 12, fontFamily: "Cairo, sans-serif" }}>رفض</button>
-                      </>
-                    )}
-                    {p.status === "approved" && (
-                      <button onClick={async () => {
-                        try {
-                          await axios.patch(`${API}/admin/community/payouts/${p.id}`, { status: "paid" }, { headers });
-                          toast.success("تم التأشير كمحوّل");
-                          setCommunityPayouts(prev => prev.map(x => x.id === p.id ? { ...x, status: "paid" } : x));
-                        } catch { toast.error("خطأ"); }
-                      }} style={{ background: "rgba(242,184,91,0.15)", color: "#f2b85b", border: "1px solid rgba(242,184,91,0.3)", borderRadius: 10, padding: "7px 12px", fontWeight: 700, cursor: "pointer", fontSize: 12, fontFamily: "Cairo, sans-serif" }}>✓ تم التحويل</button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeTab === "tournaments" && (
-        <div className="p-6 max-w-4xl mx-auto">
-          <div className="flex items-center gap-3 mb-6">
-            <span className="text-3xl">🏆</span>
-            <div>
-              <h2 className="text-2xl font-black">سجل البطولات</h2>
-              <p className="text-primary/50 text-sm">جميع البطولات المُنجزة من المستخدمين</p>
-            </div>
-          </div>
-
-          {tournamentsLoading ? (
-            <div className="text-center py-16 text-primary/40">
-              <div className="text-4xl mb-3 animate-spin">⏳</div>
-              <div>جاري التحميل...</div>
-            </div>
-          ) : tournaments.length === 0 ? (
-            <div className="text-center py-16 text-primary/30">
-              <div className="text-5xl mb-3">🏅</div>
-              <div className="font-bold">لا توجد بطولات بعد</div>
-              <div className="text-sm mt-1">ستظهر هنا عند اكتمال أول بطولة</div>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {tournaments.map((t, idx) => (
-                <div key={t.id} style={{
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.09)",
-                  borderRadius: "14px",
-                  padding: "16px 20px",
-                  display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap",
-                }}>
-                  <div style={{
-                    width: "36px", height: "36px", borderRadius: "50%",
-                    background: "rgba(241,225,148,0.12)", border: "1.5px solid rgba(241,225,148,0.3)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "#F1E194", fontWeight: 900, fontSize: "0.85rem", flexShrink: 0,
-                  }}>{idx + 1}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                      <span style={{ color: "#F1E194", fontWeight: 900, fontSize: "1rem", fontFamily: "Cairo,sans-serif" }}>
-                        🥇 {t.champion}
-                      </span>
-                      <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.75rem" }}>•</span>
-                      <span style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.8rem" }}>
-                        {t.team_count} فرق · {t.total_matches} مباراة
-                      </span>
-                    </div>
-                    <div style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.75rem", marginTop: "4px", fontFamily: "Cairo,sans-serif" }}>
-                      {t.teams?.join(" · ")}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "left", flexShrink: 0 }}>
-                    <div style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.72rem" }}>
-                      {t.username}
-                    </div>
-                    <div style={{ color: "rgba(255,255,255,0.2)", fontSize: "0.68rem" }}>
-                      {t.created_at?.slice(0, 10)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {activeTab === "experimental" && (
         <div className="flex h-full" style={{ minHeight: "calc(100vh - 140px)" }}>
 
@@ -3794,7 +3111,9 @@ export default function AdminDashboard() {
                   />
                 </div>
                 {form.image_url && (
-                  <img src={form.image_url} alt="" className="mt-2 h-16 object-contain rounded-lg" onError={(e) => e.target.style.display = "none"} />
+                  <div className="mt-3 rounded-xl overflow-hidden border border-primary/20 bg-black/20" style={{ maxHeight: "260px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <img src={form.image_url} alt="" style={{ maxHeight: "260px", maxWidth: "100%", objectFit: "contain", display: "block" }} onError={(e) => e.target.parentElement.style.display = "none"} />
+                  </div>
                 )}
               </div>
 
@@ -3821,7 +3140,45 @@ export default function AdminDashboard() {
                   />
                 </div>
                 {form.answer_image_url && (
-                  <img src={form.answer_image_url} alt="" className="mt-2 h-16 object-contain rounded-lg" onError={(e) => e.target.style.display = "none"} />
+                  <div className="mt-3 rounded-xl overflow-hidden border border-primary/20 bg-black/20" style={{ maxHeight: "200px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <img src={form.answer_image_url} alt="" style={{ maxHeight: "200px", maxWidth: "100%", objectFit: "contain", display: "block" }} onError={(e) => e.target.parentElement.style.display = "none"} />
+                  </div>
+                )}
+              </div>
+
+              {/* Audio Upload — Optional */}
+              <div>
+                <label className="text-sm font-bold text-primary/70 mb-1 block">🎵 ملف صوتي (اختياري)</label>
+                <div className="flex gap-2 items-center">
+                  <label className={`cursor-pointer flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-bold transition-all border ${audioUploading ? "bg-primary/5 border-primary/10 text-primary/40 cursor-wait" : "bg-primary/10 hover:bg-primary/20 text-primary border-primary/20"}`}>
+                    <span>{audioUploading ? "⏳ جاري الرفع..." : "🎵 رفع ملف"}</span>
+                    <input
+                      type="file"
+                      accept="audio/mpeg,audio/wav,audio/x-m4a,audio/mp4,.mp3,.wav,.m4a"
+                      className="hidden"
+                      disabled={audioUploading}
+                      onChange={(e) => uploadAudio(e.target.files[0], (url) => setForm(prev => ({ ...prev, audio_url: url, question_type: "audio" })))}
+                    />
+                  </label>
+                  <input
+                    value={form.audio_url}
+                    onChange={(e) => setForm(prev => ({ ...prev, audio_url: e.target.value, question_type: e.target.value ? "audio" : prev.question_type }))}
+                    placeholder="أو الصق رابط الملف الصوتي"
+                    className="flex-1 border-2 border-primary/20 focus:border-primary rounded-xl px-3 py-2 text-sm outline-none"
+                  />
+                  {form.audio_url && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(prev => ({ ...prev, audio_url: "", question_type: "text" }))}
+                      className="text-red-400 hover:text-red-600 text-lg px-1"
+                      title="إزالة الصوت"
+                    >✕</button>
+                  )}
+                </div>
+                {form.audio_url && (
+                  <div className="mt-3 p-3 rounded-xl border border-primary/20 bg-primary/5">
+                    <audio controls src={form.audio_url} className="w-full h-10" style={{ accentColor: "#5B0E14" }} />
+                  </div>
                 )}
               </div>
             </div>
@@ -3967,6 +3324,273 @@ export default function AdminDashboard() {
               <button onClick={() => { setShowCatForm(false); setEditingCat(null); }} className="flex-1 bg-primary/10 text-primary py-2 rounded-xl font-bold">إلغاء</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── COMMUNITY MODERATION TAB ── */}
+      {activeTab === "community" && (
+        <CommunityAdminPanel adminToken={token} />
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   COMMUNITY ADMIN PANEL
+══════════════════════════════════════════════════════════════════════════════ */
+const API_BASE = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
+
+function CommunityAdminPanel({ adminToken }) {
+  const [cats, setCats] = React.useState([]);
+  const [payouts, setPayouts] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [catStatus, setCatStatus] = React.useState("pending_review");
+  const [payoutStatus, setPayoutStatus] = React.useState("pending");
+  const [section, setSection] = React.useState("categories");
+  const [rejectReason, setRejectReason] = React.useState("");
+  const [rejectingId, setRejectingId] = React.useState(null);
+
+  const headers = { Authorization: `Bearer ${adminToken}` };
+
+  const STATUS_LABELS = {
+    draft: "مسودة", pending_review: "قيد المراجعة", published: "منشورة", rejected: "مرفوضة",
+  };
+  const PAYOUT_LABELS = {
+    pending: "قيد الانتظار", under_review: "قيد المراجعة", approved: "موافق", rejected: "مرفوض", paid: "مدفوع",
+  };
+  const PAYOUT_COLORS = {
+    pending: "#94a3b8", under_review: "#fcd34d", approved: "#6ee7b7", rejected: "#f87171", paid: "#a78bfa",
+  };
+
+  const loadCats = async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${API_BASE}/admin/community/categories?status=${catStatus}`, { headers });
+      setCats(data);
+    } catch { toast.error("فشل تحميل الفئات"); }
+    finally { setLoading(false); }
+  };
+
+  const loadPayouts = async () => {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${API_BASE}/admin/community/payouts?status=${payoutStatus}`, { headers });
+      setPayouts(data);
+    } catch { toast.error("فشل تحميل طلبات السحب"); }
+    finally { setLoading(false); }
+  };
+
+  React.useEffect(() => {
+    if (section === "categories") loadCats();
+    else loadPayouts();
+  }, [section, catStatus, payoutStatus]);
+
+  const approve = async (id) => {
+    try {
+      await axios.post(`${API_BASE}/admin/community/categories/${id}/approve`, {}, { headers });
+      toast.success("تمت الموافقة ونشر الفئة");
+      loadCats();
+    } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); }
+  };
+
+  const reject = async (id) => {
+    try {
+      await axios.post(`${API_BASE}/admin/community/categories/${id}/reject`, { reason: rejectReason }, { headers });
+      toast.success("تم الرفض");
+      setRejectingId(null);
+      setRejectReason("");
+      loadCats();
+    } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); }
+  };
+
+  const updatePayout = async (id, status, note = "") => {
+    try {
+      await axios.patch(`${API_BASE}/admin/community/payouts/${id}`, { status, admin_note: note }, { headers });
+      toast.success("تم تحديث حالة السحب");
+      loadPayouts();
+    } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); }
+  };
+
+  const pill = (label, color) => (
+    <span style={{ background: `${color}22`, color, border: `1px solid ${color}55`, borderRadius: 20, padding: "2px 10px", fontSize: 12, fontWeight: 700 }}>
+      {label}
+    </span>
+  );
+
+  return (
+    <div className="p-6">
+      <h2 className="text-2xl font-black mb-1">إدارة مجتمع حُجّة</h2>
+      <p className="text-primary/50 text-sm mb-6">مراجعة الفئات المقدّمة وطلبات سحب الأرباح</p>
+
+      {/* Section toggle */}
+      <div className="flex gap-3 mb-6">
+        {[{ id: "categories", label: "🗂️ الفئات المقدّمة" }, { id: "payouts", label: "💸 طلبات السحب" }].map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSection(s.id)}
+            className={`px-5 py-2 rounded-full font-bold text-sm transition-all ${section === s.id ? "bg-primary text-secondary" : "bg-primary/10 text-primary/60 hover:text-primary"}`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* CATEGORIES */}
+      {section === "categories" && (
+        <div>
+          {/* Status filter */}
+          <div className="flex gap-2 mb-5 flex-wrap">
+            {Object.entries(STATUS_LABELS).map(([k, v]) => (
+              <button
+                key={k}
+                onClick={() => setCatStatus(k)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all border ${catStatus === k ? "bg-primary text-secondary border-primary" : "border-primary/20 text-primary/60 hover:text-primary"}`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="text-center py-10 text-primary/40">جاري التحميل...</div>
+          ) : cats.length === 0 ? (
+            <div className="text-center py-10 text-primary/40">لا توجد فئات بهذه الحالة</div>
+          ) : (
+            <div className="space-y-4">
+              {cats.map((cat) => (
+                <div key={cat.id} className="bg-white border border-primary/10 rounded-2xl p-5 shadow-sm">
+                  <div className="flex gap-4 items-start">
+                    {cat.image_url && (
+                      <img src={cat.image_url} alt="" className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3 mb-1">
+                        <h3 className="font-black text-lg">{cat.name}</h3>
+                        {pill(STATUS_LABELS[cat.status] || cat.status, cat.status === "published" ? "#22c55e" : cat.status === "rejected" ? "#ef4444" : cat.status === "pending_review" ? "#f59e0b" : "#94a3b8")}
+                      </div>
+                      <p className="text-primary/50 text-sm mb-2">{cat.description}</p>
+                      <div className="flex gap-4 text-sm text-primary/50 flex-wrap">
+                        <span>📝 {cat.question_count || 0} سؤال</span>
+                        <span>🎮 {cat.plays || 0} لعبة</span>
+                        <span>❤️ {cat.likes || 0}</span>
+                        <span>👤 {cat.creator_name || cat.creator_id}</span>
+                        <span>🏷️ {cat.group}</span>
+                        <span>📅 {cat.submitted_at?.slice(0, 10) || ""}</span>
+                      </div>
+                      {cat.reject_reason && (
+                        <p className="text-red-500 text-sm mt-2">سبب الرفض: {cat.reject_reason}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  {cat.status === "pending_review" && (
+                    <div className="flex gap-3 mt-4 flex-wrap">
+                      <button
+                        onClick={() => approve(cat.id)}
+                        className="bg-green-600 text-white px-5 py-2 rounded-full font-bold text-sm hover:bg-green-700 transition-all"
+                      >
+                        ✅ موافقة ونشر
+                      </button>
+                      {rejectingId === cat.id ? (
+                        <div className="flex gap-2 flex-1 flex-wrap">
+                          <input
+                            value={rejectReason}
+                            onChange={(e) => setRejectReason(e.target.value)}
+                            placeholder="سبب الرفض (اختياري)..."
+                            className="flex-1 border-2 border-red-200 rounded-xl px-3 py-1.5 text-sm outline-none min-w-0"
+                          />
+                          <button onClick={() => reject(cat.id)} className="bg-red-600 text-white px-4 py-1.5 rounded-full font-bold text-sm hover:bg-red-700">
+                            تأكيد الرفض
+                          </button>
+                          <button onClick={() => { setRejectingId(null); setRejectReason(""); }} className="border border-primary/20 px-4 py-1.5 rounded-full text-sm font-bold text-primary/50 hover:text-primary">
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setRejectingId(cat.id)}
+                          className="border border-red-300 text-red-600 px-5 py-2 rounded-full font-bold text-sm hover:bg-red-50 transition-all"
+                        >
+                          ❌ رفض
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* PAYOUTS */}
+      {section === "payouts" && (
+        <div>
+          {/* Status filter */}
+          <div className="flex gap-2 mb-5 flex-wrap">
+            {Object.entries(PAYOUT_LABELS).map(([k, v]) => (
+              <button
+                key={k}
+                onClick={() => setPayoutStatus(k)}
+                className={`px-4 py-1.5 rounded-full text-sm font-bold transition-all border ${payoutStatus === k ? "bg-primary text-secondary border-primary" : "border-primary/20 text-primary/60 hover:text-primary"}`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="text-center py-10 text-primary/40">جاري التحميل...</div>
+          ) : payouts.length === 0 ? (
+            <div className="text-center py-10 text-primary/40">لا توجد طلبات</div>
+          ) : (
+            <div className="space-y-4">
+              {payouts.map((p) => (
+                <div key={p.id} className="bg-white border border-primary/10 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-xl font-black text-amber-600">{p.amount} ﷼</span>
+                        {pill(PAYOUT_LABELS[p.status] || p.status, PAYOUT_COLORS[p.status] || "#94a3b8")}
+                      </div>
+                      <div className="text-sm text-primary/50 space-y-1">
+                        <div>👤 {p.user_id}</div>
+                        <div dir="ltr" className="font-mono">🏦 {p.iban}</div>
+                        <div>👁️ {p.account_name}</div>
+                        <div>📅 {p.requested_at?.slice(0, 10)}</div>
+                        {p.admin_note && <div className="text-primary/60">💬 {p.admin_note}</div>}
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 flex-wrap">
+                      {p.status === "pending" && (
+                        <button onClick={() => updatePayout(p.id, "under_review")} className="bg-yellow-500 text-white px-4 py-1.5 rounded-full font-bold text-sm hover:bg-yellow-600">
+                          قيد المراجعة
+                        </button>
+                      )}
+                      {(p.status === "pending" || p.status === "under_review") && (
+                        <button onClick={() => updatePayout(p.id, "approved")} className="bg-green-600 text-white px-4 py-1.5 rounded-full font-bold text-sm hover:bg-green-700">
+                          ✅ موافقة
+                        </button>
+                      )}
+                      {p.status === "approved" && (
+                        <button onClick={() => updatePayout(p.id, "paid")} className="bg-purple-600 text-white px-4 py-1.5 rounded-full font-bold text-sm hover:bg-purple-700">
+                          💸 تأكيد الدفع
+                        </button>
+                      )}
+                      {(p.status === "pending" || p.status === "under_review") && (
+                        <button onClick={() => updatePayout(p.id, "rejected", "تم الرفض من الإدارة")} className="border border-red-300 text-red-600 px-4 py-1.5 rounded-full font-bold text-sm hover:bg-red-50">
+                          ❌ رفض
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
