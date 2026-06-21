@@ -4,436 +4,434 @@ import { useGame } from "@/context/GameContext";
 import axios from "axios";
 import { toast } from "sonner";
 
-const API          = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
+const API = `${process.env.REACT_APP_BACKEND_URL || "https://backend-production-cfa1f.up.railway.app"}/api`;
 const DIFFICULTIES = [300, 600, 900];
+const ROMAN_BG = "https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920";
 
-/* ─── Animated score counter ─── */
+/* ══════════════════════════════════════
+   DESIGN TOKENS — Classical Roman / Parchment
+══════════════════════════════════════ */
+const C = {
+  parchment:    "#FAF9F6",
+  parchmentDk:  "#F0EDE4",
+  parchmentBdr: "#E8E0D0",
+  gold:         "#C9A84C",
+  goldLight:    "#DAA520",
+  goldDark:     "#8B6914",
+  bronze:       "#4A3728",
+  bronzeDk:     "#2E1E14",
+  bronzeLt:     "#7A6250",
+  deepBlue:     "#1B2A4A",
+  textDark:     "#2C1810",
+  textMid:      "#5A3E28",
+  cream:        "#FFF8E8",
+};
+
+/* ── Bronze coin buttons — dark brown + gold border ── */
+const diffStyle = (diff, used) => {
+  if (used) return {
+    bg:     "rgba(200,185,165,0.45)",
+    border: "rgba(145,120,80,0.30)",
+    color:  "rgba(80,58,35,0.38)",
+    shadow: "inset 0 2px 5px rgba(0,0,0,0.10)",
+    hBg:    "rgba(200,185,165,0.45)",
+    hSh:    "inset 0 2px 5px rgba(0,0,0,0.10)",
+    strike: true,
+  };
+  if (diff === 300) return {
+    bg:     `linear-gradient(175deg,${C.bronzeLt},${C.bronze})`,
+    border: C.gold,
+    color:  "#FFF5E0",
+    shadow: "0 4px 10px rgba(0,0,0,0.28), inset 0 1px 0 rgba(218,165,32,0.35), inset 0 -2px 3px rgba(0,0,0,0.28)",
+    hBg:    "linear-gradient(175deg,#8A7260,#5E4838)",
+    hSh:    "0 6px 18px rgba(0,0,0,0.34), inset 0 1px 0 rgba(218,165,32,0.55)",
+    strike: false,
+  };
+  if (diff === 600) return {
+    bg:     `linear-gradient(175deg,#5A4530,${C.bronzeDk})`,
+    border: C.goldLight,
+    color:  "#FFF0D0",
+    shadow: "0 4px 10px rgba(0,0,0,0.34), inset 0 1px 0 rgba(184,134,11,0.35), inset 0 -2px 3px rgba(0,0,0,0.32)",
+    hBg:    "linear-gradient(175deg,#6A5540,#4A3528)",
+    hSh:    "0 6px 18px rgba(0,0,0,0.40), inset 0 1px 0 rgba(184,134,11,0.55)",
+    strike: false,
+  };
+  return {
+    bg:     `linear-gradient(175deg,#3A2518,#160C04)`,
+    border: C.goldDark,
+    color:  "#EED090",
+    shadow: "0 4px 10px rgba(0,0,0,0.42), inset 0 1px 0 rgba(139,105,20,0.38), inset 0 -2px 3px rgba(0,0,0,0.38)",
+    hBg:    "linear-gradient(175deg,#4A3528,#2E2018)",
+    hSh:    "0 6px 18px rgba(0,0,0,0.50), inset 0 1px 0 rgba(139,105,20,0.55)",
+    strike: false,
+  };
+};
+
+/* ── Card ornate frame ── */
+const cardFrame = (hover = false) => ({
+  background:   C.parchment,
+  border:       `3px solid ${hover ? C.goldLight : C.gold}`,
+  borderRadius: "18px",
+  boxShadow: hover
+    ? `0 0 0 1.5px ${C.goldLight}, 6px 6px 0 3px ${C.goldDark}, 0 16px 48px rgba(0,0,0,0.22), inset 0 0 0 1px rgba(218,165,32,0.30)`
+    : `0 0 0 1px ${C.gold}, 4px 4px 0 2px ${C.goldDark}, 0 8px 28px rgba(0,0,0,0.16), inset 0 0 0 1px rgba(218,165,32,0.18)`,
+});
+
+/* ══════════════════════════════════════
+   SCORE COUNTER
+══════════════════════════════════════ */
 function ScoreCounter({ value }) {
   const [display, setDisplay] = useState(value);
   const prev = useRef(value);
+  const [pop, setPop] = useState(false);
+
   useEffect(() => {
     if (value === prev.current) return;
-    const delta = value - prev.current, steps = 16;
+    setPop(true);
+    const delta = value - prev.current, steps = 12;
     let i = 0;
-    const t = setInterval(() => {
+    const iv = setInterval(() => {
       i++;
       setDisplay(Math.round(prev.current + (delta * i) / steps));
-      if (i >= steps) { clearInterval(t); setDisplay(value); prev.current = value; }
-    }, 28);
-    return () => clearInterval(t);
+      if (i >= steps) { clearInterval(iv); setDisplay(value); setPop(false); prev.current = value; }
+    }, 40);
+    return () => clearInterval(iv);
   }, [value]);
-  return <span>{display}</span>;
-}
-
-/* ─── Confetti ─── */
-function fireConfetti() {
-  const colors = ["#d4af37","#f1c40f","#c9a84c","#8b6a10","#e8d4a0","#fff","#b8860b"];
-  for (let i = 0; i < 100; i++) {
-    const el = document.createElement("div");
-    Object.assign(el.style, {
-      position:"fixed", top:"-12px",
-      left: Math.random()*100+"vw",
-      width:  (Math.random()*9+4)+"px",
-      height: (Math.random()*9+4)+"px",
-      background: colors[Math.floor(Math.random()*colors.length)],
-      borderRadius: Math.random()>.5?"50%":"3px",
-      animation:`hj-fall ${Math.random()*3+2}s ${Math.random()}s linear forwards`,
-      zIndex:9999, pointerEvents:"none",
-    });
-    document.body.appendChild(el);
-    setTimeout(()=>el.remove(),6000);
-  }
-}
-
-/* ─────────────────────────────────────────────────────────────────────
-   BRONZE COIN PALETTE — classical physical buttons
-───────────────────────────────────────────────────────────────────── */
-const COIN = {
-  300: {
-    active: {
-      bg:     "linear-gradient(160deg,#7a5c3a 0%,#4a3225 55%,#3a2518 100%)",
-      border: "#c9a84c",
-      text:   "#fff8e1",
-      shadow: "0 4px 14px rgba(60,30,10,.45), 0 1px 0 rgba(255,255,255,.18) inset, 0 -2px 0 rgba(0,0,0,.3) inset",
-    },
-    spent: {
-      bg:     "#d8d0c4",
-      border: "#b0a090",
-      text:   "rgba(80,60,40,.35)",
-      shadow: "inset 0 2px 4px rgba(0,0,0,.12)",
-    },
-  },
-  600: {
-    active: {
-      bg:     "linear-gradient(160deg,#6a4a2e 0%,#3d2418 55%,#2e1a10 100%)",
-      border: "#b8922a",
-      text:   "#fff8e1",
-      shadow: "0 4px 14px rgba(50,25,8,.5), 0 1px 0 rgba(255,255,255,.15) inset, 0 -2px 0 rgba(0,0,0,.3) inset",
-    },
-    spent: {
-      bg:     "#d8d0c4",
-      border: "#b0a090",
-      text:   "rgba(80,60,40,.35)",
-      shadow: "inset 0 2px 4px rgba(0,0,0,.12)",
-    },
-  },
-  900: {
-    active: {
-      bg:     "linear-gradient(160deg,#5a3822 0%,#2d1a10 55%,#1e0e08 100%)",
-      border: "#9a7520",
-      text:   "#fff8e1",
-      shadow: "0 4px 14px rgba(40,18,5,.55), 0 1px 0 rgba(255,255,255,.12) inset, 0 -2px 0 rgba(0,0,0,.35) inset",
-    },
-    spent: {
-      bg:     "#d8d0c4",
-      border: "#b0a090",
-      text:   "rgba(80,60,40,.35)",
-      shadow: "inset 0 2px 4px rgba(0,0,0,.12)",
-    },
-  },
-};
-
-/* ════════════════════════════════════════════════════════════════════
-   CATEGORY CARD  —  parchment frame with bronze coin buttons
-   [ T1 COINS ] | [ IMAGE + NAME ] | [ T2 COINS ]
-════════════════════════════════════════════════════════════════════ */
-function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, currentTurn }) {
-  const [imgErr, setImgErr] = useState(false);
-
-  const tileKey  = (d, s) => `${cat.id}_${d}_${s}`;
-  const isUsed   = (d, s) => isTileUsed(tileKey(d, s));
-  const bothDone = (d)    => isUsed(d,1) && isUsed(d,2);
-  const allDone  = DIFFICULTIES.every(d => bothDone(d));
-
-  /* ── single bronze coin button ── */
-  function CoinBtn({ diff, slot }) {
-    const k        = tileKey(diff, slot);
-    const used     = isUsed(diff, slot);
-    const gone     = bothDone(diff);
-    const loading  = clickingTile === k;
-    const disabled = used || gone || !!clickingTile;
-    const c        = used || gone ? COIN[diff].spent : COIN[diff].active;
-
-    return (
-      <button
-        data-testid={`tile-${cat.id}-${diff}-${slot}`}
-        disabled={disabled}
-        onClick={() => !used && !gone && onTileClick(cat.id, diff, slot)}
-        style={{
-          width: "100%",
-          height: 48,
-          borderRadius: 24,
-          background: c.bg,
-          border: `2px solid ${c.border}`,
-          color: c.text,
-          boxShadow: c.shadow,
-          fontFamily: "Cairo, sans-serif",
-          fontWeight: 900,
-          fontSize: "clamp(.76rem,.92vw,.9rem)",
-          letterSpacing: ".03em",
-          cursor: disabled ? "default" : "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-          transition: "transform .13s cubic-bezier(.34,1.56,.64,1), filter .13s, box-shadow .13s",
-          position: "relative",
-          overflow: "hidden",
-        }}
-        onMouseEnter={e => {
-          if (!used && !gone) {
-            e.currentTarget.style.transform = "scale(1.06) translateY(-2px)";
-            e.currentTarget.style.filter    = "brightness(1.18)";
-            e.currentTarget.style.boxShadow = `${c.shadow}, 0 0 16px rgba(201,168,76,.4)`;
-          }
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = "";
-          e.currentTarget.style.filter    = "";
-          e.currentTarget.style.boxShadow = c.shadow;
-        }}
-        onMouseDown={e  => { if (!used && !gone) e.currentTarget.style.transform = "scale(.93) translateY(1px)"; }}
-        onMouseUp={e    => { e.currentTarget.style.transform = ""; }}
-      >
-        {loading
-          ? <span style={{ animation:"hj-spin .7s linear infinite", display:"inline-block" }}>◌</span>
-          : used
-          ? <span style={{ opacity:.4, fontSize:".9rem" }}>✓</span>
-          : diff}
-      </button>
-    );
-  }
-
-  /* ── vertical coin column for one team ── */
-  const TEAM_DOT = { 1:"#b33a3a", 2:"#2a5fa8" };
-
-  function CoinColumn({ slot }) {
-    const active = currentTurn === slot;
-    const dot    = TEAM_DOT[slot];
-
-    return (
-      <div style={{
-        display:"flex", flexDirection:"column",
-        alignItems:"stretch", gap:7,
-        width:68, flexShrink:0,
-      }}>
-        {DIFFICULTIES.map(d => <CoinBtn key={d} diff={d} slot={slot}/>)}
-      </div>
-    );
-  }
-
-  /* ── ornate gold frame shadow ── */
-  const frameShadow = allDone
-    ? "0 4px 18px rgba(100,70,30,.15)"
-    : [
-        "0 0 0 1px #8b6a10",
-        "0 0 0 4px #c9a84c",
-        "0 0 0 5px #8b6a10",
-        "0 8px 32px rgba(80,50,20,.28)",
-        "inset 0 1px 0 rgba(255,255,255,.55)",
-      ].join(",");
 
   return (
-    <div
+    <span className={`inline-block tabular-nums transition-transform duration-150 ${pop ? "scale-125" : ""}`}>
+      {display}
+    </span>
+  );
+}
+
+/* ══════════════════════════════════════
+   CONFETTI
+══════════════════════════════════════ */
+function fireConfetti() {
+  const colors = ["#C9A84C", "#B8860B", "#8B0000", "#1B2A4A", "#DAA520", "#4A3728"];
+  for (let i = 0; i < 90; i++) {
+    const el = document.createElement("div");
+    el.className = "confetti-piece";
+    Object.assign(el.style, {
+      position: "fixed", top: "-20px", pointerEvents: "none", zIndex: "9999",
+      left:   Math.random() * 100 + "vw",
+      width:  (Math.random() * 10 + 5) + "px",
+      height: (Math.random() * 10 + 5) + "px",
+      background: colors[Math.floor(Math.random() * colors.length)],
+      borderRadius: Math.random() > 0.5 ? "50%" : "3px",
+      animation: `confettiFall ${Math.random() * 3 + 2}s ${Math.random()}s linear forwards`,
+    });
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 5500);
+  }
+}
+
+/* ══════════════════════════════════════
+   BRONZE COIN SCORE BUTTON
+══════════════════════════════════════ */
+function ScoreBtn({ catId, diff, slot, used, clicking, onClick }) {
+  const key = `${catId}_${diff}_${slot}`;
+  const isClicking = clicking === key;
+  const s = diffStyle(diff, used);
+
+  return (
+    <button
+      data-testid={`tile-${catId}-${diff}-${slot}`}
+      onClick={onClick}
+      disabled={used || !!clicking}
       style={{
-        position:"relative",
-        height:"100%",
-        borderRadius:20,
-        overflow:"visible",
-        border: allDone ? "2px solid #c8bfb0" : "2px solid #c9a84c",
-        opacity: allDone ? .42 : 1,
-        display:"flex", flexDirection:"row",
-        alignItems:"stretch",
-        background: allDone ? "#ede8e0" : "#faf9f5",
-        boxShadow: frameShadow,
-        transition:"transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .28s",
+        width:          "68px",
+        padding:        "12px 0",
+        background:     s.bg,
+        color:          s.color,
+        border:         `2px solid ${s.border}`,
+        borderRadius:   "999px",
+        fontSize:       "0.87rem",
+        fontWeight:     800,
+        fontFamily:     "'Noto Naskh Arabic','Amiri',serif",
+        cursor:         used ? "not-allowed" : "pointer",
+        boxShadow:      s.shadow,
+        transition:     "all 0.18s cubic-bezier(0.34,1.4,0.64,1)",
+        lineHeight:     1,
+        textDecoration: s.strike ? "line-through" : "none",
+        userSelect:     "none",
+        display:        "block",
+        flexShrink:     0,
+        letterSpacing:  "-0.01em",
       }}
       onMouseEnter={e => {
-        if (!allDone) {
-          e.currentTarget.style.transform = "translateY(-4px) scale(1.012)";
-          e.currentTarget.style.boxShadow = [
-            "0 0 0 1px #8b6a10",
-            "0 0 0 4px #c9a84c",
-            "0 0 0 5px #8b6a10",
-            "0 18px 48px rgba(80,50,20,.38)",
-            "inset 0 1px 0 rgba(255,255,255,.55)",
-          ].join(",");
+        if (!used) {
+          e.currentTarget.style.background  = s.hBg;
+          e.currentTarget.style.boxShadow   = s.hSh;
+          e.currentTarget.style.transform   = "scale(1.08)";
+          e.currentTarget.style.borderColor = C.goldLight;
         }
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.transform = "";
-        e.currentTarget.style.boxShadow = frameShadow;
+        e.currentTarget.style.background  = s.bg;
+        e.currentTarget.style.boxShadow   = s.shadow;
+        e.currentTarget.style.transform   = "";
+        e.currentTarget.style.borderColor = s.border;
       }}
+      onMouseDown={e => { if (!used) e.currentTarget.style.transform = "scale(0.94)"; }}
+      onMouseUp={e   => { if (!used) e.currentTarget.style.transform = "scale(1.08)"; }}
     >
-
-      {/* ── LEFT COLUMN — Team 1 ── */}
-      <div style={{
-        display:"flex", alignItems:"center", justifyContent:"center",
-        padding:"14px 8px 14px 12px",
-        borderRight:"1px solid rgba(201,168,76,.3)",
-        flexShrink:0,
-      }}>
-        <CoinColumn slot={1}/>
-      </div>
-
-      {/* ── CENTER — Image + Name ── */}
-      <div style={{
-        flex:1, minWidth:0,
-        display:"flex", flexDirection:"column",
-        alignItems:"center", justifyContent:"center",
-        padding:"12px 8px", gap:8,
-      }}>
-        {/* image with antique frame */}
-        <div style={{
-          width:"100%", flex:1, minHeight:0,
-          borderRadius:12, overflow:"hidden",
-          position:"relative",
-          border:"2px solid #c9a84c",
-          boxShadow:"0 4px 20px rgba(80,50,20,.35), inset 0 0 0 2px rgba(255,255,255,.5)",
-        }}>
-          {cat.image_url && !imgErr ? (
-            <img
-              src={cat.image_url}
-              alt={cat.name}
-              onError={()=>setImgErr(true)}
-              style={{
-                width:"100%", height:"100%",
-                objectFit:"cover",
-                filter:"brightness(.9) saturate(.88) contrast(1.06) sepia(.08)",
-                display:"block",
-              }}
-            />
-          ) : (
-            <div style={{
-              width:"100%", height:"100%",
-              background:"linear-gradient(160deg,#e8dfc8,#d5c8a8)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              fontSize:"2.6rem",
-            }}>
-              {cat.icon||"🎯"}
-            </div>
-          )}
-          {/* subtle bottom vignette */}
-          <div style={{
-            position:"absolute", inset:0,
-            background:"linear-gradient(180deg,transparent 55%,rgba(40,25,10,.22) 100%)",
-          }}/>
-        </div>
-
-        {/* category name — dark on light */}
-        <div style={{
-          fontFamily:"Cairo, sans-serif",
-          fontWeight:900,
-          fontSize:"clamp(.7rem,.98vw,.9rem)",
-          color:"#2c1810",
-          textAlign:"center",
-          letterSpacing:".04em",
-          lineHeight:1.3,
-          display:"flex", alignItems:"center", gap:6,
-          flexShrink:0,
-        }}>
-          <span style={{ color:"#c9a84c", fontSize:".55em" }}>✦</span>
-          {cat.name}
-          <span style={{ color:"#c9a84c", fontSize:".55em" }}>✦</span>
-        </div>
-      </div>
-
-      {/* ── RIGHT COLUMN — Team 2 ── */}
-      <div style={{
-        display:"flex", alignItems:"center", justifyContent:"center",
-        padding:"14px 12px 14px 8px",
-        borderLeft:"1px solid rgba(201,168,76,.3)",
-        flexShrink:0,
-      }}>
-        <CoinColumn slot={2}/>
-      </div>
-
-      {/* all-done veil */}
-      {allDone && (
-        <div style={{
-          position:"absolute", inset:0, zIndex:10,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          background:"rgba(240,235,225,.7)", backdropFilter:"blur(4px)",
-          borderRadius:18,
-        }}>
-          <div style={{
-            width:52, height:52, borderRadius:"50%",
-            border:"2.5px solid #c9a84c",
-            background:"rgba(201,168,76,.12)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:"1.4rem", color:"#8b6a10",
-          }}>✓</div>
-        </div>
-      )}
-    </div>
+      {isClicking ? "⏳" : used ? "✓" : diff}
+    </button>
   );
 }
 
-/* ════════════════════════════════════════════════════════════════════
-   TEAM SCORE BADGE — solid metallic bronze
-════════════════════════════════════════════════════════════════════ */
-function ScoreBadge({ name, score, active, side, testId, onAdd, onRemove }) {
-  const isRed  = side === "left";
-  const accent = isRed ? "#b33a3a" : "#2a5fa8";
-  const dimAcc = isRed ? "rgba(179,58,58,.6)" : "rgba(42,95,168,.6)";
+/* ══════════════════════════════════════
+   PARCHMENT CATEGORY CARD
+   Layout: [LEFT col vertical] | [CENTER image] | [RIGHT col vertical]
+══════════════════════════════════════ */
+function CategoryCard({ cat, isTileUsed, clickingTile, onTileClick, doubleNextQ }) {
+  const allUsed = DIFFICULTIES.every(d =>
+    isTileUsed(`${cat.id}_${d}_1`) && isTileUsed(`${cat.id}_${d}_2`)
+  );
+
+  const BtnCol = ({ slot }) => (
+    <div style={{
+      display:        "flex",
+      flexDirection:  "column",
+      justifyContent: "space-evenly",
+      alignItems:     "center",
+      width:          "72px",
+      flexShrink:     0,
+    }}>
+      {DIFFICULTIES.map(d => {
+        const isUsed = isTileUsed(`${cat.id}_${d}_${slot}`);
+        return (
+          <div key={`${cat.id}_${d}_${slot}`} style={{ position:"relative" }}>
+            <ScoreBtn
+              catId={cat.id} diff={d} slot={slot}
+              used={isUsed}
+              clicking={clickingTile}
+              onClick={() => onTileClick(cat.id, d, slot)}
+            />
+            {doubleNextQ && !isUsed && (
+              <div style={{
+                position:"absolute", top:-5, right:-5, zIndex:10,
+                background:"linear-gradient(135deg,#f5c842,#c9880c)",
+                color:"#1a0900", fontSize:"0.44rem", fontWeight:900,
+                padding:"2px 5px", borderRadius:999, lineHeight:1.4,
+                pointerEvents:"none",
+                boxShadow:"0 2px 6px rgba(0,0,0,0.40), 0 0 8px rgba(245,200,66,0.55)",
+                letterSpacing:"-0.01em",
+              }}>×2</div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
-    <div style={{
-      display:"flex", flexDirection:"column",
-      alignItems: side==="left"?"flex-start":"flex-end",
-      gap:3,
-      padding:"10px 18px",
-      borderRadius:16,
-      background:"linear-gradient(155deg,#5c3d2a 0%,#3d2418 60%,#2a1610 100%)",
-      border: active
-        ? `2px solid ${accent}`
-        : "2px solid #c9a84c",
-      boxShadow: active
-        ? `0 0 0 1px rgba(201,168,76,.3), 0 6px 24px rgba(40,20,8,.45), 0 0 18px ${accent}30, inset 0 1px 0 rgba(255,255,255,.14), inset 0 -2px 0 rgba(0,0,0,.25)`
-        : "0 6px 20px rgba(40,20,8,.35), inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.25)",
-      transition:"border-color .35s, box-shadow .35s",
-      minWidth:148,
-    }}>
+    <div
+      className="cat-card"
+      style={{
+        display:       "flex",
+        flexDirection: "row",
+        alignItems:    "stretch",
+        gap:           "10px",
+        padding:       "14px 12px",
+        opacity:       allUsed ? 0.42 : 1,
+        transition:    "transform 0.28s cubic-bezier(0.34,1.2,0.64,1), box-shadow 0.28s ease, border-color 0.28s ease",
+        position:      "relative",
+        overflow:      "hidden",
+        ...cardFrame(),
+      }}
+    >
+      {/* Ornate top gold rule */}
       <div style={{
-        display:"flex", alignItems:"center", gap:6,
-        flexDirection: side==="left"?"row":"row-reverse",
+        position:   "absolute", top: "12px", left: "18%", right: "18%", height: "1px",
+        background: `linear-gradient(90deg,transparent,${C.gold},transparent)`,
+        pointerEvents: "none",
+      }} />
+
+      {/* LEFT button column — slot 1 */}
+      <BtnCol slot={1} />
+
+      {/* CENTER — image + category name */}
+      <div style={{
+        flex:        1,
+        borderRadius:"12px",
+        overflow:    "hidden",
+        position:    "relative",
+        border:      `1.5px solid ${C.parchmentBdr}`,
+        boxShadow:   `inset 0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.10)`,
+        background:  cat.image_url
+          ? "transparent"
+          : `linear-gradient(145deg,${C.parchmentDk},${C.parchment})`,
+        minHeight:   "90px",
       }}>
-        <span style={{
-          width:7, height:7, borderRadius:"50%",
-          background: active ? accent : dimAcc,
-          boxShadow: active ? `0 0 10px ${accent}` : "none",
-          animation: active ? "hj-pulse 1.4s ease-in-out infinite" : "none",
-          flexShrink:0, transition:"all .35s",
-        }}/>
-        <span style={{
-          fontSize:".7rem", fontWeight:800,
-          color: active ? "#f0d898" : "#c8a870",
-          letterSpacing:".07em",
-          fontFamily:"Cairo,sans-serif",
-          transition:"color .35s",
-          whiteSpace:"nowrap",
-        }}>{name}</span>
-      </div>
-      <div style={{ display:"flex", alignItems:"center", gap:6, flexDirection: side==="left"?"row":"row-reverse" }}>
-        <button onClick={onRemove} style={adjBtn}>−</button>
-        <div
-          data-testid={testId}
-          style={{
-            fontSize:"clamp(1.75rem,2.4vw,2.5rem)",
-            fontWeight:900,
-            color:"#f5e090",
-            lineHeight:1,
-            letterSpacing:"-.02em",
-            fontFamily:"Cairo,sans-serif",
-            textShadow: active ? "0 0 18px rgba(245,224,144,.45)" : "none",
-            transition:"text-shadow .35s",
-            textAlign:"center", minWidth:56,
-          }}
-        >
-          <ScoreCounter value={score}/>
+        {cat.image_url ? (
+          <img
+            src={cat.image_url}
+            alt=""
+            aria-hidden="true"
+            style={{
+              width: "100%", height: "100%", objectFit: "cover",
+              display: "block", opacity: 0.90,
+              filter: "sepia(0.08) contrast(1.02)",
+            }}
+          />
+        ) : (
+          <div style={{
+            width:"100%", height:"100%",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            color: C.gold, fontSize: "2rem", opacity: 0.40,
+          }}>✦</div>
+        )}
+
+        {/* Bottom name overlay — dark gradient for legibility */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(180deg, transparent 42%, rgba(44,24,16,0.72) 100%)",
+          pointerEvents: "none",
+        }} />
+
+        {/* Category name */}
+        <div style={{
+          position:   "absolute", bottom: 0, left: 0, right: 0,
+          padding:    "7px 8px 10px",
+          display:    "flex", alignItems: "center", justifyContent: "center", gap: "4px",
+          color:      C.cream,
+          fontFamily: "'Amiri','Noto Naskh Arabic',serif",
+          fontSize:   "clamp(0.72rem,1vw,1rem)",
+          fontWeight: 700,
+          textAlign:  "center",
+          lineHeight: 1.2,
+          letterSpacing: "0.03em",
+          textShadow: "0 1px 6px rgba(0,0,0,0.80), 0 0 12px rgba(0,0,0,0.60)",
+        }}>
+          <span style={{ opacity: 0.55, fontSize: "0.5em" }}>✦</span>
+          {cat.name}
+          <span style={{ opacity: 0.55, fontSize: "0.5em" }}>✦</span>
         </div>
-        <button onClick={onAdd} style={adjBtn}>+</button>
+      </div>
+
+      {/* RIGHT button column — slot 2 */}
+      <BtnCol slot={2} />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════
+   BRONZE ESPORTS TEAM PANEL
+══════════════════════════════════════ */
+function TeamPanel({ team, name, score, isActive, icon, reversed, onAdd, onRemove }) {
+  const activeGlow = team === 1 ? "rgba(180,50,50,0.22)" : "rgba(50,100,200,0.22)";
+  const activeBorder = team === 1 ? "rgba(220,80,80,0.55)" : "rgba(80,140,240,0.55)";
+  const activeNameClr = team === 1 ? "#FFB0B0" : "#B0D0FF";
+
+  const adjBtn = (label, onClick) => (
+    <button
+      onClick={onClick}
+      style={{
+        width: "22px", height: "22px", borderRadius: "6px",
+        background: "rgba(218,165,32,0.12)", border: "1px solid rgba(218,165,32,0.30)",
+        color: C.goldLight, fontSize: "0.85rem", fontWeight: 900,
+        cursor: "pointer", lineHeight: 1, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.15s ease",
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = "rgba(218,165,32,0.28)"}
+      onMouseLeave={e => e.currentTarget.style.background = "rgba(218,165,32,0.12)"}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div
+      data-testid={`team${team}-score`}
+      style={{
+        display:       "flex",
+        flexDirection: reversed ? "row-reverse" : "row",
+        alignItems:    "center",
+        gap:           "12px",
+        padding:       "12px 20px",
+        borderRadius:  "16px",
+        minWidth:      "clamp(185px,19vw,258px)",
+        background:    `linear-gradient(160deg,${C.bronzeLt},${C.bronzeDk})`,
+        border:        `2px solid ${isActive ? activeBorder : C.gold}`,
+        boxShadow:     isActive
+          ? `0 0 28px ${activeGlow}, 0 6px 28px rgba(0,0,0,0.40), inset 0 1px 0 rgba(218,165,32,0.22)`
+          : `0 6px 28px rgba(0,0,0,0.32), inset 0 1px 0 rgba(218,165,32,0.18)`,
+        transition:    "all 0.40s cubic-bezier(0.4,0,0.2,1)",
+      }}
+    >
+      {/* Name & label */}
+      <div style={{ flex: 1, minWidth: 0, textAlign: reversed ? "right" : "left" }}>
+        <div style={{ fontSize: "0.55rem", color: "rgba(218,165,32,0.50)", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: "3px" }}>
+          TEAM
+        </div>
+        <div style={{
+          fontSize:       "clamp(0.78rem,1.1vw,0.95rem)",
+          fontWeight:     800,
+          color:          isActive ? activeNameClr : "rgba(250,240,220,0.80)",
+          overflow:       "hidden",
+          textOverflow:   "ellipsis",
+          whiteSpace:     "nowrap",
+          fontFamily:     "Cairo,Tajawal,sans-serif",
+          transition:     "color 0.4s ease",
+        }}>
+          {reversed ? `${name} ${icon}` : `${icon} ${name}`}
+        </div>
+      </div>
+
+      {/* Score + ±100 controls */}
+      <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
+        {onRemove && adjBtn("−", onRemove)}
+        <div style={{
+          fontSize:   "clamp(1.8rem,2.6vw,2.5rem)",
+          fontWeight: 900,
+          color:      C.goldLight,
+          lineHeight: 1,
+          textShadow: "0 0 20px rgba(218,165,32,0.40)",
+          fontFamily: "Cairo,sans-serif",
+          minWidth:   "3ch",
+          textAlign:  "center",
+        }}>
+          <ScoreCounter value={score} />
+        </div>
+        {onAdd && adjBtn("+", onAdd)}
       </div>
     </div>
   );
 }
 
-const adjBtn = {
-  width:22, height:22, borderRadius:"50%",
-  background:"rgba(201,168,76,.18)", border:"1px solid rgba(201,168,76,.35)",
-  color:"#8b6a10", fontFamily:"Cairo,sans-serif", fontWeight:900, fontSize:".78rem",
-  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-  lineHeight:1, padding:0, flexShrink:0,
-};
-
-/* ════════════════════════════════════════════════════════════════════
-   MAIN PAGE
-════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════
+   MAIN GAME BOARD
+══════════════════════════════════════ */
 export default function GameBoardPage() {
   const navigate = useNavigate();
   const {
-    session, resetGame, currentTurn, markTileUsed, isTileUsed,
-    teamScores, saveSession, gameMode, tournamentState,
-    switchTurn, updateScore, userToken,
+    session, resetGame, currentTurn,
+    markTileUsed, isTileUsed, teamScores,
+    saveSession, gameMode, tournamentState,
+    switchTurn, updateScore, currentUser,
   } = useGame();
 
-  const [categories,     setCategories]     = useState([]);
-  const [loading,        setLoading]        = useState(true);
+  const [categories, setCategories]         = useState([]);
+  const [loading, setLoading]               = useState(true);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
-  const [showWinner,     setShowWinner]     = useState(false);
-  const [clickingTile,   setClickingTile]   = useState(null);
-  const [showHost,       setShowHost]       = useState(false);
+  const [showWinner, setShowWinner]         = useState(false);
+  const [clickingTile, setClickingTile]     = useState(null);
+  const [showHostPanel, setShowHostPanel]   = useState(false);
+  const [doubleNextQ, setDoubleNextQ]       = useState(false);
 
-  const team1Name = session?.team1_name || "الفريق الأحمر";
-  const team2Name = session?.team2_name || "الفريق الأخضر";
-
-  // eslint-disable-next-line
-  useEffect(()=>{ if(!session){navigate("/");return;} loadBoard(); },[]);
+  useEffect(() => {
+    if (!session) { navigate("/"); return; }
+    loadBoard();
+  }, []); // eslint-disable-line
 
   const loadBoard = async () => {
-    const allIds = [...(session?.team1_categories||[]),...(session?.team2_categories||[])];
-    const { data:all } = await axios.get(`${API}/categories`);
-    setCategories(allIds.map(id=>all.find(c=>c.id===id)).filter(Boolean));
+    const allIds = [...(session?.team1_categories || []), ...(session?.team2_categories || [])];
+    const { data: all } = await axios.get(`${API}/categories`);
+    setCategories(allIds.map(id => all.find(c => c.id === id)).filter(Boolean));
     setLoading(false);
   };
 
@@ -441,26 +439,40 @@ export default function GameBoardPage() {
     if (!session?.id) return;
     try {
       const { data } = await axios.get(`${API}/game/session/${session.id}`);
-      saveSession({...session, team1_score:data.team1_score, team2_score:data.team2_score});
+      saveSession({ ...session, team1_score: data.team1_score, team2_score: data.team2_score });
     } catch {}
   }, [session, saveSession]);
 
-  useEffect(()=>{ const iv=setInterval(refreshScores,4000); return ()=>clearInterval(iv); },[refreshScores]);
-  useEffect(()=>{
-    const h=()=>refreshScores();
-    window.addEventListener("scoreUpdated",h);
-    return ()=>window.removeEventListener("scoreUpdated",h);
-  },[refreshScores]);
+  useEffect(() => {
+    const iv = setInterval(refreshScores, 4000);
+    return () => clearInterval(iv);
+  }, [refreshScores]);
+
+  useEffect(() => {
+    const h = () => refreshScores();
+    window.addEventListener("scoreUpdated", h);
+    return () => window.removeEventListener("scoreUpdated", h);
+  }, [refreshScores]);
 
   const handleTileClick = async (catId, difficulty, slot) => {
-    const k = `${catId}_${difficulty}_${slot}`;
-    if (isTileUsed(k)||clickingTile) return;
-    setClickingTile(k); markTileUsed(k);
+    const key = `${catId}_${difficulty}_${slot}`;
+    if (isTileUsed(key) || clickingTile) return;
+    setClickingTile(key);
+    markTileUsed(key);
+    const wasDouble = doubleNextQ;
+    setDoubleNextQ(false);
     try {
-      const { data:q } = await axios.post(
+      const { data: q } = await axios.post(
         `${API}/game/session/${session.id}/question?category_id=${catId}&difficulty=${difficulty}`
       );
-      navigate("/question",{state:{question:q,catId,difficulty,slot,catName:categories.find(c=>c.id===catId)?.name,turnTeam:currentTurn}});
+      navigate("/question", {
+        state: {
+          question: q, catId, difficulty, slot,
+          catName: categories.find(c => c.id === catId)?.name,
+          turnTeam: currentTurn,
+          doubleActive: wasDouble,
+        },
+      });
     } catch {
       toast.error("لا يوجد أسئلة متاحة لهذه الفئة!");
     } finally {
@@ -470,485 +482,542 @@ export default function GameBoardPage() {
 
   const handleEndGame = () => { fireConfetti(); setShowEndConfirm(false); setShowWinner(true); };
 
-  /* ── loading ── */
+  /* ── Loading ── */
   if (loading) return (
     <div style={{
-      height:"100vh", display:"flex", flexDirection:"column",
-      alignItems:"center", justifyContent:"center",
-      background:"#f2ede4", fontFamily:"Cairo,sans-serif", gap:16,
+      height: "100svh", display: "flex", alignItems: "center", justifyContent: "center",
+      background: `linear-gradient(rgba(245,235,210,0.88),rgba(235,225,195,0.92)),url("${ROMAN_BG}") center/cover`,
     }}>
       <div style={{
-        width:44, height:44, borderRadius:"50%",
-        border:"3px solid rgba(201,168,76,.25)",
-        borderTop:"3px solid #c9a84c",
-        animation:"hj-spin .9s linear infinite",
-      }}/>
-      <span style={{ color:"#8b6a10", fontSize:"1rem", fontWeight:700, letterSpacing:".06em" }}>
-        جاري التحميل…
-      </span>
-    </div>
-  );
-
-  const allUsed = categories.every(c=>
-    DIFFICULTIES.every(d=>isTileUsed(`${c.id}_${d}_1`)&&isTileUsed(`${c.id}_${d}_2`))
-  );
-  const winner = (allUsed||showWinner)
-    ? (teamScores.team1>teamScores.team2?team1Name
-       :teamScores.team2>teamScores.team1?team2Name:"تعادل")
-    : null;
-
-  /* ── modal ── */
-  const Modal = ({ children }) => (
-    <div style={{
-      position:"fixed",inset:0,zIndex:60,
-      display:"flex",alignItems:"center",justifyContent:"center",
-      padding:20,
-      background:"rgba(30,20,10,.65)",
-      backdropFilter:"blur(16px)",
-    }}>
-      <div style={{
-        background:"linear-gradient(160deg,#faf6ee,#f0e8d5)",
-        border:"2px solid #c9a84c",
-        boxShadow:"0 0 0 1px #8b6a10, 0 32px 80px rgba(30,15,5,.55), inset 0 1px 0 rgba(255,255,255,.8)",
-        borderRadius:22,
-        padding:"clamp(24px,3.5vw,44px)",
-        maxWidth:390, width:"100%",
-        textAlign:"center",
-        fontFamily:"Cairo,sans-serif",
-        animation:"hj-fadein .28s cubic-bezier(.22,1,.36,1) both",
-        color:"#2c1810",
+        color: C.bronze, fontFamily: "'Amiri',serif",
+        fontSize: "1.4rem", fontWeight: 700,
+        animation: "loadPulse 1.5s ease-in-out infinite",
+        padding: "16px 32px", borderRadius: "12px",
+        background: C.parchment, border: `2px solid ${C.gold}`,
+        boxShadow: `0 4px 20px rgba(0,0,0,0.14), 4px 4px 0 2px ${C.goldDark}`,
       }}>
-        {children}
+        جاري تحميل اللوحة...
       </div>
     </div>
   );
 
-  /* ════════════════════════════════════════════════════════════════ */
+  const allUsed = categories.every(c =>
+    DIFFICULTIES.every(d => isTileUsed(`${c.id}_${d}_1`) && isTileUsed(`${c.id}_${d}_2`))
+  );
+  const winner = allUsed || showWinner
+    ? teamScores.team1 > teamScores.team2 ? session?.team1_name
+      : teamScores.team2 > teamScores.team1 ? session?.team2_name : "تعادل"
+    : null;
+
+  /* ════════════════════════════════ RENDER ════════════════════════════════ */
   return (
-    <>
+    <div style={{
+      minHeight:     "100svh",
+      display:       "flex",
+      flexDirection: "column",
+      padding:       "18px 20px",
+      gap:           "14px",
+      position:      "relative",
+      overflow:      "hidden",
+    }}>
+
+      {/* ── Global CSS ── */}
       <style>{`
-        @keyframes hj-fall   { to{transform:translateY(110vh) rotate(560deg);opacity:0;} }
-        @keyframes hj-fadein { from{opacity:0;transform:translateY(18px) scale(.96);}to{opacity:1;transform:none;} }
-        @keyframes hj-pulse  { 0%,100%{opacity:1}50%{opacity:.22} }
-        @keyframes hj-winner { from{opacity:0;transform:scale(.84)}to{opacity:1;transform:none;} }
-        @keyframes hj-glow   { 0%,100%{text-shadow:0 0 30px rgba(201,168,76,.55),0 2px 8px rgba(0,0,0,.6)} 50%{text-shadow:0 0 70px rgba(201,168,76,.95),0 0 120px rgba(201,168,76,.35),0 2px 8px rgba(0,0,0,.6)} }
-        @keyframes hj-float  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
-        @keyframes hj-border { 0%,100%{box-shadow:0 0 0 1px rgba(201,168,76,.35),0 0 40px rgba(201,168,76,.15),0 20px 60px rgba(0,0,0,.7)} 50%{box-shadow:0 0 0 1px rgba(201,168,76,.60),0 0 70px rgba(201,168,76,.30),0 20px 60px rgba(0,0,0,.7)} }
-        @keyframes hj-spin   { to{transform:rotate(360deg)} }
-        @keyframes hj-card   { from{opacity:0;transform:translateY(20px) scale(.96)}to{opacity:1;transform:none;} }
-        * { box-sizing:border-box; margin:0; padding:0; }
-        html,body { height:100%; }
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; overflow-x: hidden; }
+
+        body {
+          background:
+            linear-gradient(rgba(245,235,210,0.72), rgba(235,225,195,0.80)),
+            url("${ROMAN_BG}") center / cover fixed no-repeat;
+          font-family: "Cairo", "Tajawal", sans-serif;
+          color: ${C.textDark};
+        }
+
+        /* Parchment card hover — intensify gold frame */
+        .cat-card { will-change: transform; }
+        .cat-card:hover {
+          transform:    translateY(-4px) scale(1.016) !important;
+          border-color: ${C.goldLight} !important;
+          box-shadow:
+            0 0 0 1.5px ${C.goldLight},
+            6px 6px 0 3px ${C.goldDark},
+            0 16px 52px rgba(0,0,0,0.24),
+            inset 0 0 0 1px rgba(218,165,32,0.32) !important;
+        }
+
+        @keyframes turnPulse {
+          0%,100% { opacity:1; }
+          50%      { opacity:0.75; }
+        }
+        @keyframes dotPulse {
+          0%,100% { transform:scale(1); }
+          50%      { transform:scale(1.40); }
+        }
+        @keyframes loadPulse {
+          0%,100% { opacity:1; }
+          50%      { opacity:0.42; }
+        }
+        @keyframes confettiFall {
+          to { transform:translateY(110vh) rotate(720deg); opacity:0; }
+        }
+        @keyframes winnerGlow {
+          0%,100% { text-shadow: 0 0 30px rgba(218,165,32,0.60), 0 4px 24px rgba(0,0,0,0.70); }
+          50%      { text-shadow: 0 0 70px rgba(218,165,32,0.90), 0 0 120px rgba(218,165,32,0.35), 0 4px 24px rgba(0,0,0,0.70); }
+        }
+        @keyframes winnerFadeIn {
+          from { opacity:0; transform:scale(0.88) translateY(16px); }
+          to   { opacity:1; transform:scale(1) translateY(0); }
+        }
       `}</style>
 
+      {/* ══════════════════════════════
+          HEADER
+      ══════════════════════════════ */}
       <div style={{
-        height:"100vh",
-        display:"flex", flexDirection:"column",
-        direction:"rtl",
-        fontFamily:"Cairo,sans-serif",
-        color:"#2c1810",
-        position:"relative",
-        overflow:"hidden",
-        background:"#ede8df",
+        display:             "grid",
+        gridTemplateColumns: "1fr auto 1fr",
+        gap:                 "16px",
+        alignItems:          "center",
+        flexShrink:          0,
       }}>
 
-        {/* ── Roman classical background — brighter, visible ── */}
-        <div style={{
-          position:"fixed", inset:0, zIndex:0, pointerEvents:"none",
-          backgroundImage:"url('/roman-bg.jpg')",
-          backgroundSize:"cover", backgroundPosition:"center",
-          opacity:.32,
-          filter:"sepia(25%) brightness(1.08) contrast(.95)",
-        }}/>
-        {/* warm cream overlay — light not dark */}
-        <div style={{
-          position:"fixed", inset:0, zIndex:0, pointerEvents:"none",
-          background:"linear-gradient(180deg,rgba(242,235,218,.72) 0%,rgba(235,226,208,.62) 50%,rgba(228,218,198,.75) 100%)",
-        }}/>
-        {/* parchment paper noise */}
-        <div style={{
-          position:"fixed", inset:0, zIndex:0, pointerEvents:"none",
-          opacity:.04,
-          backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-          backgroundSize:"160px",
-        }}/>
+        {/* Team 1 — left */}
+        <div style={{ display: "flex", justifyContent: "flex-start" }}>
+          <TeamPanel
+            team={1} name={session?.team1_name}
+            score={teamScores.team1} isActive={currentTurn === 1}
+            icon="🦁" reversed={false}
+            onAdd={() => updateScore(1, 100)}
+            onRemove={() => updateScore(1, -100)}
+          />
+        </div>
 
-        {/* ══════════════════════════════════════════════════════════
-            HEADER — classical parchment with gold border
-        ══════════════════════════════════════════════════════════ */}
-        <header style={{
-          position:"relative", zIndex:10, flexShrink:0,
-          display:"grid",
-          gridTemplateColumns:"1fr auto 1fr",
-          alignItems:"center",
-          gap:12,
-          padding:"10px 22px",
-          background:"linear-gradient(180deg,rgba(250,245,232,.96),rgba(238,228,208,.98))",
-          borderBottom:"3px solid #c9a84c",
-          boxShadow:"0 4px 24px rgba(80,50,20,.22), 0 1px 0 #8b6a10, inset 0 1px 0 rgba(255,255,255,.9)",
-        }}>
-
-          {/* Team 1 */}
-          <div style={{ display:"flex", alignItems:"center" }}>
-            <ScoreBadge
-              name={team1Name}
-              score={teamScores.team1}
-              active={currentTurn===1}
-              side="left"
-              testId="team1-score"
-              onAdd={()=>updateScore(1,100)}
-              onRemove={()=>updateScore(1,-100)}
-            />
-          </div>
-
-          {/* Center — ornate title emblem */}
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
-            {/* Emblem */}
-            <div style={{
-              background:"linear-gradient(145deg,#1a2a5c 0%,#0f1840 60%,#0a1230 100%)",
-              border:"3px solid #c9a84c",
-              boxShadow:"0 0 0 1px #8b6a10, 0 6px 22px rgba(10,18,48,.55), inset 0 1px 0 rgba(255,255,255,.15)",
-              borderRadius:14,
-              padding:"5px 26px 7px",
-              display:"flex", flexDirection:"column", alignItems:"center", gap:2,
-            }}>
-              <div style={{
-                fontFamily:"Cairo,sans-serif",
-                fontWeight:900,
-                fontSize:"clamp(1.7rem,2.4vw,2.6rem)",
-                color:"#f5e090",
-                lineHeight:1.5,
-                letterSpacing:".02em",
-                padding:"0 4px",
-                overflow:"visible",
-                textShadow:"0 0 20px rgba(245,224,144,.55), 0 2px 4px rgba(0,0,0,.4)",
-              }}>حُجّة</div>
-              <div style={{
-                fontSize:".56rem", fontWeight:700,
-                color:"rgba(201,168,76,.7)",
-                letterSpacing:".18em",
-                textTransform:"uppercase",
-                fontFamily:"Cairo,sans-serif",
-                whiteSpace:"nowrap",
-              }}>لعبة معرفية</div>
-            </div>
-
-            {/* Turn indicator — clickable to switch */}
-            <button
-              data-testid="turn-indicator"
-              onClick={switchTurn}
-              style={{
-                display:"flex", alignItems:"center", gap:7,
-                padding:"3px 14px", borderRadius:99,
-                background:"rgba(201,168,76,.12)",
-                border:"1px solid rgba(139,106,16,.35)",
-                fontSize:".68rem", fontWeight:700,
-                color:"#5c3d10",
-                letterSpacing:".04em", whiteSpace:"nowrap",
-                cursor:"pointer", fontFamily:"Cairo,sans-serif",
-                transition:"background .2s",
-              }}
-              onMouseEnter={e=>e.currentTarget.style.background="rgba(201,168,76,.22)"}
-              onMouseLeave={e=>e.currentTarget.style.background="rgba(201,168,76,.12)"}
-              title="اضغط لتبديل الدور"
-            >
-              <span style={{
-                width:6, height:6, borderRadius:"50%",
-                background:currentTurn===1?"#b33a3a":"#2a5fa8",
-                animation:"hj-pulse 1.4s ease-in-out infinite",
-              }}/>
-              دور {currentTurn===1?team1Name:team2Name}
-            </button>
-          </div>
-
-          {/* Team 2 + End */}
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:10 }}>
-            <ScoreBadge
-              name={team2Name}
-              score={teamScores.team2}
-              active={currentTurn===2}
-              side="right"
-              testId="team2-score"
-              onAdd={()=>updateScore(2,100)}
-              onRemove={()=>updateScore(2,-100)}
-            />
-            <button
-              data-testid="end-game-btn"
-              onClick={()=>setShowEndConfirm(true)}
-              style={{
-                padding:"8px 13px", borderRadius:10,
-                background:"linear-gradient(145deg,#5c1a1a,#3a0e0e)",
-                border:"1.5px solid rgba(179,58,58,.55)",
-                color:"#f5c0c0",
-                fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:".76rem",
-                cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
-                boxShadow:"0 3px 10px rgba(80,20,20,.3), inset 0 1px 0 rgba(255,255,255,.1)",
-                transition:"all .22s",
-              }}
-              onMouseEnter={e=>{ e.currentTarget.style.filter="brightness(1.18)"; }}
-              onMouseLeave={e=>{ e.currentTarget.style.filter=""; }}
-            >✕ إنهاء</button>
-          </div>
-        </header>
-
-        {/* ══════════════════════════════════════════════════════════
-            BOARD — 3 × 2 grid
-        ══════════════════════════════════════════════════════════ */}
-        <main style={{
-          position:"relative", zIndex:1,
-          flex:1, minHeight:0,
-          display:"grid",
-          gridTemplateColumns:"repeat(3,minmax(0,1fr))",
-          gridTemplateRows:"repeat(2,minmax(0,1fr))",
-          gap:16,
-          padding:"16px 22px 20px",
-        }}>
-          {categories.slice(0,6).map((cat,i)=>(
-            <div
-              key={cat.id}
-              style={{ animation:`hj-card .46s ${i*.07}s cubic-bezier(.22,1,.36,1) both`, height:"100%" }}
-            >
-              <CategoryCard
-                cat={cat}
-                isTileUsed={isTileUsed}
-                clickingTile={clickingTile}
-                currentTurn={currentTurn}
-                onTileClick={handleTileClick}
-              />
-            </div>
-          ))}
-        </main>
-
-        {/* ── all-done banner ── */}
-        {allUsed && !showWinner && (
+        {/* Center — emblem + turn + end */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+          {/* Title emblem — deep blue with gold frame */}
           <div style={{
-            position:"fixed", bottom:0, left:0, right:0, zIndex:40,
-            padding:"14px", textAlign:"center",
-            background:"linear-gradient(0deg,rgba(245,238,220,.98),rgba(238,228,208,.98))",
-            borderTop:"3px solid #c9a84c",
-            boxShadow:"0 -6px 32px rgba(80,50,20,.2)",
-          }}>
-            <div style={{ fontWeight:900, fontSize:"1.05rem", color:"#5c3d10", marginBottom:10 }}>
-              {winner==="تعادل"?"🤝 تعادل!":`🏆 ${winner} فاز!`}
-            </div>
-            <button
-              onClick={()=>{ fireConfetti(); setShowWinner(true); }}
-              style={{
-                padding:"11px 30px", borderRadius:12,
-                fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:".92rem",
-                background:"linear-gradient(145deg,#5c3d2a,#3d2418)",
-                color:"#f5e090", border:"2px solid #c9a84c",
-                boxShadow:"0 4px 18px rgba(40,20,8,.35), inset 0 1px 0 rgba(255,255,255,.15)",
-                cursor:"pointer",
-              }}
-            >عرض النتيجة النهائية</button>
+            fontFamily:  "'Amiri',serif",
+            fontWeight:  900,
+            fontSize:    "48px",
+            lineHeight:  "1.4",
+            letterSpacing: "0.04em",
+            color:       C.cream,
+            background:  C.deepBlue,
+            padding:     "6px 28px 4px",
+            borderRadius:"14px",
+            border:      `3px solid ${C.gold}`,
+            boxShadow:   `0 0 0 1px ${C.goldLight}, 4px 4px 0 2px ${C.goldDark}, 0 8px 28px rgba(0,0,0,0.32), inset 0 1px 0 rgba(218,165,32,0.22)`,
+            textShadow:  "0 2px 10px rgba(0,0,0,0.55)",
+          }}>حُجّة</div>
+
+          {/* Turn pill — click to switch turn */}
+          <div
+            data-testid="turn-indicator"
+            onClick={switchTurn}
+            title="اضغط لتبديل الدور"
+            style={{
+              display:        "flex", alignItems: "center", gap: "7px",
+              borderRadius:   "999px", padding: "6px 18px",
+              background:     C.deepBlue,
+              border:         `1.5px solid ${currentTurn === 1 ? "rgba(220,80,80,0.65)" : "rgba(80,140,240,0.65)"}`,
+              color:          currentTurn === 1 ? "#FFB0B0" : "#B0D0FF",
+              fontWeight:     800, fontSize: "clamp(0.68rem,1.1vw,0.84rem)",
+              fontFamily:     "Cairo,Tajawal,sans-serif",
+              boxShadow:      `0 4px 16px rgba(0,0,0,0.30), 4px 4px 0 2px ${C.goldDark}`,
+              animation:      "turnPulse 2.5s ease-in-out infinite",
+              whiteSpace:     "nowrap",
+              transition:     "border-color 0.4s,color 0.4s",
+              cursor:         "pointer",
+              userSelect:     "none",
+            }}
+          >
+            <span>{currentTurn === 1 ? "🦁" : "🦅"}</span>
+            <span>دور {currentTurn === 1 ? session?.team1_name : session?.team2_name}</span>
           </div>
-        )}
 
-        {/* ── end-game confirm ── */}
-        {showEndConfirm && (
-          <Modal>
-            <div style={{ fontSize:"2rem", marginBottom:10 }}>⚔️</div>
-            <div style={{ fontWeight:900, fontSize:"1.22rem", color:"#2c1810", marginBottom:8 }}>إنهاء اللعبة؟</div>
-            <div style={{ fontSize:".8rem", color:"rgba(44,24,16,.5)", marginBottom:24 }}>سيتم إعلان الفائز الحالي</div>
-            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
-              <button onClick={handleEndGame} style={{
-                padding:"10px 24px", borderRadius:10,
-                fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:".9rem",
-                background:"linear-gradient(145deg,#5c1a1a,#3a0e0e)",
-                color:"#f5c0c0", border:"1.5px solid rgba(179,58,58,.5)",
-                boxShadow:"0 3px 10px rgba(80,20,20,.3)", cursor:"pointer",
-              }}>نعم، إنهاء</button>
-              <button onClick={()=>setShowEndConfirm(false)} style={{
-                padding:"10px 24px", borderRadius:10,
-                fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:".9rem",
-                background:"rgba(44,24,16,.07)", color:"rgba(44,24,16,.55)",
-                border:"1px solid rgba(44,24,16,.2)", cursor:"pointer",
-              }}>رجوع</button>
-            </div>
-          </Modal>
-        )}
+          {/* End game */}
+          <button
+            data-testid="end-game-btn"
+            onClick={() => setShowEndConfirm(true)}
+            style={{
+              padding:      "6px 20px", borderRadius: "999px",
+              background:   `linear-gradient(135deg,#7A1520,#4A0E14)`,
+              border:       `1.5px solid ${C.goldDark}`,
+              color:        "rgba(250,240,220,0.85)",
+              fontWeight:   700, fontSize: "0.72rem",
+              fontFamily:   "Cairo,Tajawal,sans-serif", cursor: "pointer",
+              boxShadow:    "0 3px 10px rgba(0,0,0,0.28)",
+              transition:   "all 0.18s ease", whiteSpace: "nowrap",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "linear-gradient(135deg,#9A1A28,#6A1018)"; e.currentTarget.style.boxShadow = "0 5px 16px rgba(0,0,0,0.36)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "linear-gradient(135deg,#7A1520,#4A0E14)"; e.currentTarget.style.boxShadow = "0 3px 10px rgba(0,0,0,0.28)"; }}
+          >
+            إنهاء اللعبة
+          </button>
 
-        {/* ── winner screen ── */}
-        {showWinner && (
+          {/* Double Points Lifeline — activate here before opening a question */}
+          <button
+            onClick={() => {
+              setDoubleNextQ(v => !v);
+              if (!doubleNextQ) toast.success("⚡ مضاعفة النقاط مفعّلة — اختر سؤالاً الآن!");
+              else toast("تم إلغاء مضاعفة النقاط", { icon: "⚡" });
+            }}
+            style={{
+              display:    "flex", alignItems: "center", gap: "6px",
+              padding:    "7px 16px", borderRadius: "999px",
+              background: doubleNextQ
+                ? "linear-gradient(135deg,rgba(245,200,66,0.28),rgba(245,170,20,0.18))"
+                : C.deepBlue,
+              border:     `1.5px solid ${doubleNextQ ? C.goldLight : C.goldDark}`,
+              color:      doubleNextQ ? C.goldLight : "rgba(245,200,66,0.55)",
+              fontWeight: 800, fontSize: "0.72rem",
+              fontFamily: "Cairo,Tajawal,sans-serif", cursor: "pointer",
+              boxShadow:  doubleNextQ
+                ? `0 0 18px rgba(245,200,66,0.40), 4px 4px 0 2px ${C.goldDark}`
+                : `0 3px 10px rgba(0,0,0,0.24), 4px 4px 0 2px ${C.goldDark}`,
+              transition: "all 0.22s ease", whiteSpace: "nowrap",
+              animation:  doubleNextQ ? "turnPulse 1.8s ease-in-out infinite" : "none",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = doubleNextQ ? `0 0 26px rgba(245,200,66,0.55), 4px 4px 0 2px ${C.goldDark}` : `0 5px 16px rgba(0,0,0,0.32), 4px 4px 0 2px ${C.goldDark}`; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = doubleNextQ ? `0 0 18px rgba(245,200,66,0.40), 4px 4px 0 2px ${C.goldDark}` : `0 3px 10px rgba(0,0,0,0.24), 4px 4px 0 2px ${C.goldDark}`; }}
+          >
+            <span style={{ fontSize:"1rem" }}>⚡</span>
+            <span>{doubleNextQ ? "✓ مضاعفة فعّالة" : "مضاعفة النقاط"}</span>
+          </button>
+        </div>
+
+        {/* Team 2 — right */}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <TeamPanel
+            team={2} name={session?.team2_name}
+            score={teamScores.team2} isActive={currentTurn === 2}
+            icon="🦅" reversed={true}
+            onAdd={() => updateScore(2, 100)}
+            onRemove={() => updateScore(2, -100)}
+          />
+        </div>
+      </div>
+
+      {/* ══════════════════════════════
+          CATEGORY GRID — 2 rows × 3 cols
+      ══════════════════════════════ */}
+      <div style={{
+        flex:                1,
+        minHeight:           0,
+        display:             "grid",
+        gridTemplateColumns: "repeat(3,1fr)",
+        gridTemplateRows:    "repeat(2,1fr)",
+        gap:                 "16px",
+      }}>
+        {categories.slice(0, 6).map(cat => (
+          <CategoryCard
+            key={cat.id}
+            cat={cat}
+            isTileUsed={isTileUsed}
+            clickingTile={clickingTile}
+            onTileClick={handleTileClick}
+            doubleNextQ={doubleNextQ}
+          />
+        ))}
+      </div>
+
+      {/* ══════════════════════════════
+          ALL-USED BANNER
+      ══════════════════════════════ */}
+      {allUsed && !showWinner && (
+        <div style={{
+          position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40,
+          display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
+          padding: "20px 24px",
+          background: `linear-gradient(135deg,${C.deepBlue},#0F1A30)`,
+          borderTop: `3px solid ${C.gold}`,
+          boxShadow: `0 0 0 1px ${C.goldLight}, 0 -8px 32px rgba(0,0,0,0.30)`,
+        }}>
+          <div style={{ color: C.goldLight, fontFamily: "Cairo,sans-serif", fontWeight: 900, fontSize: "1.3rem" }}>
+            {winner === "تعادل" ? "🤝 تعادل!" : `🏆 ${winner} فاز!`}
+          </div>
+          <button
+            onClick={() => { fireConfetti(); setShowWinner(true); }}
+            style={{
+              padding: "12px 40px", borderRadius: "999px", fontWeight: 900, fontSize: "1rem",
+              background: `linear-gradient(135deg,${C.gold},${C.goldLight})`, color: C.bronzeDk,
+              border: "none", cursor: "pointer", fontFamily: "Cairo,sans-serif",
+              boxShadow: `0 6px 28px rgba(184,134,11,0.50), 4px 4px 0 2px ${C.goldDark}`,
+              transition: "all 0.18s ease",
+            }}
+            onMouseEnter={e => e.currentTarget.style.transform = "scale(1.04)"}
+            onMouseLeave={e => e.currentTarget.style.transform = ""}
+          >
+            عرض النتيجة النهائية
+          </button>
+        </div>
+      )}
+
+      {/* ══════════════════════════════
+          END CONFIRM MODAL
+      ══════════════════════════════ */}
+      {showEndConfirm && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 50,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+          background: "rgba(26,20,12,0.82)", backdropFilter: "blur(10px)",
+        }}>
           <div style={{
-            position:"fixed", inset:0, zIndex:70,
-            display:"flex", flexDirection:"column",
-            alignItems:"center", justifyContent:"center",
-            padding:28, textAlign:"center",
-            background:"rgba(2,1,6,0.92)",
-            backdropFilter:"blur(6px)",
-            animation:"hj-winner .6s cubic-bezier(.22,1,.36,1) both",
-            fontFamily:"Cairo,sans-serif",
+            borderRadius: "20px", padding: "36px 42px",
+            maxWidth: "390px", width: "100%", textAlign: "center",
+            background: C.parchment,
+            border:     `3px solid ${C.gold}`,
+            boxShadow:  `0 0 0 1px ${C.goldLight}, 6px 6px 0 3px ${C.goldDark}, 0 24px 72px rgba(0,0,0,0.45)`,
           }}>
-            {/* School of Athens — scholars & philosophers */}
-            <div style={{
-              position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
-              backgroundImage:"url('https://images.pexels.com/photos/159862/art-school-of-athens-raphael-italian-painter-fresco-159862.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=1080&w=1920')",
-              backgroundSize:"cover", backgroundPosition:"center 20%",
-              opacity:.35, filter:"brightness(.55) contrast(1.15) saturate(.8)",
-            }}/>
-            {/* dark gradient bottom fade */}
-            <div style={{
-              position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
-              background:"linear-gradient(180deg, rgba(2,1,6,0.20) 0%, rgba(2,1,6,0.60) 60%, rgba(2,1,6,0.90) 100%)",
-            }}/>
-            {/* radial gold center glow */}
-            <div style={{
-              position:"absolute", inset:0, zIndex:0, pointerEvents:"none",
-              background:"radial-gradient(ellipse 70% 60% at center, rgba(201,168,76,0.13) 0%, transparent 70%)",
-            }}/>
-
-            <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:0 }}>
-
-              {/* floating trophy */}
-              <div style={{
-                fontSize:"clamp(3.5rem,8vw,6rem)",
-                marginBottom:12,
-                animation:"hj-float 3s ease-in-out infinite",
-                filter:"drop-shadow(0 0 30px rgba(201,168,76,0.80)) drop-shadow(0 0 60px rgba(201,168,76,0.40))",
-              }}>🏆</div>
-
-              {/* decorative divider */}
-              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                <div style={{ width:40, height:1, background:"linear-gradient(90deg,transparent,rgba(201,168,76,0.6))" }}/>
-                <span style={{ color:"rgba(201,168,76,0.55)", fontSize:".65rem", letterSpacing:".22em", fontWeight:700 }}>الفريق الفائز</span>
-                <div style={{ width:40, height:1, background:"linear-gradient(270deg,transparent,rgba(201,168,76,0.6))" }}/>
-              </div>
-
-              {/* winner name */}
-              <div style={{
-                fontWeight:900,
-                fontSize:"clamp(2.6rem,6vw,5rem)",
-                color:"#f5e090",
-                lineHeight:1.1,
-                marginBottom:36,
-                animation:"hj-glow 2.8s ease-in-out infinite",
-                letterSpacing:"-.01em",
-              }}>
-                {winner==="تعادل"?"🤝 تعادل!":winner}
-              </div>
-
-              {/* score cards */}
-              <div style={{ display:"flex", gap:16, marginBottom:40 }}>
-                {[{name:team1Name,score:teamScores.team1,c:"#fca5a5"},{name:team2Name,score:teamScores.team2,c:"#93c5fd"}]
-                  .map(({name,score,c})=>(
-                    <div key={name} style={{
-                      textAlign:"center", borderRadius:20,
-                      padding:"20px 36px",
-                      background:"rgba(255,255,255,0.05)",
-                      backdropFilter:"blur(20px)",
-                      animation:"hj-border 3s ease-in-out infinite",
-                    }}>
-                      <div style={{ fontSize:".72rem", fontWeight:700, color:c, marginBottom:10, letterSpacing:".08em" }}>{name}</div>
-                      <div style={{ fontSize:"2.6rem", fontWeight:900, color:"#f5e090", lineHeight:1, textShadow:"0 0 20px rgba(201,168,76,0.50)" }}>{score}</div>
-                      <div style={{ fontSize:".6rem", color:"rgba(201,168,76,0.40)", marginTop:4, letterSpacing:".1em" }}>نقطة</div>
-                    </div>
-                  ))}
-              </div>
-
-              {/* action button */}
+            <div style={{ fontSize: "2rem", marginBottom: "10px" }}>🎮</div>
+            <div style={{ fontSize: "1.3rem", fontWeight: 900, color: C.textDark, fontFamily: "Cairo,sans-serif", marginBottom: "8px" }}>
+              إنهاء اللعبة؟
+            </div>
+            <div style={{ fontSize: "0.85rem", color: C.textMid, marginBottom: "28px" }}>
+              سيتم إعلان الفائز الحالي
+            </div>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
               <button
-                onClick={()=>{
-                  if(gameMode==="tournament"){
-                    const ref=tournamentState?.currentMatchRef;
-                    if(ref){
-                      const w=teamScores.team1>=teamScores.team2?ref.team1Id:ref.team2Id;
-                      navigate("/tournament/bracket",{state:{autoRecord:{roundIdx:ref.roundIdx,matchIdx:ref.matchIdx,winnerId:w}}});
-                    }else{navigate("/tournament/bracket");}
-                  }else{ resetGame(); navigate("/"); }
-                }}
+                onClick={handleEndGame}
                 style={{
-                  padding:"15px 56px", borderRadius:50,
-                  fontFamily:"Cairo,sans-serif", fontWeight:900, fontSize:"1.05rem",
-                  background:"linear-gradient(135deg,#c9a84c,#f5e090,#c9a84c)",
-                  backgroundSize:"200% auto",
-                  color:"#1a0e04", border:"none",
-                  boxShadow:"0 0 0 1px rgba(201,168,76,0.50), 0 10px 36px rgba(201,168,76,0.35)",
-                  cursor:"pointer",
-                  transition:"filter .2s, transform .2s",
+                  padding: "12px 28px", borderRadius: "999px", fontWeight: 800, cursor: "pointer",
+                  background: `linear-gradient(135deg,#8B1520,#5B0E14)`, color: C.goldLight,
+                  border: `1.5px solid ${C.goldDark}`, fontFamily: "Cairo,sans-serif",
+                  boxShadow: "0 4px 20px rgba(91,14,20,0.45)", transition: "all 0.18s ease",
                 }}
-                onMouseEnter={e=>{ e.currentTarget.style.filter="brightness(1.12)"; e.currentTarget.style.transform="scale(1.04)"; }}
-                onMouseLeave={e=>{ e.currentTarget.style.filter=""; e.currentTarget.style.transform=""; }}
+                onMouseEnter={e => e.currentTarget.style.filter = "brightness(1.15)"}
+                onMouseLeave={e => e.currentTarget.style.filter = ""}
               >
-                {gameMode==="tournament"?"🏆 العودة للبطولة":"🎮 لعبة جديدة"}
+                نعم، إنهاء
+              </button>
+              <button
+                onClick={() => setShowEndConfirm(false)}
+                style={{
+                  padding: "12px 28px", borderRadius: "999px", fontWeight: 700, cursor: "pointer",
+                  background: C.parchmentDk, border: `1.5px solid ${C.parchmentBdr}`,
+                  color: C.textMid, fontFamily: "Cairo,sans-serif",
+                  transition: "all 0.18s ease",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = C.parchmentBdr}
+                onMouseLeave={e => e.currentTarget.style.background = C.parchmentDk}
+              >
+                رجوع
               </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ── HOST CONTROLS — bottom-left corner, logged-in only ── */}
-        {userToken && (
-          <div style={{
-            position:"fixed", bottom:16, left:16, zIndex:50,
-            display:"flex", flexDirection:"column", alignItems:"flex-start", gap:6,
-          }}>
-            {showHost && (
-              <div style={{
-                background:"linear-gradient(160deg,#faf6ee,#f0e8d5)",
-                border:"2px solid #c9a84c",
-                boxShadow:"0 0 0 1px #8b6a10, 0 8px 28px rgba(30,15,5,.45)",
-                borderRadius:14, padding:"10px 12px",
-                display:"flex", flexDirection:"column", gap:8,
-                fontFamily:"Cairo,sans-serif", minWidth:180,
-                animation:"hj-fadein .2s ease both",
-              }}>
-                {/* switch turn */}
-                <button
-                  onClick={() => { switchTurn(); toast("🔄 تم تبديل الدور", { duration: 1500 }); }}
-                  style={{
-                    width:"100%", padding:"6px 10px", borderRadius:8,
-                    background:"linear-gradient(145deg,#1a2a5c,#0f1840)",
-                    border:"1.5px solid #c9a84c", color:"#f5e090",
-                    fontFamily:"Cairo,sans-serif", fontWeight:700, fontSize:".75rem",
-                    cursor:"pointer",
-                  }}
-                >⇄ تبديل الدور</button>
+      {/* ══════════════════════════════
+          WINNER SCREEN
+      ══════════════════════════════ */}
+      {showWinner && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 50,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          padding: "24px", textAlign: "center",
+          background: `linear-gradient(rgba(0,0,0,0.72), rgba(0,0,0,0.86)), url("${ROMAN_BG}") center/cover fixed no-repeat`,
+        }}>
+          <div style={{ animation: "winnerFadeIn 0.55s cubic-bezier(0.34,1.2,0.64,1) both", display:"flex", flexDirection:"column", alignItems:"center" }}>
 
-                {/* team 1 points */}
-                <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                  <span style={{ fontSize:".65rem", fontWeight:800, color:"#b33a3a", flex:1 }}>{team1Name}</span>
-                  <button onClick={() => updateScore(1,  300)} style={hCtrlBtn("#6ee7b7")}>+300</button>
-                  <button onClick={() => updateScore(1, -300)} style={hCtrlBtn("#fca5a5")}>-300</button>
-                </div>
+          <div style={{ fontSize: "clamp(4rem,8vw,7rem)", marginBottom: "12px", filter: "drop-shadow(0 0 24px rgba(218,165,32,0.60))" }}>🏆</div>
 
-                {/* team 2 points */}
-                <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-                  <span style={{ fontSize:".65rem", fontWeight:800, color:"#2a5fa8", flex:1 }}>{team2Name}</span>
-                  <button onClick={() => updateScore(2,  300)} style={hCtrlBtn("#6ee7b7")}>+300</button>
-                  <button onClick={() => updateScore(2, -300)} style={hCtrlBtn("#fca5a5")}>-300</button>
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => setShowHost(h => !h)}
-              title="تحكم المضيف"
-              style={{
-                width:32, height:32, borderRadius:"50%",
-                background:"rgba(201,168,76,.18)",
-                border:"1.5px solid rgba(201,168,76,.45)",
-                color:"#8b6a10", fontSize:".9rem",
-                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                boxShadow:"0 2px 8px rgba(80,50,20,.2)",
-                transition:"background .2s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.background="rgba(201,168,76,.32)"}
-              onMouseLeave={e => e.currentTarget.style.background="rgba(201,168,76,.18)"}
-            >⚙</button>
+          {/* "الفريق الفائز" label */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
+            <div style={{ height: "1px", width: "60px", background: `linear-gradient(90deg,transparent,${C.gold})` }} />
+            <span style={{ color: C.goldLight, fontFamily: "Cairo,sans-serif", fontSize: "0.84rem", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase" }}>الفريق الفائز</span>
+            <div style={{ height: "1px", width: "60px", background: `linear-gradient(90deg,${C.gold},transparent)` }} />
           </div>
-        )}
 
-      </div>
-    </>
+          <div style={{
+            fontSize: "clamp(2.8rem,6vw,5.5rem)", fontWeight: 900, color: C.cream,
+            fontFamily: "Cairo,sans-serif", marginBottom: "40px",
+            animation: "winnerGlow 2.5s ease-in-out infinite",
+          }}>
+            {winner === "تعادل" ? "🤝 تعادل!" : winner}
+          </div>
+
+          {/* Score cards */}
+          <div style={{ display: "flex", alignItems: "center", gap: "24px", marginBottom: "48px" }}>
+            <div style={{
+              textAlign: "center", borderRadius: "16px", padding: "20px 32px",
+              background: "rgba(250,249,246,0.10)",
+              border: `2px solid ${C.gold}`,
+              boxShadow: `0 0 0 1px rgba(218,165,32,0.30), 0 8px 32px rgba(0,0,0,0.50)`,
+              backdropFilter: "blur(12px)",
+            }}>
+              <div style={{ fontSize: "0.84rem", fontWeight: 700, color: "rgba(218,165,32,0.80)", fontFamily: "Cairo,sans-serif", marginBottom: "8px" }}>
+                🦁 {session?.team1_name}
+              </div>
+              <div style={{ fontSize: "2.4rem", fontWeight: 900, color: C.cream }}>{teamScores.team1}</div>
+            </div>
+
+            <div style={{ color: C.gold, fontSize: "1.4rem", fontWeight: 900, textShadow: "0 0 12px rgba(218,165,32,0.50)" }}>VS</div>
+
+            <div style={{
+              textAlign: "center", borderRadius: "16px", padding: "20px 32px",
+              background: "rgba(250,249,246,0.10)",
+              border: `2px solid ${C.gold}`,
+              boxShadow: `0 0 0 1px rgba(218,165,32,0.30), 0 8px 32px rgba(0,0,0,0.50)`,
+              backdropFilter: "blur(12px)",
+            }}>
+              <div style={{ fontSize: "0.84rem", fontWeight: 700, color: "rgba(218,165,32,0.80)", fontFamily: "Cairo,sans-serif", marginBottom: "8px" }}>
+                {session?.team2_name} 🦅
+              </div>
+              <div style={{ fontSize: "2.4rem", fontWeight: 900, color: C.cream }}>{teamScores.team2}</div>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              if (gameMode === "tournament") {
+                const ref = tournamentState?.currentMatchRef;
+                if (ref) {
+                  const winnerId = teamScores.team1 >= teamScores.team2 ? ref.team1Id : ref.team2Id;
+                  navigate("/tournament/bracket", { state: { autoRecord: { roundIdx: ref.roundIdx, matchIdx: ref.matchIdx, winnerId } } });
+                } else navigate("/tournament/bracket");
+              } else { resetGame(); navigate("/"); }
+            }}
+            style={{
+              padding: "16px 52px", borderRadius: "999px", fontWeight: 900, fontSize: "1.1rem",
+              background: `linear-gradient(135deg,${C.gold},${C.goldLight})`,
+              color: C.bronzeDk, border: `2px solid ${C.goldDark}`,
+              fontFamily: "Cairo,sans-serif",
+              boxShadow: `0 0 0 1px ${C.goldLight}, 0 8px 36px rgba(218,165,32,0.45)`,
+              transition: "all 0.18s ease",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.filter = "brightness(1.12)"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.filter = ""; }}
+          >
+            {gameMode === "tournament" ? "🏆 العودة للبطولة" : "🎮 لعبة جديدة"}
+          </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════
+          HOST CONTROLS — bottom-left corner
+          Visible only when logged in
+      ══════════════════════════════ */}
+      {currentUser && (
+        <div style={{ position: "fixed", bottom: "20px", left: "20px", zIndex: 60, direction: "rtl" }}>
+
+          {/* Toggle button */}
+          <button
+            onClick={() => setShowHostPanel(p => !p)}
+            title="تحكم المضيف"
+            style={{
+              width: "44px", height: "44px", borderRadius: "12px",
+              background: showHostPanel
+                ? `linear-gradient(135deg,${C.gold},${C.goldLight})`
+                : `linear-gradient(135deg,${C.deepBlue},#0F1A30)`,
+              border: `2px solid ${C.gold}`,
+              color: showHostPanel ? C.bronzeDk : C.goldLight,
+              fontSize: "1.1rem", cursor: "pointer",
+              boxShadow: `0 4px 16px rgba(0,0,0,0.38), 3px 3px 0 2px ${C.goldDark}`,
+              transition: "all 0.18s ease",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            ⚙️
+          </button>
+
+          {/* Panel */}
+          {showHostPanel && (
+            <div style={{
+              position: "absolute", bottom: "54px", left: 0,
+              minWidth: "220px",
+              background: C.deepBlue,
+              border: `2px solid ${C.gold}`,
+              borderRadius: "16px",
+              boxShadow: `0 0 0 1px ${C.goldLight}, 6px 6px 0 3px ${C.goldDark}, 0 16px 40px rgba(0,0,0,0.50)`,
+              padding: "14px 16px",
+              display: "flex", flexDirection: "column", gap: "10px",
+            }}>
+              {/* Header */}
+              <div style={{
+                color: C.goldLight, fontFamily: "Cairo,sans-serif",
+                fontWeight: 800, fontSize: "0.75rem",
+                letterSpacing: "0.10em", textAlign: "center",
+                borderBottom: `1px solid rgba(201,168,76,0.25)`,
+                paddingBottom: "8px", marginBottom: "2px",
+              }}>
+                تحكم المضيف
+              </div>
+
+              {/* Switch turn */}
+              <button
+                onClick={switchTurn}
+                style={{
+                  padding: "9px 14px", borderRadius: "10px", cursor: "pointer",
+                  background: `linear-gradient(135deg,#1B3A6A,#0F2248)`,
+                  border: `1.5px solid rgba(80,140,240,0.55)`,
+                  color: "#B0D0FF", fontFamily: "Cairo,sans-serif",
+                  fontWeight: 700, fontSize: "0.82rem",
+                  boxShadow: "0 3px 10px rgba(0,0,0,0.28)",
+                  transition: "all 0.15s ease",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                }}
+                onMouseEnter={e => e.currentTarget.style.filter = "brightness(1.2)"}
+                onMouseLeave={e => e.currentTarget.style.filter = ""}
+              >
+                🔄 تبديل الدور
+              </button>
+
+              {/* Points controls per team */}
+              {[
+                { team: 1, name: session?.team1_name, icon: "🦁", color: "#FFB0B0", border: "rgba(220,80,80,0.55)", bg: "rgba(140,30,30,0.30)" },
+                { team: 2, name: session?.team2_name, icon: "🦅", color: "#B0D0FF", border: "rgba(80,140,240,0.55)", bg: "rgba(30,60,140,0.30)" },
+              ].map(({ team, name, icon, color, border, bg }) => (
+                <div key={team} style={{
+                  borderRadius: "10px", padding: "8px 10px",
+                  background: bg, border: `1px solid ${border}`,
+                }}>
+                  <div style={{
+                    color, fontFamily: "Cairo,sans-serif",
+                    fontWeight: 700, fontSize: "0.75rem",
+                    marginBottom: "6px", textAlign: "center",
+                  }}>
+                    {icon} {name}
+                  </div>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    {[300, 600, 900].map(pts => (
+                      <div key={pts} style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <button
+                          onClick={() => updateScore(team, pts)}
+                          style={{
+                            padding: "5px 2px", borderRadius: "6px", cursor: "pointer", fontSize: "0.65rem",
+                            fontFamily: "Cairo,sans-serif", fontWeight: 800,
+                            background: "rgba(67,233,123,0.15)", border: "1px solid rgba(67,233,123,0.45)",
+                            color: "#43e97b", transition: "all 0.15s ease",
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(67,233,123,0.28)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "rgba(67,233,123,0.15)"}
+                        >
+                          +{pts}
+                        </button>
+                        <button
+                          onClick={() => updateScore(team, -pts)}
+                          style={{
+                            padding: "5px 2px", borderRadius: "6px", cursor: "pointer", fontSize: "0.65rem",
+                            fontFamily: "Cairo,sans-serif", fontWeight: 800,
+                            background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.40)",
+                            color: "#f87171", transition: "all 0.15s ease",
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(239,68,68,0.28)"}
+                          onMouseLeave={e => e.currentTarget.style.background = "rgba(239,68,68,0.15)"}
+                        >
+                          -{pts}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
-}
-
-function hCtrlBtn(col) {
-  return {
-    padding:"3px 7px", borderRadius:6,
-    background:"transparent",
-    border:`1px solid ${col}`,
-    color: col, fontFamily:"Cairo,sans-serif",
-    fontWeight:700, fontSize:".68rem",
-    cursor:"pointer",
-  };
 }

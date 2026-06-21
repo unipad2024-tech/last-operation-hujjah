@@ -33,11 +33,11 @@ export default function QuestionPage() {
   const [zoomedImage, setZoomedImage] = useState(null);
   const [imgLoaded, setImgLoaded]     = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(question);
-  const [doubleActive, setDoubleActive]       = useState(false);
+  const [doubleActive, setDoubleActive]       = useState(state?.doubleActive || false);
   const [changingQ, setChangingQ]             = useState(false);
   const [lifelines, setLifelines]             = useState({
-    1: { changeQuestion: true, doublePoints: true, extraTime: true },
-    2: { changeQuestion: true, doublePoints: true, extraTime: true },
+    1: { changeQuestion: true, extraTime: true },
+    2: { changeQuestion: true, extraTime: true },
   });
   const timerRef = useRef(null);
 
@@ -135,10 +135,8 @@ export default function QuestionPage() {
   };
 
   const handleDoublePoints = () => {
-    if (!lifelines[slot]?.doublePoints || assigned) return;
-    setDoubleActive(true);
-    setLifelines(prev => ({ ...prev, [slot]: { ...prev[slot], doublePoints: false } }));
-    toast.success("⚡ النقاط مضاعفة عند الإجابة الصحيحة!");
+    if (doubleActive) return;
+    toast("مضاعفة النقاط يجب تفعيلها قبل فتح السؤال", { icon: "⚡" });
   };
 
   const handleExtraTime = () => {
@@ -740,47 +738,116 @@ export default function QuestionPage() {
             </div>
           </div>
 
-          {/* Lifelines */}
-          <div style={{ ...glass, padding:"12px 12px" }}>
-            <div style={{ textAlign:"center", color:"rgba(255,255,255,0.45)", fontSize:"0.62rem", fontWeight:800, letterSpacing:"0.10em", textTransform:"uppercase", marginBottom:"12px" }}>
+          {/* ── LIFELINES (وسائل المساعدة) ── */}
+          <div style={{ ...glass, padding:"14px 12px" }}>
+            <div style={{ textAlign:"center", color:"rgba(255,255,255,0.40)", fontSize:"0.58rem", fontWeight:800, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"14px" }}>
               وسائل المساعدة
             </div>
             <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
               {[
-                { key:"changeQuestion", icon: changingQ ? <RefreshCw size={18} style={{animation:"spin 1s linear infinite"}} /> : <RefreshCw size={18} />, tooltip:"يغير لك السؤال الحالي", action:handleChangeQuestion, color:"#60a5fa", bg:"rgba(96,165,250,0.15)", border:"rgba(96,165,250,0.40)" },
-                { key:"doublePoints",   icon:<Zap size={18}/>,   tooltip:"يضاعف النقاط عند الإجابة الصحيحة", action:handleDoublePoints, color:"#f5c842", bg: doubleActive?"rgba(245,200,66,0.25)":"rgba(245,200,66,0.13)", border:"rgba(245,200,66,0.40)" },
-                { key:"extraTime",      icon:<Clock size={18}/>, tooltip:"يزيد الوقت المتبقي",               action:handleExtraTime,    color:"#43e97b", bg:"rgba(67,233,123,0.13)",  border:"rgba(67,233,123,0.38)" },
-              ].map((ll) => {
-                const used = !lifelines[slot]?.[ll.key];
+                {
+                  key:     "changeQuestion",
+                  icon:    changingQ ? <RefreshCw size={28} style={{animation:"spin 1s linear infinite"}}/> : <RefreshCw size={28}/>,
+                  label:   "تبديل السؤال",
+                  tooltip: "استبدل السؤال الحالي بسؤال جديد من نفس الفئة والنقاط",
+                  color:   "#60a5fa",
+                  glow:    "rgba(96,165,250,0.28)",
+                  isUsed:  !lifelines[slot]?.changeQuestion || assigned,
+                  isDouble: false,
+                  onClick: handleChangeQuestion,
+                },
+                {
+                  key:     "doublePoints",
+                  icon:    <Zap size={28}/>,
+                  label:   doubleActive ? "✓ مفعّلة" : "من البورد",
+                  tooltip: doubleActive
+                    ? "النقاط ستُضاعف عند الإجابة الصحيحة ⚡"
+                    : "يجب تفعيلها من البورد قبل فتح السؤال",
+                  color:   "#f5c842",
+                  glow:    "rgba(245,200,66,0.28)",
+                  isUsed:  false,
+                  isDouble: true,
+                  onClick: handleDoublePoints,
+                },
+                {
+                  key:     "extraTime",
+                  icon:    <Clock size={28}/>,
+                  label:   "زيادة الوقت",
+                  tooltip: "تضاعف الوقت المخصص للإجابة على السؤال الحالي",
+                  color:   "#43e97b",
+                  glow:    "rgba(67,233,123,0.28)",
+                  isUsed:  !lifelines[slot]?.extraTime || assigned,
+                  isDouble: false,
+                  onClick: handleExtraTime,
+                },
+              ].map(ll => {
+                const isDoubleOn     = ll.isDouble && doubleActive;
+                const isDoubleLocked = ll.isDouble && !doubleActive;
+
+                let cardBg, cardBorder, cardColor, cardOpacity, cardCursor, cardShadow;
+                if (ll.isUsed) {
+                  cardBg = "rgba(255,255,255,0.03)"; cardBorder = "rgba(255,255,255,0.07)";
+                  cardColor = "rgba(255,255,255,0.18)"; cardOpacity = 0.45;
+                  cardCursor = "not-allowed"; cardShadow = "none";
+                } else if (isDoubleOn) {
+                  cardBg = "rgba(245,200,66,0.16)"; cardBorder = "rgba(245,200,66,0.55)";
+                  cardColor = "#f5c842"; cardOpacity = 1;
+                  cardCursor = "default"; cardShadow = "0 0 22px rgba(245,200,66,0.32), inset 0 0 10px rgba(245,200,66,0.06)";
+                } else if (isDoubleLocked) {
+                  cardBg = "rgba(255,255,255,0.03)"; cardBorder = "rgba(245,200,66,0.16)";
+                  cardColor = "rgba(245,200,66,0.30)"; cardOpacity = 1;
+                  cardCursor = "pointer"; cardShadow = "none";
+                } else {
+                  cardBg = `rgba(${ll.key==="changeQuestion"?"96,165,250":ll.key==="doublePoints"?"245,200,66":"67,233,123"},0.11)`;
+                  cardBorder = ll.glow.replace("0.28","0.45");
+                  cardColor = ll.color; cardOpacity = 1;
+                  cardCursor = "pointer"; cardShadow = `0 0 16px ${ll.glow}`;
+                }
+
                 return (
                   <div key={ll.key} style={{ position:"relative" }}
-                    onMouseEnter={e => { const t = e.currentTarget.querySelector(".ll-tip"); if (t) t.style.opacity="1"; t.style.transform="translateY(0)"; }}
-                    onMouseLeave={e => { const t = e.currentTarget.querySelector(".ll-tip"); if (t) t.style.opacity="0"; t.style.transform="translateY(-4px)"; }}
+                    onMouseEnter={e => {
+                      const tip = e.currentTarget.querySelector(".ll-tip");
+                      if (tip) { tip.style.opacity="1"; tip.style.transform="translateY(0)"; }
+                      if (!ll.isUsed && !isDoubleOn) {
+                        const btn = e.currentTarget.querySelector("button");
+                        if (btn) { btn.style.transform="translateY(-2px)"; btn.style.boxShadow=`0 0 28px ${ll.glow}, 0 8px 20px rgba(0,0,0,0.28)`; }
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      const tip = e.currentTarget.querySelector(".ll-tip");
+                      if (tip) { tip.style.opacity="0"; tip.style.transform="translateY(-4px)"; }
+                      const btn = e.currentTarget.querySelector("button");
+                      if (btn) { btn.style.transform=""; btn.style.boxShadow=cardShadow; }
+                    }}
                   >
-                    <div style={{ ...glass, display:"flex", alignItems:"center", gap:"12px", padding:"11px 14px", opacity: used ? 0.35 : 1, transition:"opacity 0.2s", borderRadius:"14px" }}>
-                      <button
-                        onClick={ll.action}
-                        disabled={used || assigned}
-                        style={{
-                          width:"42px", height:"42px", borderRadius:"12px",
-                          background: used ? "rgba(255,255,255,0.04)" : ll.bg,
-                          border:`1.5px solid ${used ? "rgba(255,255,255,0.07)" : ll.border}`,
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                          color: used ? "rgba(255,255,255,0.20)" : ll.color,
-                          cursor: used || assigned ? "not-allowed" : "pointer",
-                          flexShrink:0, transition:"all 0.2s",
-                          boxShadow: used ? "none" : `0 0 12px ${ll.bg}`,
-                        }}
-                        onMouseEnter={e => { if (!used && !assigned) e.currentTarget.style.transform="scale(1.10)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.transform="scale(1)"; }}
-                      >
-                        {ll.icon}
-                      </button>
-                      <span style={{ color: used ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.55)", fontSize:"0.68rem", fontWeight:700 }}>
-                        {used ? "✗ مستخدمة" : ll.key==="doublePoints" && doubleActive ? "✓ مفعّلة" : "متاحة"}
+                    <button
+                      onClick={ll.onClick}
+                      style={{
+                        width:"100%", display:"flex", flexDirection:"column", alignItems:"center", gap:"7px",
+                        padding:"13px 10px", borderRadius:"16px",
+                        background: cardBg, border:`1.5px solid ${cardBorder}`,
+                        color: cardColor, cursor: cardCursor, opacity: cardOpacity,
+                        transition:"all 0.22s cubic-bezier(0.34,1.2,0.64,1)",
+                        boxShadow: cardShadow, backdropFilter:"blur(8px)",
+                        fontFamily:"Cairo,sans-serif",
+                      }}
+                    >
+                      {ll.icon}
+                      <span style={{ fontSize:"0.60rem", fontWeight:800, whiteSpace:"nowrap" }}>
+                        {ll.isUsed ? "✗ مستخدمة" : ll.label}
                       </span>
-                    </div>
-                    <div className="ll-tip" style={{ position:"absolute", top:"calc(100% + 6px)", right:0, left:0, background:"rgba(8,4,18,0.97)", border:"1px solid rgba(255,255,255,0.14)", borderRadius:"9px", padding:"6px 10px", fontSize:"0.65rem", color:"rgba(255,255,255,0.92)", fontWeight:700, textAlign:"center", pointerEvents:"none", opacity:0, transform:"translateY(-4px)", transition:"opacity 0.18s, transform 0.18s", zIndex:99, backdropFilter:"blur(12px)", whiteSpace:"nowrap" }}>
+                    </button>
+                    <div className="ll-tip" style={{
+                      position:"absolute", top:"calc(100% + 6px)", right:0, left:0, zIndex:99,
+                      background:"rgba(8,4,18,0.96)", border:"1px solid rgba(255,255,255,0.13)",
+                      borderRadius:"10px", padding:"8px 10px",
+                      fontSize:"0.65rem", color:"rgba(255,255,255,0.92)", fontWeight:700,
+                      textAlign:"center", lineHeight:1.6,
+                      pointerEvents:"none", opacity:0,
+                      transform:"translateY(-4px)", transition:"opacity 0.18s, transform 0.18s",
+                      backdropFilter:"blur(12px)",
+                    }}>
                       {ll.tooltip}
                     </div>
                   </div>
