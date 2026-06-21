@@ -1,0 +1,17 @@
+{
+  "short_name": "حُجّة",
+  "name": "حُجّة | Hujjah",
+  "description": "لعبة تريفيا عربية تنافسية للفرق",
+  "icons": [
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any maskable" },
+    { "src": "/favicon-32x32.png", "type": "image/png", "sizes": "32x32" },
+    { "src": "/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0D0103",
+  "theme_color": "#0D0103",
+  "lang": "ar",
+  "dir": "rtl"
+}
