@@ -241,7 +241,8 @@ export const GameProvider = ({ children }) => {
   const updateSession = async (updates) => {
     if (!session?.id) return;
     try {
-      const { data } = await axios.put(`${API}/game/session/${session.id}`, updates);
+      const headers = userToken ? { Authorization: `Bearer ${userToken}` } : {};
+      const { data } = await axios.put(`${API}/game/session/${session.id}`, updates, { headers });
       saveSession(data);
       return data;
     } catch (e) {
