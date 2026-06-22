@@ -66,6 +66,10 @@ const ForgotPasswordPage   = lazy(() => import("@/pages/ForgotPasswordPage"));
 const ResetPasswordPage    = lazy(() => import("@/pages/ResetPasswordPage"));
 const AdminLoginPage       = lazy(() => import("@/pages/AdminLoginPage"));
 const AdminDashboard       = lazy(() => import("@/pages/AdminDashboard")); // heaviest page — ~3300 lines
+const PrivacyPolicyPage    = lazy(() => import("@/pages/PrivacyPolicyPage"));
+const TermsPage            = lazy(() => import("@/pages/TermsPage"));
+const RefundPolicyPage     = lazy(() => import("@/pages/RefundPolicyPage"));
+const ContactPage          = lazy(() => import("@/pages/ContactPage"));
 
 const PageLoader = () => (
   <div style={{ minHeight: "100vh", background: "#09070b", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -106,6 +110,10 @@ function App() {
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/admin" element={<AdminLoginPage />} />
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
+                <Route path="/privacy" element={<PrivacyPolicyPage />} />
+                <Route path="/terms" element={<TermsPage />} />
+                <Route path="/refund" element={<RefundPolicyPage />} />
+                <Route path="/contact" element={<ContactPage />} />
               </Routes>
             </Suspense>
           </BrowserRouter>

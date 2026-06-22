@@ -963,5 +963,18 @@ function ContactSection() {
         تابعنا عشان تشوف أحدث الفئات والتحديات
       </p>
     </div>
+
+    {/* Legal Footer */}
+    <footer style={{ borderTop: "1px solid rgba(241,225,148,0.10)", padding: "24px 24px", textAlign: "center", display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "8px 20px", fontSize: 13 }}>
+      <a href="/privacy" style={{ color: "rgba(241,225,148,0.45)", textDecoration: "none" }}>سياسة الخصوصية</a>
+      <span style={{ color: "rgba(241,225,148,0.15)" }}>·</span>
+      <a href="/terms" style={{ color: "rgba(241,225,148,0.45)", textDecoration: "none" }}>الشروط والأحكام</a>
+      <span style={{ color: "rgba(241,225,148,0.15)" }}>·</span>
+      <a href="/refund" style={{ color: "rgba(241,225,148,0.45)", textDecoration: "none" }}>سياسة الاسترداد</a>
+      <span style={{ color: "rgba(241,225,148,0.15)" }}>·</span>
+      <a href="/contact" style={{ color: "rgba(241,225,148,0.45)", textDecoration: "none" }}>تواصل معنا</a>
+      <span style={{ color: "rgba(241,225,148,0.15)" }}>·</span>
+      <span style={{ color: "rgba(241,225,148,0.25)" }}>© 2025 حُجّة</span>
+    </footer>
   );
 }
