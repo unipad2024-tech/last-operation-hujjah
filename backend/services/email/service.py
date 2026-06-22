@@ -1,61 +1,77 @@
 """
-Email service using Resend.
-Replaces the old Gmail SMTP implementation.
+Email service — Gmail SMTP primary, Resend fallback.
+Gmail works for all recipients without domain verification.
 """
 import os
 import logging
-import resend
-from typing import Optional
+import smtplib
+import ssl
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 logger = logging.getLogger(__name__)
 
+
 def _cfg():
-    """Read env vars at call-time so Railway variables are always fresh."""
     return {
-        "api_key":    os.environ.get("RESEND_API_KEY", ""),
-        "email_from": os.environ.get("EMAIL_FROM", "noreply@hujjahgames.com"),
-        "app_url":    os.environ.get("APP_URL", "https://hujjahgames.com"),
+        "gmail_user":  os.environ.get("EMAIL_USER", ""),
+        "gmail_pass":  os.environ.get("EMAIL_PASS", ""),
+        "email_from":  os.environ.get("EMAIL_FROM", ""),
+        "app_url":     os.environ.get("APP_URL", "https://nakbah.hujjahgames.com"),
     }
 
-# Keep module-level APP_URL for templates — resolved lazily via _cfg() at send time
+
 def _app_url() -> str:
-    return os.environ.get("APP_URL", "https://hujjahgames.com")
+    return os.environ.get("APP_URL", "https://nakbah.hujjahgames.com")
 
 
 async def send_email(to_email: str, subject: str, html_body: str) -> bool:
     """
-    Send a transactional email via Resend.
-    Tries the configured EMAIL_FROM first; if Resend rejects it (domain not
-    verified / test-mode restriction), retries with the Resend default sender
-    onboarding@resend.dev so delivery still works during development.
-    Returns True on success, False on failure.  Never raises.
+    Send email via Gmail SMTP (App Password).
+    Falls back to Resend if Gmail credentials not set.
+    Returns True on success, False on failure. Never raises.
     """
     cfg = _cfg()
-    api_key = cfg["api_key"]
-    if not api_key:
-        logger.error("Email skipped — RESEND_API_KEY not set | to=%s | subject=%s", to_email, subject)
-        return False
 
-    resend.api_key = api_key
-    senders = [cfg["email_from"]]
-    # Fallback: Resend's built-in test sender works without domain verification
-    if cfg["email_from"] != "onboarding@resend.dev":
-        senders.append("onboarding@resend.dev")
-
-    for sender in senders:
+    # ── Primary: Gmail SMTP ──────────────────────────────────────────────────
+    gmail_user = cfg["gmail_user"]
+    gmail_pass = cfg["gmail_pass"]
+    if gmail_user and gmail_pass:
         try:
-            params = {
+            from_label = f"حُجّة <{gmail_user}>"
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"]    = from_label
+            msg["To"]      = to_email
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+                server.login(gmail_user, gmail_pass)
+                server.sendmail(gmail_user, to_email, msg.as_string())
+
+            logger.info("Email sent via Gmail | to=%s | subject=%s", to_email, subject)
+            return True
+        except Exception as e:
+            logger.warning("Gmail failed | to=%s | error=%s", to_email, str(e)[:200])
+
+    # ── Fallback: Resend ─────────────────────────────────────────────────────
+    resend_key = os.environ.get("RESEND_API_KEY", "")
+    if resend_key:
+        try:
+            import resend as resend_lib
+            resend_lib.api_key = resend_key
+            sender = cfg["email_from"] or "onboarding@resend.dev"
+            response = resend_lib.Emails.send({
                 "from":    sender,
                 "to":      [to_email],
                 "subject": subject,
                 "html":    html_body,
-            }
-            response = resend.Emails.send(params)
-            message_id = response.get("id") if response else None
-            logger.info("Email sent | from=%s | to=%s | subject=%s | id=%s", sender, to_email, subject, message_id)
+            })
+            logger.info("Email sent via Resend | to=%s | id=%s", to_email, response.get("id"))
             return True
         except Exception as e:
-            logger.warning("Email attempt failed | from=%s | to=%s | error=%s", sender, to_email, str(e)[:200])
+            logger.warning("Resend failed | to=%s | error=%s", to_email, str(e)[:200])
 
     logger.error("All email attempts failed | to=%s | subject=%s", to_email, subject)
     return False
