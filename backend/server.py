@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Request, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -127,6 +128,7 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     username: Optional[str] = None
     password: Optional[str] = None
+    old_password: Optional[str] = None  # required when changing password
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     banner_url: Optional[str] = None
@@ -856,6 +858,11 @@ async def reset_password(body: ResetPasswordBody):
         {"id": user_id},
         {"$set": {"password_hash": hash_pw(body.new_password)}}
     )
+    # Invalidate all active sessions — prevents attacker retaining access after victim resets
+    await db.auth_sessions.update_many(
+        {"user_id": user_id},
+        {"$set": {"is_active": False, "revoked_reason": "password_reset"}}
+    )
     logger.info(f"Password reset completed | user={user_id}")
     return {"message": "تم تغيير كلمة المرور بنجاح"}
 
@@ -899,6 +906,12 @@ async def update_me(body: UserUpdate, user: dict = Depends(require_user)):
     if body.password:
         if len(body.password) < 6:
             raise HTTPException(400, "كلمة المرور قصيرة")
+        # Require current password verification before allowing change
+        if not body.old_password:
+            raise HTTPException(400, "يجب إدخال كلمة المرور الحالية")
+        stored_user = await db.users.find_one({"id": user["id"]}, {"password_hash": 1})
+        if not stored_user or not verify_pw(body.old_password, stored_user.get("password_hash", "")):
+            raise HTTPException(401, "كلمة المرور الحالية غير صحيحة")
         updates["password_hash"] = hash_pw(body.password)
     if body.bio is not None:
         updates["bio"] = body.bio[:300]
@@ -977,13 +990,12 @@ async def verify_legacy(_: bool = Depends(get_admin)):
 
 @api_router.get("/admin/users")
 async def admin_list_users(_: dict = Depends(get_super_admin)):
-    users = await db.users.find({}, {"_id": 0, "password_hash": 0, "answered_question_ids": 0}).to_list(1000)
-    for u in users:
-        u["answered_count"] = 0
-        full = await db.users.find_one({"id": u["id"]}, {"answered_question_ids": 1})
-        if full:
-            u["answered_count"] = len(full.get("answered_question_ids", []))
-    return users
+    # Single aggregation — avoids N+1 query (one query per user was 1001 queries for 1000 users)
+    pipeline = [
+        {"$addFields": {"answered_count": {"$size": {"$ifNull": ["$answered_question_ids", []]}}}},
+        {"$project": {"_id": 0, "password_hash": 0, "answered_question_ids": 0}},
+    ]
+    return await db.users.aggregate(pipeline).to_list(1000)
 
 @api_router.put("/admin/users/{user_id}")
 async def admin_update_user(user_id: str, body: AdminUserUpdate, admin: dict = Depends(get_super_admin)):
@@ -1030,6 +1042,9 @@ async def admin_send_welcome_emails(admin: dict = Depends(get_super_admin)):
 
 @api_router.get("/admin/analytics")
 async def admin_analytics(_: dict = Depends(get_super_admin)):
+    cached = _cache_get("admin_analytics")
+    if cached:
+        return cached
     now = datetime.now(timezone.utc)
     yesterday  = (now - timedelta(days=1)).isoformat()
     week_ago   = (now - timedelta(days=7)).isoformat()
@@ -1109,6 +1124,8 @@ async def admin_analytics(_: dict = Depends(get_super_admin)):
         "categories": {"total": len(cats), "active": active_cats, "inactive": inactive_cats,
                        "premium": premium_cats, "most_popular": most_popular},
     }
+    _cache_set("admin_analytics", result, ttl=300)  # 5-minute cache — analytics don't need real-time
+    return result
 
 @api_router.get("/admin/sessions")
 async def admin_sessions(_: dict = Depends(get_super_admin)):
@@ -1199,11 +1216,35 @@ async def delete_category(cat_id: str, admin: dict = Depends(get_admin)):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @api_router.get("/questions")
-async def get_questions(category_id: Optional[str] = None, difficulty: Optional[int] = None):
+async def get_questions(
+    category_id: Optional[str] = None,
+    difficulty: Optional[int] = None,
+    limit: int = 100,
+    offset: int = 0,
+    authorization: Optional[str] = Header(None),
+):
+    # Determine if caller is admin (answers visible to admin only)
+    _is_admin = False
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            _payload = jwt.decode(authorization.split(" ", 1)[1], SECRET_KEY, algorithms=[ALGORITHM])
+            _is_admin = _payload.get("role") == "admin"
+        except Exception:
+            pass
+
     q = {}
     if category_id: q["category_id"] = category_id
-    if difficulty:  q["difficulty"]   = difficulty
-    return await db.questions.find(q, {"_id": 0}).to_list(10000)
+    if difficulty:   q["difficulty"]  = difficulty
+
+    # Public callers get no answer field and capped at 100 per request
+    if _is_admin:
+        limit = min(max(1, limit), 10000)
+        projection = {"_id": 0}
+    else:
+        limit = min(max(1, limit), 100)
+        projection = {"_id": 0, "answer": 0, "answer_image": 0}
+
+    return await db.questions.find(q, projection).skip(max(0, offset)).limit(limit).to_list(limit)
 
 @api_router.get("/questions/count")
 async def count_questions(category_id: Optional[str] = None, difficulty: Optional[int] = None):
@@ -1866,7 +1907,15 @@ async def get_session(session_id: str):
     return s
 
 @api_router.put("/game/session/{session_id}")
-async def update_session(session_id: str, body: GameSessionUpdate):
+async def update_session(session_id: str, body: GameSessionUpdate,
+                         authorization: Optional[str] = Header(None)):
+    sess = await db.game_sessions.find_one({"id": session_id}, {"_id": 0, "user_id": 1})
+    if not sess: raise HTTPException(404, "الجلسة غير موجودة")
+    # If session was created by a specific user, verify caller owns it
+    if sess.get("user_id"):
+        caller = await get_current_user(authorization)
+        if not caller or caller["id"] != sess["user_id"]:
+            raise HTTPException(403, "غير مصرح بتعديل هذه الجلسة")
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
     upd["updated_at"] = datetime.now(timezone.utc).isoformat()
     res = await db.game_sessions.find_one_and_update({"id": session_id}, {"$set": upd}, {"_id": 0}, return_document=True)
@@ -1943,6 +1992,11 @@ async def update_score(session_id: str, body: ScoreUpdate,
                        authorization: Optional[str] = Header(None)):
     session = await db.game_sessions.find_one({"id": session_id}, {"_id": 0})
     if not session: raise HTTPException(404, "الجلسة غير موجودة")
+    # If session belongs to a user, verify ownership
+    if session.get("user_id"):
+        caller = await get_current_user(authorization)
+        if not caller or caller["id"] != session["user_id"]:
+            raise HTTPException(403, "غير مصرح بتعديل هذه الجلسة")
 
     field = "team1_score" if body.team == 1 else "team2_score"
     new_score = max(0, session.get(field, 0) + body.points)
@@ -4690,6 +4744,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 _cors_origins_env = os.environ.get('CORS_ORIGINS', '')
 _cors_origins = _cors_origins_env.split(',') if _cors_origins_env else ["https://hujjahgames.com", "https://nakbah.hujjahgames.com"]
@@ -4758,6 +4813,7 @@ async def startup_event():
         await db.suspicious_logs.create_index([("created_at", -1)])
         await db.ip_logs.create_index([("user_id", 1)])
         await db.ip_logs.create_index([("ts", 1)], expireAfterSeconds=7200)  # auto-purge IP logs after 2h
+        await db.rate_limits.create_index([("ts", 1)], expireAfterSeconds=300)  # TTL: auto-purge after 5 min window
         # Community creator system indexes
         await db.community_categories.create_index([("creator_id", 1)])
         await db.community_categories.create_index([("status", 1)])

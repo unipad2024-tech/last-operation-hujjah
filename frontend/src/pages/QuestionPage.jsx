@@ -219,7 +219,7 @@ export default function QuestionPage() {
     if (!lifelines[slot]?.changeQuestion || assigned || changingQ) return;
     setChangingQ(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("hujjah_user_token");
       const res = await fetch(
         `${API}/game/session/${session?.id}/question?category_id=${currentQuestion.category_id}&difficulty=${currentQuestion.difficulty}`,
         { method: "POST", headers: { Authorization: `Bearer ${token}` } }
@@ -293,9 +293,6 @@ export default function QuestionPage() {
         position: "relative",
       }}
     >
-      {/* Tajawal font */}
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" />
-
       <style>{`
         @keyframes fadeInScale {
           from { opacity:0; transform:scale(0.88); }

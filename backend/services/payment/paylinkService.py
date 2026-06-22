@@ -5,10 +5,14 @@ Docs: https://developer.paylink.sa
 import httpx
 import logging
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
 PAYLINK_BASE_URL = "https://restapi.paylink.sa"
+
+# Module-level token cache — avoids a round-trip HTTP auth call on every payment operation
+_token_cache: dict = {"token": None, "expires_at": 0.0}
 
 
 def _credentials() -> tuple[str, str]:
@@ -21,8 +25,13 @@ def _credentials() -> tuple[str, str]:
 async def _get_auth_token() -> str:
     """
     Authenticate with Paylink and return a Bearer token (id_token).
+    Token is cached for 55 minutes to avoid a round-trip on every payment operation.
     POST /api/auth  →  { id_token }
     """
+    # Return cached token if still valid
+    if _token_cache["token"] and time.time() < _token_cache["expires_at"]:
+        return _token_cache["token"]
+
     api_id, secret = _credentials()
     if not api_id or not secret:
         raise ValueError("PAYMENT_API_ID / PAYMENT_API_KEY not configured")
@@ -48,6 +57,10 @@ async def _get_auth_token() -> str:
         token = data.get("id_token", "")
         if not token:
             raise ValueError(f"Paylink auth: no id_token in response: {data}")
+
+        # Cache for 55 min (tokens valid ~60 min, refresh 5 min early to avoid expiry mid-request)
+        _token_cache["token"] = token
+        _token_cache["expires_at"] = time.time() + 55 * 60
         return token
 
 

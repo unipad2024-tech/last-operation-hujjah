@@ -444,7 +444,7 @@ export default function GameBoardPage() {
   }, [session, saveSession]);
 
   useEffect(() => {
-    const iv = setInterval(refreshScores, 4000);
+    const iv = setInterval(refreshScores, 12000); // was 4000ms — 3x reduction in DB polling load
     return () => clearInterval(iv);
   }, [refreshScores]);
 

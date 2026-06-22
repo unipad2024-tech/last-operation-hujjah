@@ -172,6 +172,12 @@ export const GameProvider = ({ children }) => {
     localStorage.setItem("hujjah_user_token", data.token);
     if (data.session_id)  localStorage.setItem("hujjah_session_id", data.session_id);
     if (data.device_id)   localStorage.setItem("hujjah_device_id",  data.device_id);
+    // Identify user in PostHog so events are linked to a real person
+    try {
+      if (window.posthog && data.user?.id) {
+        window.posthog.identify(data.user.id, { email: data.user.email, username: data.user.username });
+      }
+    } catch {}
     return data;
   };
 
@@ -186,6 +192,13 @@ export const GameProvider = ({ children }) => {
     localStorage.setItem("hujjah_user_token", data.token);
     if (data.session_id)  localStorage.setItem("hujjah_session_id", data.session_id);
     if (data.device_id)   localStorage.setItem("hujjah_device_id",  data.device_id);
+    // Identify new user in PostHog for funnel tracking
+    try {
+      if (window.posthog && data.user?.id) {
+        window.posthog.identify(data.user.id, { email: data.user.email, username: data.user.username });
+        window.posthog.capture("signup", { method: "email" });
+      }
+    } catch {}
     return data;
   };
 
@@ -195,6 +208,7 @@ export const GameProvider = ({ children }) => {
     localStorage.removeItem("hujjah_user");
     localStorage.removeItem("hujjah_user_token");
     localStorage.removeItem("hujjah_session_id");
+    try { if (window.posthog) window.posthog.reset(); } catch {}
   };
 
   const refreshUser = async () => {
@@ -203,7 +217,10 @@ export const GameProvider = ({ children }) => {
       const { data } = await axios.get(`${API}/auth/me`, { headers: { Authorization: `Bearer ${userToken}` } });
       setCurrentUser(data);
       localStorage.setItem("hujjah_user", JSON.stringify(data));
-    } catch { logoutUser(); }
+    } catch (err) {
+      // Only force logout on 401 (expired/invalid token) — not on network errors or 5xx
+      if (err?.response?.status === 401) logoutUser();
+    }
   };
 
   const createSession = async (team1_name, team2_name) => {

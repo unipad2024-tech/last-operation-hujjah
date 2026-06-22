@@ -113,7 +113,7 @@ export default function SettingsPage() {
     if (newPw !== confirmPw) { toast.error("كلمتا المرور غير متطابقتين"); return; }
     setSavingPw(true);
     try {
-      await axios.put(`${API}/auth/me`, { password: newPw }, h);
+      await axios.put(`${API}/auth/me`, { password: newPw, old_password: oldPw }, h);
       setOldPw(""); setNewPw(""); setConfirmPw("");
       toast.success("تم تغيير كلمة المرور ✓");
     } catch (e) {
